@@ -523,9 +523,10 @@ class Api:
                 "voice_on": self._settings.get("voice_on", True),
                 "has_eleven": bool(self._settings.get("elevenlabs_key")),
                 "voice_name": self._settings.get("voice_name", ""),
-                "voice_style": self._settings.get("voice_style", "ryan"),
+                "voice_style": self._settings.get("voice_style", "own" if self._own_voice() else "ryan"),
                 "version": VERSION,
-                "voice_styles": [[k, v[1]] for k, v in voice.NEURAL_VOICES.items()]}
+                "voice_styles": ([["own", "Franklin's own voice (made on this PC)"]] if self._own_voice() else [])
+                + [[k, v[1]] for k, v in voice.NEURAL_VOICES.items()]}
 
     def save_settings(self, values):
         for k in ("mode", "destination", "voice_on", "voice_style"):
@@ -596,12 +597,49 @@ class Api:
             self._chat_history = []
         return True
 
+    def _own_voice(self):
+        """Franklin's own XTTS voice, started on first use, or None if it isn't set up on this PC."""
+        if getattr(self, "_own", None) is None:
+            folder = voice.LocalVoice.find(self._settings.get("xtts_folder"))
+            if not folder or sys.platform != "win32":
+                self._own = False
+            else:
+                self._own = voice.LocalVoice(folder, os.path.join(os.path.dirname(resource_dir()), "xtts_server.py"),
+                                             paths.sub("voice-cache"))
+                self._own.start()
+        return self._own or None
+
+    def franklin_voice_warm(self, lines):
+        """Make the clips for lines Franklin says a lot, in the background, once his voice is loaded."""
+        own = self._own_voice()
+        if not own:
+            return False
+
+        def run():
+            for _ in range(120):  # the model can take a minute or two to load on a laptop CPU
+                if own.ready():
+                    break
+                time.sleep(2)
+            for line in lines:
+                try:
+                    own.wav(line)
+                except voice.VoiceError:
+                    return
+        threading.Thread(target=run, daemon=True).start()
+        return True
+
     def franklin_voice(self, text, force=False):
         """Franklin's voice as mp3: ElevenLabs Manchester if a key is saved, otherwise a free natural
         British voice. None means use the voice built into Windows."""
         if not force and not self._settings.get("voice_on", True):
             return None
         text = text[:1200]
+        own = self._own_voice()
+        if own and self._settings.get("voice_style", "own") == "own":
+            try:
+                return own.wav(text)
+            except voice.VoiceError:
+                pass  # still loading: use the next voice for now
         key = self._settings.get("elevenlabs_key")
         if key:
             try:

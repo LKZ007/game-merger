@@ -57,4 +57,9 @@ def main():
     window = webview.create_window("Game Merger", os.path.join(WEB, "index.html"), js_api=api,
                                    width=1360, height=860, min_size=(1100, 700), background_color="#0c0912")
     api._window = window  # underscore: keeps it out of what the page can call
-    webview.start()
+    try:
+        webview.start()
+    finally:
+        own = getattr(api, "_own", None)
+        if own:
+            own.stop()  # don't leave Franklin's voice model using memory after the app closes

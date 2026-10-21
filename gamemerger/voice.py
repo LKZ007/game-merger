@@ -84,3 +84,77 @@ def neural(text, style="ryan"):
     if not audio:
         raise VoiceError("The natural voice service sent no audio.")
     return "data:audio/mpeg;base64," + base64.b64encode(audio).decode("ascii")
+
+
+# ---------- Franklin's own voice (local XTTS clone) ----------
+
+class LocalVoice:
+    """Runs xtts_server.py with the Python from the franklin-voice folder and keeps it running.
+    Clips are cached, so lines Franklin says often (greetings) are instant after the first time."""
+
+    PORT = 5123
+
+    def __init__(self, folder, script, cache_dir):
+        self.folder, self.script, self.cache_dir = folder, script, cache_dir
+        self.proc = None
+
+    @staticmethod
+    def find(folder=None):
+        """The franklin-voice folder if it has a venv and a voice sample, else None."""
+        import os
+        for f in [folder, os.path.join(os.path.expanduser("~"), "claude", "franklin-voice")]:
+            if f and os.path.isfile(os.path.join(f, "voice_sample.wav")) and os.path.isfile(LocalVoice.python(f)):
+                return f
+        return None
+
+    @staticmethod
+    def python(folder):
+        import os
+        return os.path.join(folder, ".venv", "Scripts", "python.exe")
+
+    def start(self):
+        import subprocess
+        if self.proc and self.proc.poll() is None:
+            return
+        if self.ready():
+            return  # already running (e.g. left over from a previous start)
+        self.proc = subprocess.Popen([self.python(self.folder), self.script, "--folder", self.folder,
+                                      "--port", str(self.PORT)], cwd=self.folder,
+                                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                     creationflags=0x08000000)  # no console window
+
+    def stop(self):
+        if self.proc and self.proc.poll() is None:
+            self.proc.terminate()
+
+    def ready(self):
+        try:
+            with urllib.request.urlopen("http://127.0.0.1:%d/health" % self.PORT, timeout=1) as r:
+                return r.status == 200
+        except OSError:
+            return False
+
+    def _cache(self, text):
+        import hashlib
+        import os
+        key = hashlib.sha1(text.strip().lower().encode("utf-8")).hexdigest()[:20]
+        return os.path.join(self.cache_dir, key + ".wav")
+
+    def wav(self, text):
+        import os
+        path = self._cache(text)
+        if not os.path.isfile(path):
+            req = urllib.request.Request("http://127.0.0.1:%d/speak" % self.PORT, method="POST",
+                                         data=json.dumps({"text": text}).encode("utf-8"),
+                                         headers={"Content-Type": "application/json"})
+            try:
+                with urllib.request.urlopen(req, timeout=180) as r:
+                    audio = r.read()
+            except OSError:
+                raise VoiceError("Franklin's own voice isn't ready yet.")
+            os.makedirs(self.cache_dir, exist_ok=True)
+            with open(path + ".part", "wb") as f:
+                f.write(audio)
+            os.replace(path + ".part", path)
+        with open(path, "rb") as f:
+            return "data:audio/wav;base64," + base64.b64encode(f.read()).decode("ascii")

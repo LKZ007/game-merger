@@ -687,6 +687,7 @@ const voiceOn = () => !state.settings || state.settings.voice_on !== false;
 let speaking = null;
 
 function stopSpeaking() {
+  speechRun++;
   if (speaking) { speaking.pause(); speaking = null; }
   if (window.speechSynthesis) speechSynthesis.cancel();
   window.FranklinBrain.talking(false);
@@ -719,28 +720,57 @@ function speakable(text) {
   return text.replace(/\*\*/g, "").replace(/^\s*([-*•]|\d+\.)\s+/gm, "").replace(/https?:\/\/\S+/g, "the link").replace(/\s+/g, " ").trim().slice(0, 1200);
 }
 
+// Long replies are spoken a sentence or two at a time, making the next clip while one plays,
+// so Franklin starts talking quickly even with the slower voices.
+function chunks(text, max = 220) {
+  const out = [];
+  let cur = "";
+  for (const s of text.match(/[^.!?]+[.!?]*\s*/g) || [text]) {
+    if (cur && (cur + s).length > max) { out.push(cur.trim()); cur = ""; }
+    cur += s;
+  }
+  if (cur.trim()) out.push(cur.trim());
+  return out;
+}
+
+let speechRun = 0;
 async function speak(text, force = false) {
   if ((!voiceOn() && !force) || !text) return;
   stopSpeaking();
-  const line = speakable(text);
-  const done = () => window.FranklinBrain.talking(false);
-  let uri = null;
-  uri = await call("franklin_voice", line, force).catch(() => null);
+  const run = ++speechRun;
+  const parts = chunks(speakable(text));
+  const fetchPart = (i) => (i < parts.length ? call("franklin_voice", parts[i], force).catch(() => null) : Promise.resolve(null));
+  let next = fetchPart(0);
   window.FranklinBrain.talking(true);
-  if (uri) {
+  for (let i = 0; i < parts.length && run === speechRun; i++) {
+    const uri = await next;
+    if (run !== speechRun) return;
+    next = fetchPart(i + 1);
+    await (uri ? playUri(uri) : sayBuiltIn(parts[i]));
+  }
+  if (run === speechRun) window.FranklinBrain.talking(false);
+}
+
+function playUri(uri) {
+  return new Promise((done) => {
     speaking = new Audio(uri);
     speaking.onended = speaking.onerror = done;
+    speaking.onpause = done;
     speaking.play().catch(done);
-    return;
-  }
-  if (!window.speechSynthesis) return done();
-  const u = new SpeechSynthesisUtterance(line);
-  const v = britishVoice();
-  if (v) u.voice = v;
-  u.lang = "en-GB";
-  u.pitch = 0.9;
-  u.onend = u.onerror = done;
-  speechSynthesis.speak(u);
+  });
+}
+
+function sayBuiltIn(line) {
+  return new Promise((done) => {
+    if (!window.speechSynthesis) return done();
+    const u = new SpeechSynthesisUtterance(line);
+    const v = britishVoice();
+    if (v) u.voice = v;
+    u.lang = "en-GB";
+    u.pitch = 0.9;
+    u.onend = u.onerror = done;
+    speechSynthesis.speak(u);
+  });
 }
 
 // ---------- first run: ask Windows for permission once ----------
@@ -785,6 +815,8 @@ const SPLASH_LINES = [
   try { state.settings = await call("get_settings"); } catch (e) { /* shown when needed */ }
   renderFranklinCard();
   renderMute();
+  call("franklin_voice_warm", [...SPLASH_LINES, "Sound, all sorted.", "Alright our kid, how's this one sound?",
+    "Alright our kid, it's Franklin. Pick a game and let's get merging."]).catch(() => {});
   await scan();
   await sleep(Math.max(0, 2200 - (Date.now() - started)));
   clearInterval(rotate);

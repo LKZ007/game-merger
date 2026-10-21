@@ -77,7 +77,7 @@ merge built from their own copy of the game, with its own saves.
 ## For developers
 
 - Release build (Windows): `pip install pyinstaller -r requirements.txt`, then
-  `pyinstaller --onedir --windowed --name GameMerger --icon installer\GameMerger.ico --collect-data edge_tts --add-data "gamemerger\recipes;gamemerger\recipes" --add-data "gamemerger\web;gamemerger\web" GameMerger.pyw`,
+  `pyinstaller --onedir --windowed --name GameMerger --icon installer\GameMerger.ico --collect-data edge_tts --add-data "gamemerger\recipes;gamemerger\recipes" --add-data "gamemerger\web;gamemerger\web" --add-data "gamemerger\xtts_server.py;gamemerger" GameMerger.pyw`,
   then `makensis -DVER=x.y.z installer\GameMerger.nsi` makes `dist\GameMergerSetup.exe`.
 - Bump `gamemerger/version.py` and publish the setup file as a GitHub release asset named
   `GameMergerSetup.exe` with tag `vX.Y.Z`; installed apps pick it up on their next start.

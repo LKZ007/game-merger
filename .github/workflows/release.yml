@@ -45,12 +45,16 @@ jobs:
           pyinstaller --noconfirm --onedir --windowed --name GameMerger
           --icon installer\GameMerger.ico --collect-data edge_tts
           --add-data "gamemerger\recipes;gamemerger\recipes"
-          --add-data "gamemerger\web;gamemerger\web" GameMerger.pyw
+          --add-data "gamemerger\web;gamemerger\web"
+          --add-data "gamemerger\xtts_server.py;gamemerger" GameMerger.pyw
 
       - name: Build installer
-        shell: bash
+        shell: pwsh
         run: |
-          "/c/Program Files (x86)/NSIS/makensis.exe" -DVER=${{ steps.ver.outputs.version }} installer/GameMerger.nsi
+          $nsis = "${env:ProgramFiles(x86)}\NSIS\makensis.exe"
+          if (-not (Test-Path $nsis)) { choco install nsis -y --no-progress | Out-Null }
+          & $nsis "-DVER=${{ steps.ver.outputs.version }}" installer\GameMerger.nsi
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - uses: actions/upload-artifact@v4
         with:
