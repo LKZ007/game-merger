@@ -157,6 +157,23 @@ class Franklin:
         culprit = out.get("culprit")
         return {"culprit": culprit if culprit in mods else None, "why": str(out.get("why") or text.strip())[:600]}
 
+    def game_identity(self, base, theme, slots, avoid=()):
+        """A name and tagline for the merged game, as if it were a new game of its own."""
+        import json
+        import re
+        ask = ("Name a new game that is %s merged with %s (mods: %s). Give it a catchy, original title (2 to 4 words, "
+               "no colon, don't just glue the two names together) and a punchy one-line tagline under 70 characters.%s "
+               "Answer with only JSON: {\"title\": \"...\", \"tagline\": \"...\"}" % (
+                   base, theme, ", ".join(slots), (" Not any of: " + ", ".join(avoid) + ".") if avoid else ""))
+        text = "".join(self.stream_reply([{"role": "user", "content": ask}]))
+        m = re.search(r"\{.*\}", text, re.S)
+        try:
+            out = json.loads(m.group(0)) if m else {}
+        except ValueError:
+            out = {}
+        title = re.sub(r"[\\/:*?\"<>|]", "", str(out.get("title") or "")).strip()[:40]
+        return {"title": title, "tagline": str(out.get("tagline") or "").strip()[:90]} if title else None
+
     def preview_pitch(self, base, theme, slots):
         """Two or three spoken sentences on what this merge would feel like to play."""
         ask = ("In two or three short spoken sentences, hype up what playing %s merged with %s would feel like: what "

@@ -338,6 +338,24 @@ class Api:
             json.dump(cache, f)
         return {n: mine[n] for n in names if n in mine}
 
+    def merge_identity(self, base_key, theme_id, avoid=None):
+        """A new-game name and tagline for this merge. Franklin makes one up; without his key it's a
+        simple name from the two games."""
+        g = self._game(base_key)
+        t = next((x for x in (g.recipe.themes if g.recipe else []) if x.id == theme_id), None)
+        if not t:
+            raise MergeError("Pick a style to merge in first.")
+        if self._settings.get("claude_api_key"):
+            try:
+                bot = franklin.Franklin(self._settings["claude_api_key"], self._settings.get("explicit", True))
+                got = bot.game_identity(g.name, t.from_game, [s.name for s in t.slots], avoid or [])
+                if got:
+                    return got
+            except Exception:
+                pass
+        source = t.from_game.split(" /")[0]
+        return {"title": "%s: %s Edition" % (g.name, source), "tagline": t.name}
+
     def merge_preview(self, base_key, theme_id):
         """What a merge could look like, before anything is downloaded: low-res trailers streamed from
         Steam (the base game and the game whose style comes in), pictures of popular mods for each part
@@ -558,7 +576,7 @@ class Api:
                 if not permissions.grant(needs):
                     raise MergeError("Frankenstein needs permission to change %s. Press Merge again and click Yes "
                                      "when Windows asks." % needs[0])
-            merge = self._new_merge(g, t, p["mode"], p["destination"], p["name"], job)
+            merge = self._new_merge(g, t, p["mode"], p["destination"], p["name"], job, p.get("tagline", ""))
             problems = []
             for fw in frameworks:
                 try:
@@ -590,7 +608,7 @@ class Api:
             return {"merge_id": merge.id, "name": merge.name, "problems": problems}
         return self._run(work)
 
-    def _new_merge(self, g, t, mode, destination, name, job):
+    def _new_merge(self, g, t, mode, destination, name, job, tagline=""):
         """Copy the base game, give the merge its cover info and its own saves."""
         r = g.recipe
         merge = Merge.create(r, t, g.path, destination, mode, name,
@@ -599,6 +617,7 @@ class Api:
         merge.data["cover_appid"] = covers.appid_for(g) or ""
         merge.data["source_appid"] = t.source_appid
         merge.data["source_name"] = t.from_game.split(" /")[0]
+        merge.data["tagline"] = (tagline or "")[:90]
         merge.save()
         if r.saves:
             saves.create_slot(merge.id, r, log=job.write)
@@ -807,7 +826,7 @@ class Api:
         kinds = {MODE_HARDLINK: "Fast copy", MODE_COPY: "Full copy", MODE_INPLACE: "Original (backed up)"}
         out = []
         for m in Merge.all():
-            out.append({"id": m.id, "name": m.name, "game": m.data.get("game_name", ""),
+            out.append({"id": m.id, "name": m.name, "tagline": m.data.get("tagline", ""), "game": m.data.get("game_name", ""),
                         "recipe_id": m.data.get("recipe_id"), "theme": m.data.get("theme_name", ""),
                         "mode": m.mode, "mode_label": kinds.get(m.mode, m.mode), "folder": m.target_path,
                         "created": m.data.get("created", ""), "status": m.data.get("status", ""),
@@ -820,9 +839,7 @@ class Api:
                         "playing": self._playing == m.id})
         return out
 
-    def merge_cover(self, merge_id):
-        """Combined cover: the base game's art with the merged-in game's art cut in."""
-        m = Merge.load(merge_id)
+    def _cover_parts(self, m):
         root = self._steam_root()
         base = covers.steam_cover(m.data["cover_appid"], root) if m.data.get("cover_appid") else None
         if not base:
@@ -832,9 +849,21 @@ class Api:
         if not sid and m.data.get("source_name"):
             sid = covers.search_appid(m.data["source_name"])
         source = covers.steam_cover(sid, root) if sid else None
-        path = covers.merged_cover(base, source, m.data.get("source_name", "") or m.data.get("theme_name", ""),
-                                   "%s-%s" % (m.id, "s" if source else "n"))
-        return covers.as_data_uri(path)
+        merged = covers.merged_cover(base, source, m.data.get("source_name", "") or m.data.get("theme_name", ""),
+                                     "%s-%s" % (m.id, "s" if source else "n"), title=m.name, tagline=m.data.get("tagline", ""))
+        return base, source, merged
+
+    def merge_cover(self, merge_id):
+        """Combined cover: the base game's art with the merged-in game's art cut in."""
+        return covers.as_data_uri(self._cover_parts(Merge.load(merge_id))[2])
+
+    def fusion_art(self, merge_id):
+        """The covers for the merge animation: the two games, then the one they become."""
+        m = Merge.load(merge_id)
+        base, source, merged = self._cover_parts(m)
+        return {"name": m.name, "tagline": m.data.get("tagline", ""), "base_name": m.data.get("game_name", ""),
+                "source_name": m.data.get("source_name", "") or m.data.get("theme_name", ""),
+                "base": covers.as_data_uri(base), "source": covers.as_data_uri(source), "merged": covers.as_data_uri(merged)}
 
     def play(self, merge_id):
         """Swap in this merge's own saves, start the game, and swap them back when it closes."""

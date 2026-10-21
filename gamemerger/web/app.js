@@ -231,10 +231,24 @@ async function startSetup() {
       key: g.key, themeId: t.id, options: o,
       frameworks: new Set(o.frameworks.map((f) => f.id)),
       manual: {}, mods: [], check: { mods: [], clashes: [] },
-      mode: o.mode, name: o.default_name, destination: o.destination,
+      mode: o.mode, name: o.default_name, destination: o.destination, tagline: "", names: [],
     };
     show("setup");
+    nameMerge(state.setup);
   } catch (e) { toast(errText(e)); }
+}
+
+// Every merge is its own new game: Franklin names it and gives it a tagline (the player can change it).
+async function nameMerge(s) {
+  const btn = $("#mReroll");
+  if (btn) { btn.disabled = true; btn.textContent = "Thinking…"; }
+  try {
+    const id = await call("merge_identity", s.key, s.themeId, s.names);
+    if (state.setup === s && !s.named) {
+      s.name = id.title; s.tagline = id.tagline; s.names.push(id.title);
+    }
+  } catch (e) { /* keep the plain name */ }
+  if (state.setup === s && state.view === "setup") renderSetup();
 }
 
 const MODES = [
@@ -289,7 +303,9 @@ function renderSetup() {
       <div class="label" style="margin:16px 0 8px">Where to put it</div>
       <div class="modes">${modes}</div>
       <div class="two" style="margin-top:14px">
-        <div class="field"><label for="mName">Name</label><input class="input" id="mName" value="${esc(s.name)}"></div>
+        <div class="field"><label for="mName">Your new game's name</label>
+          <div class="row" style="flex-wrap:nowrap"><input class="input" id="mName" value="${esc(s.name)}"><button class="btn" id="mReroll" title="Franklin makes up another one">New name</button></div>
+          ${s.tagline ? `<div class="muted small" style="margin-top:6px">“${esc(s.tagline)}”</div>` : ""}</div>
         <div class="field"><label for="mDest">Folder</label><div class="row" style="flex-wrap:nowrap"><input class="input" id="mDest" value="${esc(s.mode === "inplace" ? g.path : s.destination)}" ${s.mode === "inplace" ? "disabled" : ""}>
           <button class="btn" id="mBrowse" ${s.mode === "inplace" ? "disabled" : ""}>Browse</button></div></div>
       </div></details>
@@ -321,7 +337,8 @@ function renderSetup() {
   }));
   v.querySelectorAll("[data-remove]").forEach((b) => (b.onclick = () => { s.mods.splice(+b.dataset.remove, 1); renderSetup(); checkMods(); }));
   v.querySelectorAll("[data-mode]").forEach((b) => (b.onclick = () => { s.mode = b.dataset.mode; renderSetup(); }));
-  $("#mName").oninput = (e) => (s.name = e.target.value);
+  $("#mName").oninput = (e) => { s.name = e.target.value; s.named = true; };
+  $("#mReroll").onclick = () => { s.named = false; nameMerge(s); };
   $("#mDest").oninput = (e) => { if (s.mode !== "inplace") s.destination = e.target.value; };
   $("#mBrowse").onclick = async () => { const p = await call("pick_folder"); if (p) { s.destination = p; renderSetup(); } };
   $("#go").onclick = runMerge;
@@ -429,12 +446,13 @@ async function runMerge() {
   let id;
   try {
     id = await call("start_merge", {
-      key: s.key, theme_id: s.themeId, mode: s.mode, name: s.name, destination: s.destination,
+      key: s.key, theme_id: s.themeId, mode: s.mode, name: s.name, tagline: s.tagline, destination: s.destination,
       frameworks: fw.map((f) => f.id), manual_files: s.manual, mods: s.mods,
     });
   } catch (e) { return modal("Couldn't start", `<p>${esc(errText(e))}</p>`); }
   const res = await followJob(id, "Merging " + s.name);
   if (res && res.result) {
+    await playFusion(res.result.merge_id);
     const p = res.result.problems;
     const body = `<p>“${esc(res.result.name)}” is ready. Press Play in My merges.</p>` +
       (p.length ? `<div class="note">Some parts didn't install:<ul>${p.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>Franklin can help with these.</div>` : "");
@@ -442,6 +460,62 @@ async function runMerge() {
     state.setup = null;
     show(go ? "merges" : "library");
   }
+}
+
+// The two games spin in, fuse in a violet flash and come out as one box (about 3 seconds, skippable).
+async function playFusion(mergeId) {
+  let art;
+  try { art = await call("fusion_art", mergeId); } catch (e) { return; }
+  const box = (cover, name, cls) => `<div class="fz-box ${cls}">${caseHtml(name, cover)}</div>`;
+  const el = document.createElement("div");
+  el.className = "fusion";
+  el.setAttribute("role", "dialog");
+  el.setAttribute("aria-label", "Merging " + art.name);
+  el.innerHTML = `${box(art.base, art.base_name, "fz-left")}${box(art.source, art.source_name, "fz-right")}
+    <div class="fz-flash"></div><canvas class="fz-sparks"></canvas>
+    ${box(art.merged, art.name, "fz-merged")}
+    <div class="fz-title"><div class="eyebrow">It's alive</div><h1>${esc(art.name)}</h1>${art.tagline ? `<p class="muted">${esc(art.tagline)}</p>` : ""}</div>
+    <button class="btn ghost fz-skip">Skip</button>`;
+  document.body.appendChild(el);
+  const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (reduce) el.classList.add("fz-instant");
+  sparks(el.querySelector(".fz-sparks"), reduce ? 0 : 1500);
+  if (!reduce) setTimeout(() => speak(line("goodMod")), 1500);
+  await new Promise((resolve) => {
+    let t;
+    const end = () => { clearTimeout(t); document.removeEventListener("keydown", key, true); el.classList.add("fz-out"); setTimeout(() => el.remove(), 350); resolve(); };
+    const key = (e) => { if (e.key === "Escape" || e.key === "Enter" || e.key === " ") { e.preventDefault(); e.stopPropagation(); end(); } };
+    document.addEventListener("keydown", key, true);
+    el.onclick = end;
+    el.querySelector(".fz-skip").focus();
+    t = setTimeout(end, reduce ? 1500 : 4200);
+  });
+}
+
+// Violet sparks bursting out from the middle when the two boxes hit.
+function sparks(cv, delay) {
+  const w = (cv.width = innerWidth), h = (cv.height = innerHeight), ctx = cv.getContext("2d");
+  const ps = Array.from({ length: 140 }, () => {
+    const a = Math.random() * Math.PI * 2, v = 3 + Math.random() * 9;
+    return { x: w / 2, y: h / 2, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: 1, grey: Math.random() < 0.35 };
+  });
+  setTimeout(() => {
+    const step = () => {
+      if (!cv.isConnected) return;
+      ctx.clearRect(0, 0, w, h);
+      let alive = 0;
+      for (const p of ps) {
+        if (p.life <= 0) continue;
+        alive++;
+        p.x += p.vx; p.y += p.vy; p.vx *= 0.965; p.vy *= 0.965; p.life -= 0.012;
+        ctx.globalAlpha = Math.max(p.life, 0);
+        ctx.fillStyle = p.grey ? "#ece8f5" : "#a78bfa";
+        ctx.beginPath(); ctx.arc(p.x, p.y, 2.2, 0, Math.PI * 2); ctx.fill();
+      }
+      if (alive) requestAnimationFrame(step);
+    };
+    step();
+  }, delay);
 }
 
 // Shows a progress window for a background job until it finishes.
@@ -479,7 +553,7 @@ async function loadMerges() {
       <div data-merge-cover="${esc(m.id)}">${caseHtml(m.game, null, "small")}</div>
       <div class="merge-info">
         <div class="merge-name">${esc(m.name)}</div>
-        <div class="muted">${esc(m.game)} × ${esc(m.theme)}</div>
+        <div class="muted">${m.tagline ? `<em>${esc(m.tagline)}</em> · ` : ""}${esc(m.game)} × ${esc(m.theme)}</div>
         <div class="row small"><span class="tag">${esc(m.mode_label)}</span><span class="tag">${m.mods.length} installed</span>${m.has_saves ? `<span class="tag">Own saves</span>` : ""}${m.offline_lock ? `<span class="tag" title="Starts in offline mode so mods can't reach online play">Online locked</span>` : ""}${m.playing ? `<span class="tag live">Playing now</span>` : ""}${m.status === "restored" ? `<span class="tag">Mods removed</span>` : ""}</div>
         <div class="muted small" title="${esc(m.folder)}">${esc(m.folder)}</div>
       </div>

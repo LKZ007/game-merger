@@ -240,12 +240,15 @@ def made_cover(name, folder=None, exe_names=()):
     return out
 
 
-def merged_cover(base_path, source_path, label, key):
-    """Base game art with the merged-in game's art (or its name) cut in from the bottom right."""
+def merged_cover(base_path, source_path, label, key, title="", tagline=""):
+    """Base game art with the merged-in game's art (or its name) cut in from the bottom right, and the
+    merge's own name across the bottom like a new game's box."""
     try:
         from PIL import Image, ImageDraw, ImageOps
     except ImportError:
         return base_path
+    if title:
+        key += "-" + hashlib.sha1((title + "|" + tagline).encode("utf-8")).hexdigest()[:8]
     out = os.path.join(paths.sub("covers"), "merge-%s.png" % key)
     if os.path.isfile(out):
         return out
@@ -271,10 +274,33 @@ def merged_cover(base_path, source_path, label, key):
     base.paste(src, (0, 0), mask)
     d = ImageDraw.Draw(base)
     d.line(edge, fill=(167, 139, 250), width=8)
-    cx, cy = (edge[0][0] + edge[1][0]) // 2, (edge[0][1] + edge[1][1]) // 2
+    k = 0.3 if title and source_path else 0.5  # keep the × clear of the name band
+    cx, cy = int(edge[0][0] + k * (edge[1][0] - edge[0][0])), int(edge[0][1] + k * (edge[1][1] - edge[0][1]))
     d.ellipse([cx - 44, cy - 44, cx + 44, cy + 44], fill=(167, 139, 250), outline=(22, 11, 46), width=6)
     f = _font(64)
     d.text((cx - d.textlength("×", font=f) / 2, cy - 42), "×", font=f, fill=(22, 11, 46))
+    if title:
+        # a dark band at the bottom with the new game's name, like a real box
+        band = Image.new("RGBA", (W, 300), (0, 0, 0, 0))
+        bd = ImageDraw.Draw(band)
+        for y in range(300):
+            bd.line([(0, y), (W, y)], fill=(8, 5, 16, min(235, int(y * 1.4))))
+        base.paste(band, (0, H - 300), band)
+        d = ImageDraw.Draw(base)
+        font = _font(64)
+        lines = _wrap(d, title.upper(), font, W - 70)[:2]
+        if len(lines) > 1 or d.textlength(lines[0], font=font) > W - 70:
+            font = _font(52)
+            lines = _wrap(d, title.upper(), font, W - 70)[:2]
+        small = _font(24)
+        tag = _wrap(d, tagline, small, W - 72)[:2] if tagline else []
+        y = H - 56 - (len(lines) * 58) - 30 * len(tag)
+        for ln in lines:
+            d.text((36, y), ln, font=font, fill=(236, 232, 245))
+            y += 58
+        d.line([(38, y + 8), (150, y + 8)], fill=(167, 139, 250), width=5)
+        for i, ln in enumerate(tag):
+            d.text((36, y + 22 + 30 * i), ln, font=small, fill=(196, 181, 253))
     base.save(out)
     return out
 
