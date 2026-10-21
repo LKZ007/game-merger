@@ -1,0 +1,102 @@
+{
+  "id": "gta5",
+  "name": "Grand Theft Auto V (story mode only)",
+  "exe": [
+    "GTA5.exe",
+    "GTA5_Enhanced.exe",
+    "PlayGTAV.exe"
+  ],
+  "steam_appids": [
+    "271590",
+    "3240220"
+  ],
+  "nexus_domain": "gta5",
+  "logs": [
+    "ScriptHookV.log",
+    "ScriptHookVDotNet.log",
+    "asiloader.log"
+  ],
+  "saves": [
+    "{Documents}/Rockstar Games/GTA V/Profiles",
+    "{Documents}/Rockstar Games/GTAV Enhanced/Profiles"
+  ],
+  "processes": [
+    "GTA5.exe",
+    "GTA5_Enhanced.exe"
+  ],
+  "warning": "Only use the merged copy in Story Mode. Modded files in GTA Online can get your account banned.",
+  "layout": {
+    "root_markers": [
+      "scripts",
+      "mods",
+      "plugins",
+      "x64",
+      "update"
+    ],
+    "loose_rules": [
+      {
+        "ext": [
+          ".asi"
+        ],
+        "dest": "."
+      },
+      {
+        "ext": [
+          ".cs",
+          ".vb",
+          ".dll"
+        ],
+        "dest": "scripts"
+      }
+    ]
+  },
+  "frameworks": [
+    {
+      "id": "scripthookv",
+      "name": "Script Hook V",
+      "manual_url": "http://www.dev-c.com/gtav/scripthookv/",
+      "flat_root": true,
+      "subdir": "bin",
+      "scrape": {
+        "page": "http://www.dev-c.com/gtav/scripthookv/",
+        "pattern": "(?:href=\")([^\"]*ScriptHookV_[0-9a-z.]+\\.zip)"
+      }
+    },
+    {
+      "id": "shvdn",
+      "name": "Script Hook V .NET",
+      "github": "crosire/scripthookvdotnet",
+      "asset": "(?i)\\.zip$",
+      "flat_root": true
+    }
+  ],
+  "themes": [
+    {
+      "id": "minecraft",
+      "name": "Minecraft style: blocks, skins and creatures",
+      "from_game": "Minecraft",
+      "source_match": [
+        "minecraft"
+      ],
+      "description": "Gives Los Santos a Minecraft look: Steve and Alex player models, Minecraft creatures, blocky textures and build mods. No Minecraft files are copied.",
+      "frameworks": [
+        "scripthookv",
+        "shvdn"
+      ],
+      "slots": [
+        {
+          "name": "Player skins (Steve, Alex...)",
+          "search": "minecraft"
+        },
+        {
+          "name": "Creatures and mobs",
+          "search": "minecraft mob"
+        },
+        {
+          "name": "Building / block placing",
+          "search": "map builder"
+        }
+      ]
+    }
+  ]
+}

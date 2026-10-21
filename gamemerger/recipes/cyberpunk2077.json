@@ -1,0 +1,167 @@
+{
+  "id": "cyberpunk2077",
+  "name": "Cyberpunk 2077",
+  "exe": [
+    "bin/x64/Cyberpunk2077.exe"
+  ],
+  "steam_appids": [
+    "1091500"
+  ],
+  "nexus_domain": "cyberpunk2077",
+  "logs": [
+    "bin/x64/plugins/cyber_engine_tweaks/cyber_engine_tweaks.log",
+    "red4ext/logs/*.log",
+    "r6/logs/*.log",
+    "red4ext/plugins/ArchiveXL/*.log",
+    "red4ext/plugins/TweakXL/*.log"
+  ],
+  "saves": [
+    "{SavedGames}/CD Projekt Red/Cyberpunk 2077"
+  ],
+  "processes": [
+    "Cyberpunk2077.exe"
+  ],
+  "layout": {
+    "root_markers": [
+      "archive",
+      "bin",
+      "r6",
+      "red4ext",
+      "mods",
+      "engine"
+    ],
+    "loose_rules": [
+      {
+        "ext": [
+          ".archive",
+          ".xl"
+        ],
+        "dest": "archive/pc/mod"
+      },
+      {
+        "ext": [
+          ".reds"
+        ],
+        "dest": "r6/scripts"
+      },
+      {
+        "ext": [
+          ".yaml",
+          ".yml"
+        ],
+        "dest": "r6/tweaks"
+      },
+      {
+        "ext": [
+          ".lua"
+        ],
+        "dest": "bin/x64/plugins/cyber_engine_tweaks/mods"
+      }
+    ]
+  },
+  "frameworks": [
+    {
+      "id": "red4ext",
+      "name": "RED4ext (plugin loader)",
+      "github": "WopsS/RED4ext",
+      "asset": "(?i)red4ext.*\\.zip$"
+    },
+    {
+      "id": "cet",
+      "name": "Cyber Engine Tweaks",
+      "github": "maximegmd/CyberEngineTweaks",
+      "asset": "(?i)cet.*\\.zip$"
+    },
+    {
+      "id": "archivexl",
+      "name": "ArchiveXL (adds new cars and items)",
+      "github": "psiberx/cp2077-archive-xl",
+      "asset": "(?i)archivexl.*\\.zip$"
+    },
+    {
+      "id": "tweakxl",
+      "name": "TweakXL (changes game data)",
+      "github": "psiberx/cp2077-tweak-xl",
+      "asset": "(?i)tweakxl.*\\.zip$"
+    },
+    {
+      "id": "codeware",
+      "name": "Codeware (needed by many mods)",
+      "github": "psiberx/cp2077-codeware",
+      "asset": "(?i)codeware.*\\.zip$"
+    }
+  ],
+  "themes": [
+    {
+      "id": "forza",
+      "name": "Forza style: cars, driving and racing",
+      "from_game": "Forza Horizon / Forza Motorsport",
+      "source_match": [
+        "forza"
+      ],
+      "description": "Turns Night City into a Forza-style car game: real-world-style cars built for Cyberpunk, a racing-game handling overhaul, extra street races and a better speedometer. Forza's own files are never copied, only Cyberpunk mods that recreate the feel.",
+      "frameworks": [
+        "red4ext",
+        "cet",
+        "archivexl",
+        "tweakxl",
+        "codeware"
+      ],
+      "slots": [
+        {
+          "name": "Real-world style cars",
+          "search": "real car"
+        },
+        {
+          "name": "Driving / handling overhaul",
+          "search": "handling"
+        },
+        {
+          "name": "Races and street racing",
+          "search": "racing"
+        },
+        {
+          "name": "Speedometer and HUD",
+          "search": "speedometer"
+        },
+        {
+          "name": "Car customization / tuning",
+          "search": "car tuning"
+        }
+      ],
+      "source_appid": "1551360"
+    },
+    {
+      "id": "gta",
+      "name": "GTA style: police, chaos and radio",
+      "from_game": "Grand Theft Auto V",
+      "source_match": [
+        "grand theft auto",
+        "gta"
+      ],
+      "description": "Adds GTA-style gameplay to Night City: wanted level and police chase overhauls, car theft and more traffic, plus new radio stations.",
+      "frameworks": [
+        "red4ext",
+        "cet",
+        "archivexl",
+        "tweakxl",
+        "codeware"
+      ],
+      "slots": [
+        {
+          "name": "Police / wanted system",
+          "search": "police"
+        },
+        {
+          "name": "Traffic and car theft",
+          "search": "traffic"
+        },
+        {
+          "name": "Radio stations",
+          "search": "radio"
+        }
+      ],
+      "source_appid": "271590"
+    }
+  ]
+}

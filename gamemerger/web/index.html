@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Game Merger</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<div class="splash" id="splash" role="status" aria-live="polite">
+  <div class="splash-avatar"><canvas class="brain" data-brain="big" aria-label="Franklin" role="img"></canvas></div>
+  <div class="logo splash-logo">GAME<span>MERGER</span></div>
+  <div class="splash-line" id="splashLine">Alright our kid! Give us a sec, I'm finding your games…</div>
+  <div class="bar indeterminate splash-bar"><div></div></div>
+</div>
+<div class="app">
+  <nav class="nav" aria-label="Main">
+    <div class="logo">GAME<span>MERGER</span></div>
+    <button class="nav-item active" data-view="library"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>Library</button>
+    <button class="nav-item" data-view="merges"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3v6a4 4 0 0 0 8 0V3"/><path d="M12 13v8"/></svg>My merges</button>
+    <button class="nav-item" data-view="quests"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h12l4 4v12H4z"/><path d="M8 10h8M8 14h8M8 18h5"/></svg>Questlines <span class="pill">Soon</span></button>
+    <button class="nav-item" data-view="backups"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>Backups</button>
+    <button class="nav-item" data-view="settings"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg>Settings</button>
+    <div class="grow"></div>
+    <button class="nav-item franklin-toggle" id="franklinToggle"><canvas class="nav-avatar brain" data-brain="tiny" aria-hidden="true"></canvas>Franklin</button>
+    <div class="nav-foot" id="navFoot">Looking for games…</div>
+  </nav>
+
+  <main class="main" id="main">
+    <section class="view" id="view-library"></section>
+    <section class="view hidden" id="view-setup"></section>
+    <section class="view hidden" id="view-merges"></section>
+    <section class="view hidden" id="view-quests"></section>
+    <section class="view hidden" id="view-backups"></section>
+    <section class="view hidden" id="view-settings"></section>
+  </main>
+
+  <aside class="franklin" id="franklin" aria-label="Franklin assistant">
+    <header class="f-head">
+      <canvas class="f-avatar brain" data-brain="small" aria-hidden="true"></canvas>
+      <div class="grow"><div class="f-name">Franklin</div><div class="f-sub">Your merge assistant · powered by Claude</div></div>
+      <button class="icon-btn" id="franklinMute" aria-label="Mute Franklin" title="Mute Franklin's voice"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4z"/><path class="wave" d="M16 9a4 4 0 0 1 0 6M18.5 6.5a7.5 7.5 0 0 1 0 11"/><path class="cross" d="M16 9l6 6M22 9l-6 6"/></svg></button>
+      <button class="icon-btn" id="franklinNew" aria-label="New conversation" title="New conversation"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
+      <button class="icon-btn" id="franklinClose" aria-label="Hide Franklin" title="Hide"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+    </header>
+    <div class="f-body" id="franklinBody">
+      <div class="f-card" id="franklinCard"></div>
+      <div id="franklinMessages" class="f-messages" aria-live="polite"></div>
+    </div>
+    <div class="f-chips" id="franklinChips">
+      <button data-ask="explain">Explain this merge</button>
+      <button data-ask="suggest">Suggest mods</button>
+      <button data-ask="check">Check my mods</button>
+      <button data-ask="crash">Why did it crash?</button>
+      <button data-ask="online">Is this safe online?</button>
+    </div>
+    <form class="f-input" id="franklinForm">
+      <label for="franklinText" class="sr-only">Ask Franklin</label>
+      <input id="franklinText" placeholder="Ask Franklin…" autocomplete="off">
+      <button class="send" aria-label="Send"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
+    </form>
+  </aside>
+</div>
+
+<div class="modal hidden" id="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+  <div class="modal-box">
+    <h2 id="modalTitle"></h2>
+    <div id="modalBody"></div>
+    <div class="modal-actions" id="modalActions"></div>
+  </div>
+</div>
+<div class="toast hidden" id="toast" role="status"></div>
+
+<script src="brain.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,112 @@
+{
+  "id": "schedule1",
+  "name": "Schedule I",
+  "exe": [
+    "Schedule I.exe"
+  ],
+  "steam_appids": [
+    "3164500"
+  ],
+  "nexus_domain": "schedule1",
+  "logs": [
+    "MelonLoader/Latest.log"
+  ],
+  "saves": [
+    "{LocalLow}/TVGS/Schedule I/Saves"
+  ],
+  "processes": [
+    "Schedule I.exe"
+  ],
+  "layout": {
+    "root_markers": [
+      "Mods",
+      "UserLibs",
+      "Plugins",
+      "UserData",
+      "MelonLoader"
+    ],
+    "loose_rules": [
+      {
+        "ext": [
+          ".dll"
+        ],
+        "dest": "Mods"
+      },
+      {
+        "ext": [
+          ".cfg",
+          ".json"
+        ],
+        "dest": "UserData"
+      }
+    ]
+  },
+  "frameworks": [
+    {
+      "id": "melonloader",
+      "name": "MelonLoader (mod loader)",
+      "github": "LavaGang/MelonLoader",
+      "asset": "(?i)melonloader\\.x64\\.zip$"
+    }
+  ],
+  "themes": [
+    {
+      "id": "hoodwarfare",
+      "name": "Hood Warfare style: guns and gang fights",
+      "from_game": "Hood Warfare 2",
+      "source_match": [
+        "hood warfare"
+      ],
+      "description": "Pushes Schedule I toward a hood combat game: more weapons, tougher gang and police fights, and extra areas. Hood Warfare's own files are never copied, only Schedule I mods.",
+      "frameworks": [
+        "melonloader"
+      ],
+      "slots": [
+        {
+          "name": "Weapons",
+          "search": "weapon"
+        },
+        {
+          "name": "Gangs, NPCs and combat",
+          "search": "combat"
+        },
+        {
+          "name": "Police and wanted level",
+          "search": "police"
+        },
+        {
+          "name": "Vehicles",
+          "search": "vehicle"
+        }
+      ]
+    },
+    {
+      "id": "gta",
+      "name": "GTA style: cars and open world chaos",
+      "from_game": "Grand Theft Auto V",
+      "source_match": [
+        "grand theft auto",
+        "gta"
+      ],
+      "description": "Adds GTA-style vehicles, police chases and more freedom to Schedule I's town.",
+      "frameworks": [
+        "melonloader"
+      ],
+      "slots": [
+        {
+          "name": "Vehicles",
+          "search": "vehicle"
+        },
+        {
+          "name": "Police and wanted level",
+          "search": "police"
+        },
+        {
+          "name": "Quality of life",
+          "search": "quality of life"
+        }
+      ],
+      "source_appid": "271590"
+    }
+  ]
+}
