@@ -392,8 +392,36 @@ class Merge:
                             shutil.copy2(original, dest)
             self._prune(os.path.dirname(dest))
         log("Removed %d mod file(s)." % len(self.data["files"]))
+        # keep what was installed (and its kept file) so mods can be switched back on later
+        self.data["parked"] = self.data.get("parked", []) + [i for i in self.data["installs"] if i.get("kept")]
         self.data["files"], self.data["installs"] = {}, []
         self.data["status"] = "restored"
+        self.save()
+
+    def all_mods(self):
+        """Every mod this merge knows about, switched on or off, in install order."""
+        on = [dict(i, on=True) for i in self.data.get("installs", [])]
+        off = [dict(i, on=False) for i in self.data.get("parked", [])]
+        return on + off
+
+    def rebuild(self, layout, enabled, log=_noop):
+        """Switch mods on and off: undo everything, then reinstall the enabled ones (by label) in their
+        original order from the files the merge kept. Used by mod profiles and crash repair."""
+        wanted = set(enabled)
+        order = self.all_mods()
+        missing = [m["label"] for m in order if m["label"] in wanted and not self.kept_archive(m)]
+        if missing:
+            raise MergeError("Game Merger doesn't have the files for: %s. Add them again with Add mods." % ", ".join(missing))
+        self.undo(log)
+        self.data["parked"] = []
+        for m in order:
+            archive = self.kept_archive(m)
+            if m["label"] in wanted and archive:
+                self.install(archive, m["label"], layout, flat_root=m.get("flat_root", False),
+                             subdir=m.get("subdir", ""), log=log)
+            elif archive:
+                self.data["parked"].append({k: v for k, v in m.items() if k != "on"})
+        self.data["status"] = "ready"
         self.save()
 
     def _prune(self, d):

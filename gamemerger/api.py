@@ -581,11 +581,12 @@ class Api:
                 "voice_name": self._settings.get("voice_name", ""),
                 "voice_style": self._settings.get("voice_style", voice.DEFAULT_VOICE),
                 "version": VERSION,
+                "explicit": self._settings.get("explicit", True),
                 "voice_styles": ([["own", "Your own cloned voice (made on this PC)"]] if self._own_voice() else [])
                 + [[k, v[1]] for k, v in voice.NEURAL_VOICES.items()]}
 
     def save_settings(self, values):
-        for k in ("mode", "destination", "voice_on", "voice_style"):
+        for k in ("mode", "destination", "voice_on", "voice_style", "explicit"):
             if k in values:
                 self._settings[k] = values[k]
         if values.get("elevenlabs_key") is not None:
@@ -626,7 +627,7 @@ class Api:
 
         def run():
             try:
-                bot = franklin.Franklin(self._settings.get("claude_api_key", ""))
+                bot = franklin.Franklin(self._settings.get("claude_api_key", ""), self._settings.get("explicit", True))
                 for chunk in bot.stream_reply(history):
                     stream["text"] += chunk
                 with self._lock:
@@ -685,7 +686,7 @@ class Api:
         return True
 
     def franklin_voice(self, text, force=False):
-        """Franklin's voice as mp3: ElevenLabs Manchester if a key is saved, otherwise a free natural
+        """Franklin's voice as mp3: your cloned voice or ElevenLabs if set up, otherwise a free natural
         British voice. None means use the voice built into Windows."""
         if not force and not self._settings.get("voice_on", True):
             return None

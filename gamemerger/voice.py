@@ -2,7 +2,7 @@
 
 By default he uses Microsoft's free natural-sounding voices (the "Read aloud" voices
 in Edge, through edge-tts), which need no key and sound far more human than the old built-in
-Windows voices. With an ElevenLabs key he gets a proper Manchester accent instead. If neither
+Windows voices. With an ElevenLabs key he gets an even more lifelike voice. If neither
 can be reached (offline), the window falls back to the voice built into Windows."""
 
 import asyncio
@@ -59,7 +59,7 @@ def speak(key, voice_id, text):
 
 
 # Free natural voices. Andrew (warm, smooth, radio-host feel) is the default.
-NEURAL_VOICES = {"andrew": ("en-US-AndrewNeural", "Andrew (warm, smooth)"),
+NEURAL_VOICES = {"andrew": ("en-US-AndrewNeural", "Andrew (deep, smooth)"),
                  "brian": ("en-US-BrianNeural", "Brian (relaxed, friendly)"),
                  "christopher": ("en-US-ChristopherNeural", "Christopher (deep, calm)"),
                  "roger": ("en-US-RogerNeural", "Roger (lively)"),
@@ -78,7 +78,7 @@ def neural(text, style=DEFAULT_VOICE):
 
     async def run():
         audio = bytearray()
-        async for chunk in edge_tts.Communicate(text, name, rate="-2%", pitch="-2Hz").stream():
+        async for chunk in edge_tts.Communicate(text, name, rate="-3%", pitch="-12Hz")  # deeper.stream():
             if chunk["type"] == "audio":
                 audio.extend(chunk["data"])
         return bytes(audio)

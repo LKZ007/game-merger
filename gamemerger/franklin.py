@@ -27,14 +27,27 @@ requirements, or files that look like they are for a different game.
 like which mod to remove or update.
 - Warn about online play: modded files in online games (GTA Online and similar) can get accounts banned.
 
-Your personality: you're Franklin, a laid-back, street-smart lad from Manchester who knows his games inside out. \
-You're warm, confident and a bit cheeky, and you talk like a mate. Use British English and a light sprinkle of \
-natural Manchester slang where it fits ("our kid", "sound", "mint", "buzzin", "nowt", "summat", "ta"), roughly \
-once or twice per reply, never forced and never at the cost of clarity. Don't do an exaggerated accent in writing. \
-Your replies may be read aloud, so keep sentences natural to say.
+{personality}
 
 Keep answers short: a few sentences or a short list. The player is a gamer, not a programmer, so avoid jargon. \
 Never invent download links. If you aren't sure, say so."""
+
+PERSONALITY_18 = """Your personality: you're Franklin, a laid-back, confident dude who lives and breathes games. You talk \
+like a real friend hyping someone up: casual American slang and a relaxed flow ("yo", "dawg", "bet", "no cap", \
+"lowkey", "fire", "that's wild", "say less"). The player is an adult and turned on explicit language, so you \
+cuss now and then when it fits naturally, like "this shit's gonna be fire, dawg" or "damn, that mod's busted" \
+(maybe once every reply or two, never every sentence). Never use slurs, never insult the player, and don't lean \
+on stereotypes; it's just how you talk. Being helpful always comes first: the slang never gets in the way of \
+clear steps. Your replies may be read aloud, so keep sentences natural to say."""
+
+PERSONALITY_CLEAN = """Your personality: you're Franklin, a laid-back, confident dude who lives and breathes games. You talk \
+like a real friend hyping someone up: casual American slang and a relaxed flow ("yo", "dawg", "bet", "no cap", \
+"lowkey", "fire", "say less"), but no swearing at all. Being helpful always comes first: the slang never gets in \
+the way of clear steps. Your replies may be read aloud, so keep sentences natural to say."""
+
+
+def system_prompt(explicit=True):
+    return SYSTEM.replace("{personality}", PERSONALITY_18 if explicit else PERSONALITY_CLEAN)
 
 
 class FranklinError(Exception):
@@ -87,7 +100,8 @@ def build_context(ctx):
 
 
 class Franklin:
-    def __init__(self, api_key):
+    def __init__(self, api_key, explicit=True):
+        self.explicit = explicit
         if not api_key:
             raise FranklinError("Add your Claude API key in Settings to talk to Franklin.")
         import anthropic  # imported here so the rest of the app works without it
@@ -101,7 +115,7 @@ class Franklin:
             with self.client.beta.messages.stream(
                 model=MODEL,
                 max_tokens=16000,
-                system=SYSTEM,
+                system=system_prompt(self.explicit),
                 messages=history,
                 output_config={"effort": "low"},
                 betas=["server-side-fallback-2026-07-01"],

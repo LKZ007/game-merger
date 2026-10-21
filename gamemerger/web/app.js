@@ -414,7 +414,7 @@ async function loadMerges() {
 // ---------- updates ----------
 async function offerUpdate(u, asked = false) {
   if (!u) { if (asked) toast("You're on the newest version."); return; }
-  const go = await modal("Update ready, our kid", `
+  const go = await modal(line("updateTitle"), `
     <p>Game Merger <strong>${esc(u.version)}</strong> is out. It takes a few seconds: the app closes, updates and opens again. Your merges and saves aren't touched.</p>
     ${u.notes ? `<div class="log">${esc(u.notes)}</div>` : ""}`,
     [{ label: "Later", value: false }, { label: "Update now", value: true, primary: true }]);
@@ -444,7 +444,7 @@ async function importMerge(path) {
     [{ label: "Cancel", value: false }, { label: "Add it", value: true, primary: true }]);
   if (!go) return;
   const r = (await followJob(await call("import_merge", path), "Adding " + info.name))?.result;
-  if (r) { toast("Sound, “" + r.name + "” is ready to play."); show("merges"); }
+  if (r) { toast(line("importDone").replace("{name}", r.name)); show("merges"); }
 }
 
 // Refresh My merges when the game closes and the normal saves are put back.
@@ -573,6 +573,7 @@ async function loadSettings() {
     </div>
     <div class="card"><h2>Franklin's voice</h2>
       <label class="switch"><input type="checkbox" id="voiceOn" ${s.voice_on ? "checked" : ""}> Franklin talks out loud</label>
+      <label class="switch" style="margin-top:10px"><input type="checkbox" id="explicit" ${s.explicit ? "checked" : ""}> 18+ mode: Franklin cusses now and then</label>
       <div class="field" style="margin-top:12px"><label for="voiceStyle">Voice</label>
         <div class="row" style="flex-wrap:nowrap"><select class="input" id="voiceStyle">${(s.voice_styles || []).map(([id, name]) => `<option value="${id}" ${s.voice_style === id ? "selected" : ""}>${esc(name)}</option>`).join("")}</select>
           <button class="btn" id="testVoice">Hear Franklin</button></div></div>
@@ -602,17 +603,21 @@ async function loadSettings() {
   $("#elevenLink").onclick = (e) => { e.preventDefault(); call("open_url", "https://elevenlabs.io/"); };
   $("#voiceStyle").onchange = async () => {
     state.settings = await call("save_settings", { voice_style: $("#voiceStyle").value });
-    speak("Alright our kid, how's this one sound?", true);
+    speak(line("voiceTest"), true);
+  };
+  $("#explicit").onchange = async () => {
+    state.settings = await call("save_settings", { explicit: $("#explicit").checked });
+    toast($("#explicit").checked ? "18+ mode on." : "Clean mode on. No cussing.");
   };
   $("#voiceOn").onchange = async () => { await setVoice($("#voiceOn").checked); };
   $("#saveEleven").onclick = async () => {
     const v = $("#elevenKey").value.trim();
     if (!v) return toast("Paste your ElevenLabs key first.");
     await call("save_settings", { elevenlabs_key: v }); toast("Saved. Finding Franklin a voice…"); await loadSettings();
-    speak("Alright our kid, that's me sorted. Sound.");
+    speak(line("voiceSaved"));
   };
   if ($("#clearEleven")) $("#clearEleven").onclick = async () => { await call("save_settings", { elevenlabs_key: "" }); loadSettings(); };
-  $("#testVoice").onclick = () => speak("Alright our kid, it's Franklin. Pick a game and let's get merging.", true);
+  $("#testVoice").onclick = () => speak(line("hello"), true);
   $("#defBrowse").onclick = async () => { const p = await call("pick_folder"); if (p) $("#defDest").value = p; };
   $("#saveMerging").onclick = async () => { await call("save_settings", { mode: $("#defMode").value, destination: $("#defDest").value.trim() }); toast("Saved."); };
 }
@@ -826,7 +831,7 @@ async function firstRun() {
   if (st.done) return;
   if (!st.needs.length) { call("run_setup").catch(() => {}); return; }
   const list = st.needs.map((f) => `<li>${esc(f)}</li>`).join("");
-  const go = await modal("One quick thing, our kid", `
+  const go = await modal(line("permTitle"), `
     <canvas class="welcome-brain brain" data-brain="welcome" aria-hidden="true"></canvas>
     <p>Your games live in protected folders, so Windows needs to say it's OK for Game Merger to make copies and add mods there.</p>
     <p class="muted">Windows will pop up <strong>once</strong>. Press Yes and you'll never be asked again, even for games you install later in the same library.</p>
@@ -836,7 +841,7 @@ async function firstRun() {
   if (cv) cv.remove();
   if (!go) return toast("No worries. I'll ask again when you first merge.");
   const ok = await call("run_setup").catch(() => false);
-  if (ok) { toast("Sound, all sorted. You won't be asked again."); speak("Sound, all sorted."); }
+  if (ok) { toast(line("permDone") + " You won't be asked again."); speak(line("permDone")); }
   else modal("Windows said no", `<p class="muted">That's fine, nothing changed. I'll ask again when you start your first merge.</p>`);
 }
 
@@ -847,27 +852,43 @@ document.querySelectorAll("canvas[data-brain]").forEach((cv) => {
 });
 
 // ---------- start ----------
-const SPLASH_LINES = [
-  "Alright our kid! Give us a sec, I'm finding your games…",
-  "Checking Steam, Epic, GOG and the Xbox app…",
-  "Nearly there, sorting the box art…",
-];
+// Franklin's fixed lines, with and without the explicit language (Settings > Franklin's voice).
+const LINES = {
+  explicit: {
+    splash: ["Yo, what's good! Gimme a sec, I'm finding your games…", "Checking Steam, Epic, GOG and the Xbox app…", "Almost there, grabbing the box art…"],
+    found: "Bet, found {n} games. This shit's gonna be fire, dawg.", foundOne: "Bet, found 1 game. Let's get it, dawg.",
+    none: "Damn, couldn't spot any games yet. You can add one in a sec.",
+    updateTitle: "New update just dropped", importDone: "Say less, “{name}” is ready to play.",
+    voiceTest: "Yo, how's this sound?", voiceSaved: "Bet, voice is locked in.",
+    hello: "Yo, it's Franklin. Pick a game and let's cook, dawg.",
+    permTitle: "Quick thing before we cook", permDone: "Bet, all sorted.",
+  },
+  clean: {
+    splash: ["Yo, what's good! Gimme a sec, I'm finding your games…", "Checking Steam, Epic, GOG and the Xbox app…", "Almost there, grabbing the box art…"],
+    found: "Bet, found {n} games. This is gonna be fire, dawg.", foundOne: "Bet, found 1 game. Let's get it, dawg.",
+    none: "Couldn't spot any games yet. You can add one in a sec.",
+    updateTitle: "New update just dropped", importDone: "Say less, “{name}” is ready to play.",
+    voiceTest: "Yo, how's this sound?", voiceSaved: "Bet, voice is locked in.",
+    hello: "Yo, it's Franklin. Pick a game and let's cook, dawg.",
+    permTitle: "Quick thing before we cook", permDone: "Bet, all sorted.",
+  },
+};
+const line = (k) => LINES[state.settings && state.settings.explicit === false ? "clean" : "explicit"][k];
 (async () => {
   const started = Date.now();
   let i = 0;
-  const rotate = setInterval(() => { i = (i + 1) % SPLASH_LINES.length; $("#splashLine").textContent = SPLASH_LINES[i]; }, 1600);
+  const rotate = setInterval(() => { const L = line("splash"); i = (i + 1) % L.length; $("#splashLine").textContent = L[i]; }, 1600);
   renderLibrary();
   renderFranklinCard();
   try { state.settings = await call("get_settings"); } catch (e) { /* shown when needed */ }
   renderFranklinCard();
   renderMute();
-  call("franklin_voice_warm", [...SPLASH_LINES, "Sound, all sorted.", "Alright our kid, how's this one sound?",
-    "Alright our kid, it's Franklin. Pick a game and let's get merging."]).catch(() => {});
+  call("franklin_voice_warm", [...line("splash"), line("permDone"), line("voiceTest"), line("hello")]).catch(() => {});
   await scan();
   await sleep(Math.max(0, 2200 - (Date.now() - started)));
   clearInterval(rotate);
   const n = state.games.length;
-  $("#splashLine").textContent = n ? `Sound, found ${n} game${n === 1 ? "" : "s"}. Let's get merging.` : "Couldn't spot any games yet, but you can add one in a sec.";
+  $("#splashLine").textContent = n > 1 ? line("found").replace("{n}", n) : n ? line("foundOne") : line("none");
   speak($("#splashLine").textContent);
   await sleep(1100);
   $("#splash").classList.add("gone");
