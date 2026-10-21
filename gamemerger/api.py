@@ -12,7 +12,7 @@ import urllib.parse
 import uuid
 import webbrowser
 
-from . import covers, detect, downloader, franklin, network, paths, permissions, saves, sharing, updater, voice
+from . import covers, detect, downloader, franklin, network, paths, permissions, saves, scan, sharing, updater, voice
 from .version import VERSION
 from .installer import MODE_COPY, MODE_HARDLINK, MODE_INPLACE, Merge, MergeError, find_clashes, preview
 from .recipes import load_recipes, resource_dir
@@ -251,7 +251,7 @@ class Api:
             for m in p.get("mods", []):
                 name = os.path.basename(m["path"])
                 try:
-                    merge.install(m["path"], "%s (%s)" % (name, m["slot"]), r.layout, log=job.write)
+                    merge.install(m["path"], "%s (%s)" % (name, m["slot"]), r.layout, log=job.write, check=scan.scan)
                 except Exception as e:
                     problems.append("%s: %s" % (name, e))
                     job.write("✖ %s failed: %s" % (name, e))
@@ -427,7 +427,7 @@ class Api:
                 for inst, archive in items:
                     try:
                         merge.install(archive, inst["label"], r.layout, flat_root=inst.get("flat_root", False),
-                                      subdir=inst.get("subdir", ""), log=job.write)
+                                      subdir=inst.get("subdir", ""), log=job.write, check=scan.scan)
                     except Exception as e:
                         problems.append("%s: %s" % (inst["label"], e))
                         job.write("✖ %s failed: %s" % (inst["label"], e))
@@ -456,6 +456,8 @@ class Api:
                         "replaced": sum(1 for e in m.data.get("files", {}).values() if e.get("replaced")),
                         "cover_appid": m.data.get("cover_appid", ""),
                         "has_saves": os.path.isdir(saves.slot_root(m.id)),
+                        "offline_lock": bool(self._recipe(m.data.get("recipe_id")) and
+                                             self._recipe(m.data.get("recipe_id")).launch_args and m.mode != MODE_INPLACE),
                         "playing": self._playing == m.id})
         return out
 
@@ -488,7 +490,9 @@ class Api:
             saves.swap_in(merge_id, r)
             self._playing = merge_id
             saves.watch_until_closed(r.processes or [os.path.basename(exe)], self._game_closed)
-        subprocess.Popen([exe], cwd=os.path.dirname(exe))
+        # modded copies start offline-only where the game supports it, so mods never reach online modes
+        args = list(r.launch_args) if r and m.mode != MODE_INPLACE else []
+        subprocess.Popen([exe] + args, cwd=os.path.dirname(exe))
         return True
 
     def playing(self):
@@ -511,7 +515,7 @@ class Api:
         def work(job):
             for p in files:
                 try:
-                    m.install(p, os.path.basename(p), r.layout, log=job.write)
+                    m.install(p, os.path.basename(p), r.layout, log=job.write, check=scan.scan)
                 except Exception as e:
                     job.write("✖ %s failed: %s" % (os.path.basename(p), e))
         return self._run(work)
@@ -547,6 +551,40 @@ class Api:
             m.data["profile"] = ""
         m.save()
         return self.merge_mods(merge_id)
+
+    def fix_crash(self, merge_id):
+        """One-click crash repair: Franklin reads the logs, turns off the mod causing it, and restarts the game."""
+        m = Merge.load(merge_id)
+        r = self._recipe(m.data.get("recipe_id"))
+        if self._playing == merge_id and saves.running(r.processes if r else []):
+            raise MergeError("The game is still running. Close it first.")
+        bot = franklin.Franklin(self._settings.get("claude_api_key", ""), self._settings.get("explicit", True))
+
+        def work(job):
+            job.write("Franklin is reading the crash logs …")
+            logs = franklin.read_logs(m.target_path, r.logs if r else [])
+            if not logs:
+                raise MergeError("There are no log files yet. Play until it crashes, then press Fix it again.")
+            on = [x["label"] for x in m.all_mods() if x["on"]]
+            ctx = franklin.build_context({"base_game": m.data.get("game_name"), "theme": m.data.get("theme_name"),
+                                          "logs": logs})
+            try:
+                verdict = bot.diagnose(ctx, on)
+            except franklin.FranklinError as e:
+                raise MergeError(str(e))
+            job.write(verdict["why"])
+            if not verdict["culprit"]:
+                return {"fixed": False, "why": verdict["why"]}
+            if not m.kept_archive(next(x for x in m.all_mods() if x["label"] == verdict["culprit"])):
+                return {"fixed": False, "why": verdict["why"] + " Remove that mod with Undo all mods, then add the others back."}
+            job.write("Turning off %s …" % verdict["culprit"])
+            m.rebuild(r.layout, [x for x in on if x != verdict["culprit"]], log=job.write)
+            m.data["profile"] = ""
+            m.save()
+            job.write("Starting the game again …")
+            self.play(merge_id)
+            return {"fixed": True, "culprit": verdict["culprit"], "why": verdict["why"]}
+        return self._run(work)
 
     def undo(self, merge_id):
         m = Merge.load(merge_id)

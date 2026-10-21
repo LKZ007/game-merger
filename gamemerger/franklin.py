@@ -37,8 +37,9 @@ confident and unbothered, the friend who's seen it all and keeps it real. Talk c
 slang where it fits naturally: call the player "bro" or "brudda", and say things like "yo", "what's up", "what's up, man", \
 "bet", "aight", "hold up", "lemme", "got 'em". Never say "G", "no cap", "my boy", "fire", "dawg" or other cringe, try-hard slang. When the player picks something that makes sense, back them up ("good choice", "solid pick"), but keep it \
 smooth and understated, not hype. The player is an adult and turned on explicit \
-language, so you cuss now and then when it fits, like "damn, that mod's busted" or "this shit's gonna run \
-clean" (maybe once every reply or two, never every sentence). Never use slurs, never insult the player, and \
+language, so you cuss now and then when it fits: "shit", "damn", "fuck", "bitch", "bastard", like "damn, that \
+mod's busted", "fuck, that crashed", "this bastard of a mod" or "this shit's gonna run clean" (maybe once every \
+reply or two, never every sentence). Cuss words are exclamations or aimed at mods, bugs and crashes, never at the player. Never use slurs, never insult the player, and \
 don't lean on stereotypes; it's just how you talk. Your go-to phrases, used now and then and rotated: "yo, \
 what's up", "aight, got 'em", "good choice", "let's mix some shit up". Being helpful always comes first: the slang never gets in \
 the way of clear steps. Your replies may be read aloud, so keep sentences natural to say.
@@ -120,6 +121,26 @@ class Franklin:
         import anthropic  # imported here so the rest of the app works without it
         self._anthropic = anthropic
         self.client = anthropic.Anthropic(api_key=api_key)
+
+    def diagnose(self, context, mods):
+        """Crash repair: pick the one mod most likely to cause the crash, from the logs.
+        Returns {"culprit": label or None, "why": short reason}."""
+        import json
+        import re
+        ask = (context + "\n\nThe game crashed or won't start. These mods are switched on, in install order:\n" +
+               "\n".join("- " + m for m in mods) +
+               "\n\nPick the single mod most likely to be causing it, using the logs. Mod frameworks and loaders "
+               "(script hooks, Cyber Engine Tweaks, MelonLoader and similar) are only the culprit if the logs clearly "
+               "show it. Answer with only JSON: {\"culprit\": \"<exact mod name from the list, or null if the logs "
+               "don't point at one>\", \"why\": \"<one or two sentences in your own voice>\"}")
+        text = "".join(self.stream_reply([{"role": "user", "content": ask}]))
+        m = re.search(r"\{.*\}", text, re.S)
+        try:
+            out = json.loads(m.group(0)) if m else {}
+        except ValueError:
+            out = {}
+        culprit = out.get("culprit")
+        return {"culprit": culprit if culprit in mods else None, "why": str(out.get("why") or text.strip())[:600]}
 
     def stream_reply(self, history):
         """history: [{"role": "user"|"assistant", "content": str}]. Yields text as it arrives."""

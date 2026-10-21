@@ -386,7 +386,7 @@ async function loadMerges() {
       <div class="merge-info">
         <div class="merge-name">${esc(m.name)}</div>
         <div class="muted">${esc(m.game)} × ${esc(m.theme)}</div>
-        <div class="row small"><span class="tag">${esc(m.mode_label)}</span><span class="tag">${m.mods.length} installed</span>${m.has_saves ? `<span class="tag">Own saves</span>` : ""}${m.playing ? `<span class="tag live">Playing now</span>` : ""}${m.status === "restored" ? `<span class="tag">Mods removed</span>` : ""}</div>
+        <div class="row small"><span class="tag">${esc(m.mode_label)}</span><span class="tag">${m.mods.length} installed</span>${m.has_saves ? `<span class="tag">Own saves</span>` : ""}${m.offline_lock ? `<span class="tag" title="Starts in offline mode so mods can't reach online play">Online locked</span>` : ""}${m.playing ? `<span class="tag live">Playing now</span>` : ""}${m.status === "restored" ? `<span class="tag">Mods removed</span>` : ""}</div>
         <div class="muted small" title="${esc(m.folder)}">${esc(m.folder)}</div>
       </div>
       <div class="merge-actions">
@@ -394,6 +394,7 @@ async function loadMerges() {
         <button class="btn" data-act="mods">Mods &amp; profiles</button>
         <button class="btn" data-act="add">Add mods</button>
         <button class="btn" data-act="share">Share</button>
+        <button class="btn" data-act="fix">Fix crash</button>
         <button class="btn" data-act="crash">Why did it crash?</button>
         <button class="btn ghost" data-act="folder">Open folder</button>
         <button class="btn ghost" data-act="undo">Undo all mods</button>
@@ -502,6 +503,14 @@ async function mergeAction(id, act) {
     else if (act === "folder") await call("open_folder", id);
     else if (act === "share") await shareMerge(m);
     else if (act === "mods") await modsDialog(m);
+    else if (act === "fix") {
+      const r = (await followJob(await call("fix_crash", id), "Fixing " + m.name))?.result;
+      if (r) {
+        modal(r.fixed ? "Fixed it" : "Couldn't pin it down", `<p>${esc(r.why)}</p>${r.fixed ? `<p class="muted">I switched off <strong>${esc(r.culprit)}</strong> and started the game again. Switch it back on any time in Mods &amp; profiles.</p>` : `<p class="muted">Ask me in the chat and I'll dig deeper.</p>`}`);
+        if (r.fixed) speak(r.why);
+        loadMerges();
+      }
+    }
     else if (act === "crash") { openFranklin(); askFranklin("My merged game crashed or a mod isn't working. What went wrong?", { merge: id }); }
     else if (act === "add") { const job = await call("add_mods", id); if (job) { await followJob(job, "Adding mods"); loadMerges(); } }
     else if (act === "undo") {
@@ -893,11 +902,11 @@ const LINES = {
   explicit: {
     splash: ["Yo, what's up bro. Hold up, lemme find your games…", "What's up, man. Lemme find your games…", "What's up bro. Lemme pull up your games…",
       "Aight brudda, lemme see what you got installed…", "Checking Steam, Epic, GOG and the Xbox app…",
-      "Hold up, grabbing your box art…", "Damn bro, you got a collection. Sorting it out…"],
+      "Hold up, grabbing your box art…", "Damn bro, you got a collection. Sorting it out…", "Hold up, lemme find all your shit…"],
     found: ["Bet, got 'em. {n} games ready, bro.", "Found {n} games. Aight, let's mix some shit up.", "{n} games, bro. Pick one and we'll get into it.",
-      "Got {n} games ready, brudda. Your move.", "{n} games. Time to make some wild shit."],
+      "Got {n} games ready, brudda. Your move.", "{n} games. Time to make some wild shit.", "Fuck yeah, {n} games. Let's mix some shit up."],
     foundOne: ["Found 1 game, bro. We can work with that.", "Just the one game bro, but damn, that's enough to start."],
-    none: ["Damn bro, no games showing up yet. Point me at a folder.", "Couldn't spot any games, brudda. Add one and we're good."],
+    none: ["Damn bro, no games showing up yet. Point me at a folder.", "Where the fuck are your games, bro? Point me at a folder.", "Couldn't spot any games, brudda. Add one and we're good."],
     updateTitle: ["New update's out, bro", "Got an update for you, brudda", "Yo, there's an update"],
     importDone: ["Aight, “{name}” is ready, bro.", "“{name}” is in, bro. Go have fun.", "Done brudda, “{name}” is set up."],
     voiceTest: ["Yo bro, how's this sound?", "This is me now, bro. Smooth as hell, right?", "Check it brudda. That's the voice."],
@@ -907,7 +916,7 @@ const LINES = {
     goodGame: ["Good choice, bro.", "Good choice. {game} is a solid base.", "Ohh, good choice, brudda.", "{game}? Good choice, bro.",
       "Damn, good choice.", "Solid pick, bro.", "Aight, {game} it is."],
     goodMod: ["Good choice, brudda.", "Bet, got 'em.", "Good choice on that one, bro.", "Good pick, brudda.", "Bet, that's going in.",
-      "Damn, good choice."],
+      "Damn, good choice.", "Fuck yeah, good choice."],
     permTitle: ["Quick thing first, bro", "One sec before we get into it, bro", "Real quick, brudda"],
     permDone: ["Bet, all sorted.", "Done, bro. Easy.", "Sorted bro, no stress."],
   },

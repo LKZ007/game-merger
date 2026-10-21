@@ -10,6 +10,11 @@ on:
 permissions:
   contents: write
 
+# a newer push replaces an older build, so an old version can never be published after a newer one
+concurrency:
+  group: release
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: windows-latest

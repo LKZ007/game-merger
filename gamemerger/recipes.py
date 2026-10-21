@@ -60,6 +60,7 @@ class Recipe:
     saves: list = field(default_factory=list)  # save folders, see saves.expand()
     processes: list = field(default_factory=list)  # .exe names to watch while the game runs
     multiplayer: str = ""  # how to play this game's merges with friends (shown on Play together)
+    launch_args: list = field(default_factory=list)  # e.g. keep modded GTA V out of GTA Online
 
     def framework(self, fid):
         return self.frameworks[fid]
@@ -102,6 +103,7 @@ def _parse(data):
         saves=data.get("saves", []),
         processes=data.get("processes", []),
         multiplayer=data.get("multiplayer", ""),
+        launch_args=data.get("launch_args", []),
     )
 
 

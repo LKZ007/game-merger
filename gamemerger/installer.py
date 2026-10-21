@@ -319,7 +319,14 @@ class Merge:
         os.makedirs(os.path.dirname(dest), exist_ok=True)
         shutil.copy2(src, dest)
 
-    def install(self, archive, label, layout, flat_root=False, subdir="", log=_noop, seq=None):
+    def install(self, archive, label, layout, flat_root=False, subdir="", log=_noop, seq=None, check=None):
+        if check:
+            verdict = check(archive)
+            if verdict == "threat":
+                raise MergeError("Microsoft Defender found a threat in %s, so it wasn't installed. Delete that file."
+                                 % os.path.basename(archive))
+            if verdict == "clean":
+                log("Defender checked %s: clean." % os.path.basename(archive))
         tmp = tempfile.mkdtemp(prefix="gm-", dir=paths.sub("tmp"))
         try:
             extract(archive, tmp)

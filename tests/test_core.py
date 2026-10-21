@@ -302,6 +302,16 @@ class ProfileTests(unittest.TestCase):
         self.assertEqual([x["label"] for x in m.all_mods()], ["Chaos", "Car"])  # original order kept
 
 
+class CrashRepairTests(unittest.TestCase):
+    def test_diagnose_picks_a_listed_mod_only(self):
+        from gamemerger import franklin
+        bot = franklin.Franklin.__new__(franklin.Franklin)
+        bot.stream_reply = lambda h: iter(['Here: {"culprit": "Car pack", "why": "Fuck, the car pack broke the tweaks."}'])
+        self.assertEqual(bot.diagnose("logs", ["Car pack", "HUD"])["culprit"], "Car pack")
+        bot.stream_reply = lambda h: iter(['{"culprit": "Something else", "why": "?"}'])
+        self.assertIsNone(bot.diagnose("logs", ["Car pack"])["culprit"])
+
+
 class SharingTests(MergeTests):
     def test_share_and_rebuild_on_a_friends_pc(self):
         from gamemerger import sharing
