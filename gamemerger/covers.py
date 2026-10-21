@@ -122,6 +122,41 @@ def steam_cover(appid, steam_root=None, allow_download=True):
     return None
 
 
+def steam_trailer(appid):
+    """{url, poster, title} of a game's first Steam trailer at 480p, streamed when played (never saved)."""
+    if not appid:
+        return None
+    data = json.loads(_get("https://store.steampowered.com/api/appdetails?appids=%s&filters=movies&cc=us" % appid))
+    movies = (((data or {}).get(str(appid)) or {}).get("data") or {}).get("movies") or []
+    page = "https://store.steampowered.com/app/%s/" % appid
+    for m in movies:
+        url = (m.get("mp4") or {}).get("480") or (m.get("webm") or {}).get("480")
+        if url:
+            return {"url": url.replace("http://", "https://"), "poster": m.get("thumbnail", ""), "title": m.get("name", ""), "page": page}
+    if movies:  # newer trailers are streaming-only formats the window can't play: show the still, link the store
+        return {"url": None, "poster": movies[0].get("thumbnail", ""), "title": movies[0].get("name", ""), "page": page}
+    return None
+
+
+def url_cover(url):
+    """Download a cover image once (Epic and GOG give image links) and keep it."""
+    import hashlib
+    mine = os.path.join(paths.sub("covers"), "u-" + hashlib.sha1(url.encode()).hexdigest()[:20] + ".jpg")
+    if os.path.isfile(mine) and os.path.getsize(mine) > 0:
+        return mine
+    try:
+        data = _get(url)
+    except (OSError, ValueError):
+        return None
+    if data[:3] != b"\xff\xd8\xff" and data[:4] != b"\x89PNG":
+        return None
+    if data[:4] == b"\x89PNG":
+        mine = mine[:-4] + ".png"
+    with open(mine, "wb") as f:
+        f.write(data)
+    return mine
+
+
 # ---------- covers made with Pillow ----------
 
 def _font(size):

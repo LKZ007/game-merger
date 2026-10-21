@@ -157,6 +157,37 @@ class Franklin:
         culprit = out.get("culprit")
         return {"culprit": culprit if culprit in mods else None, "why": str(out.get("why") or text.strip())[:600]}
 
+    def preview_pitch(self, base, theme, slots):
+        """Two or three spoken sentences on what this merge would feel like to play."""
+        ask = ("In two or three short spoken sentences, hype up what playing %s merged with %s would feel like: what "
+               "you'd actually do and see. The mods it adds: %s. Be honest, it's mods layered on %s, not a new game. "
+               "No lists, no markdown." % (base, theme, ", ".join(slots), base))
+        return "".join(self.stream_reply([{"role": "user", "content": ask}])).strip()[:600]
+
+    def fun_scores(self, base, others):
+        """How FUN each game would be merged into `base` (not how hard it is).
+        Returns {name: {"rating": "green"|"yellow"|"red", "why": one line}}."""
+        import json
+        import re
+        ask = ("Rate how fun it would be to merge each of these games into %s, as a mod-based merge where %s stays the "
+               "game you play and the other game's style, vehicles, weapons, characters, activities or vibe get layered "
+               "on. Rate only on fun: how many cool things you could do together and how well the worlds and gameplay "
+               "mix. Do NOT rate on how hard it is to mod. green = great pairing, yellow = OK, red = doable but not as "
+               "great. Games:\n%s\n\nAnswer with only JSON: {\"<exact game name>\": {\"rating\": \"green|yellow|red\", "
+               "\"why\": \"<one short line in your own voice, under 90 characters>\"}}" % (base, base, "\n".join("- " + o for o in others)))
+        text = "".join(self.stream_reply([{"role": "user", "content": ask}]))
+        m = re.search(r"\{.*\}", text, re.S)
+        try:
+            data = json.loads(m.group(0)) if m else {}
+        except ValueError:
+            data = {}
+        out = {}
+        for name in others:
+            v = data.get(name) or {}
+            if v.get("rating") in ("green", "yellow", "red"):
+                out[name] = {"rating": v["rating"], "why": str(v.get("why") or "")[:140]}
+        return out
+
     def stream_reply(self, history):
         """history: [{"role": "user"|"assistant", "content": str}]. Yields text as it arrives."""
         a = self._anthropic

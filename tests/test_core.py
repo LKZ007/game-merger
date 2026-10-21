@@ -387,5 +387,59 @@ class RenameAndNexusTests(unittest.TestCase):
         self.assertIsNone(nexus.parse_nxm("https://www.nexusmods.com/"))
 
 
+class OwnedLibraryTests(unittest.TestCase):
+    def setUp(self):
+        os.environ["GAMEMERGER_HOME"] = tempfile.mkdtemp()
+
+    def test_steam_account_and_list(self):
+        from gamemerger import accounts
+        vdf = '"users"\n{\n\t"76561197960287930"\n\t{\n\t\t"PersonaName"\t\t"levy"\n\t\t"MostRecent"\t\t"1"\n\t}\n}'
+        self.assertEqual(accounts.parse_loginusers(vdf), ("76561197960287930", "levy"))
+        xml = b"<gamesList><games><game><appID>1551360</appID><name><![CDATA[Forza Horizon 5]]></name></game></games></gamesList>"
+        self.assertEqual(accounts.parse_steam_xml(xml), [{"id": "1551360", "name": "Forza Horizon 5"}])
+        with self.assertRaises(accounts.AccountError):
+            accounts.parse_steam_xml(b"<html>private</html>")
+        self.assertEqual(accounts.steam_id_from("https://steamcommunity.com/profiles/76561197960287930/"), "76561197960287930")
+
+    def test_not_on_this_pc_and_other_devices(self):
+        from gamemerger import accounts
+        cloud = tempfile.mkdtemp()
+        os.makedirs(os.path.join(cloud, "Frankenstein devices"))
+        with open(os.path.join(cloud, "Frankenstein devices", "BIG-PC.json"), "w") as f:
+            json.dump({"device": "BIG-PC", "games": [{"name": "Forza Horizon 5", "source": "Xbox", "appid": ""}]}, f)
+        here = [{"name": "Cyberpunk 2077", "source": "Steam", "appid": "1091500"}]
+        owned = {"Steam": [{"id": "1091500", "name": "Cyberpunk 2077"}, {"id": "1551360", "name": "Forza Horizon 5"},
+                           {"id": "413150", "name": "Stardew Valley"}]}
+        out = accounts.merge_lists(here, owned, accounts.other_devices(cloud))
+        self.assertEqual([g["name"] for g in out], ["Forza Horizon 5", "Stardew Valley"])
+        self.assertEqual(out[0]["elsewhere"], "BIG-PC")
+        self.assertEqual(out[1]["install"], "steam://install/413150")
+
+    def test_gog_galaxy_list(self):
+        import sqlite3
+        from gamemerger import accounts
+        db = os.path.join(tempfile.mkdtemp(), "galaxy-2.0.db")
+        con = sqlite3.connect(db)
+        con.executescript("""CREATE TABLE LibraryReleases (releaseKey TEXT); CREATE TABLE GamePieceTypes (id INTEGER, type TEXT);
+            CREATE TABLE GamePieces (releaseKey TEXT, gamePieceTypeId INTEGER, value TEXT);
+            INSERT INTO LibraryReleases VALUES ('gog_1207664643'), ('steam_10');
+            INSERT INTO GamePieceTypes VALUES (1, 'originalTitle'), (2, 'originalImages');
+            INSERT INTO GamePieces VALUES ('gog_1207664643', 1, '{"title": "The Witcher 3"}'), ('gog_1207664643', 2, '{"verticalCover": "https://x/c.jpg"}'),
+                                          ('steam_10', 1, '{"title": "Counter-Strike"}');""")
+        con.commit()
+        con.close()
+        self.assertEqual(accounts.gog_owned(db), [{"id": "1207664643", "name": "The Witcher 3", "image": "https://x/c.jpg",
+                                                   "install": "goggalaxy://openGameView/1207664643"}])
+
+    def test_epic_code_and_secrets(self):
+        from gamemerger import accounts
+        self.assertEqual(accounts.epic_code_from('{"redirectUrl":"x","authorizationCode":"0123456789abcdef0123456789abcdef"}'),
+                         "0123456789abcdef0123456789abcdef")
+        accounts.secret_set("steam_key", "abc")
+        self.assertEqual(accounts.secret_get("steam_key"), "abc")
+        accounts.secret_delete("steam_key")
+        self.assertIsNone(accounts.secret_get("steam_key"))
+
+
 if __name__ == "__main__":
     unittest.main()

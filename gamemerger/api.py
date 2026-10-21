@@ -1,6 +1,7 @@
 """Everything the window can ask the app to do. The web UI calls these methods through
 pywebview (or the local browser bridge in server.py); every argument and return value is plain JSON."""
 
+import json
 import os
 import re
 import shutil
@@ -13,7 +14,7 @@ import urllib.parse
 import uuid
 import webbrowser
 
-from . import covers, detect, downloader, franklin, gallery, network, nexus, paths, permissions, saves, scan, sharing, specs, updater, voice
+from . import accounts, covers, detect, downloader, franklin, gallery, network, nexus, paths, permissions, saves, scan, sharing, specs, updater, voice
 from .version import VERSION
 from .installer import MODE_COPY, MODE_HARDLINK, MODE_INPLACE, Merge, MergeError, find_clashes, preview
 from .recipes import load_recipes, resource_dir
@@ -164,6 +165,252 @@ class Api:
                         "base": g.recipe is not None, "recipe_id": g.recipe.id if g.recipe else None,
                         "warning": g.recipe.warning if g.recipe else "", "themes": themes})
         return out
+
+    # ---------- every game you own (all launchers, any PC) ----------
+
+    def _installed_here(self):
+        return [{"name": g.name, "source": g.source, "appid": g.appid} for g in getattr(self, "_games", [])]
+
+    def library_status(self):
+        sid, persona = accounts.steam_account(self._steam_root())
+        sid = self._settings.get("steam_id") or sid
+        epic = accounts.epic_account()
+        return {"steam": {"id": sid or "", "name": persona if sid and not self._settings.get("steam_id") else "",
+                          "has_key": bool(accounts.secret_get("steam_key")), "on": bool(self._settings.get("steam_on")),
+                          "error": self._settings.get("steam_error", "")},
+                "epic": {"name": epic.get("name", "") if epic else "", "on": bool(epic)},
+                "gog": {"available": bool(accounts.galaxy_db()), "on": bool(self._settings.get("gog_on"))},
+                "devices": [d.get("device") for d in accounts.other_devices(self._settings.get("cloud_folder"))]}
+
+    def steam_connect(self, profile=None, key=None):
+        """Turn on Steam's owned list. profile: an id or profile link if this PC's Steam isn't signed in."""
+        if profile:
+            sid = accounts.steam_id_from(profile)
+            if not sid:
+                raise MergeError("Paste your Steam profile link (steamcommunity.com/profiles/7656...) or SteamID.")
+            self._settings["steam_id"] = sid
+        if key is not None:
+            key = key.strip()
+            if key:
+                accounts.secret_set("steam_key", key)
+            else:
+                accounts.secret_delete("steam_key")
+        self._settings["steam_on"] = True
+        paths.save_settings(self._settings)
+        self._refresh_source("Steam")
+        return self.library_status()
+
+    def epic_connect(self):
+        """Open Epic's sign-in in a small window and wait for it. Browser mode: returns the link instead."""
+        if self._window is None:
+            return {"manual": True, "url": accounts.EPIC_LOGIN}
+        import webview
+        win = webview.create_window("Sign in to Epic Games", accounts.EPIC_LOGIN, width=520, height=760)
+        code = None
+        for _ in range(600):  # five minutes to sign in
+            time.sleep(0.5)
+            try:
+                url = win.get_current_url() or ""
+            except Exception:
+                break  # closed
+            if "/id/api/redirect" in url:
+                try:
+                    code = accounts.epic_code_from(win.evaluate_js("document.body.innerText"))
+                except Exception:
+                    code = None
+                break
+        try:
+            win.destroy()
+        except Exception:
+            pass
+        if not code:
+            raise MergeError("Epic sign-in didn't finish. Try again.")
+        return self._epic_finish(code)
+
+    def epic_paste(self, text):
+        code = accounts.epic_code_from(text) or (text.strip() if re.fullmatch(r"[0-9a-f]{32}", text.strip()) else None)
+        if not code:
+            raise MergeError("That doesn't look like Epic's code. Copy the whole page after signing in.")
+        return self._epic_finish(code)
+
+    def _epic_finish(self, code):
+        try:
+            accounts.epic_sign_in(code)
+        except accounts.AccountError as e:
+            raise MergeError(str(e))
+        self._refresh_source("Epic")
+        return self.library_status()
+
+    def gog_connect(self):
+        self._settings["gog_on"] = True
+        paths.save_settings(self._settings)
+        self._refresh_source("GOG")
+        return self.library_status()
+
+    def library_disconnect(self, source):
+        if source == "Steam":
+            self._settings.pop("steam_on", None)
+            self._settings.pop("steam_id", None)
+            accounts.secret_delete("steam_key")
+        elif source == "Epic":
+            accounts.secret_delete("epic")
+        elif source == "GOG":
+            self._settings.pop("gog_on", None)
+        paths.save_settings(self._settings)
+        try:
+            os.remove(accounts._cache_file(source.lower() + ".json"))
+        except OSError:
+            pass
+        return self.library_status()
+
+    def _refresh_source(self, source):
+        try:
+            if source == "Steam":
+                st = self.library_status()["steam"]
+                if not st["id"]:
+                    raise accounts.AccountError("Steam isn't signed in on this PC. Paste your Steam profile link.")
+                try:
+                    games = accounts.steam_owned(st["id"], accounts.secret_get("steam_key"))
+                except accounts.AccountError as e:
+                    if str(e) == "private":
+                        raise accounts.AccountError("Your Steam game list is private. Make Game details public on your "
+                                                    "Steam profile, or add a free Steam Web API key.")
+                    raise
+                self._settings.pop("steam_error", None)
+            elif source == "Epic":
+                games = accounts.epic_owned()
+            else:
+                games = accounts.gog_owned()
+            accounts._save_cache(source.lower() + ".json", games)
+        except accounts.AccountError as e:
+            if source == "Steam":
+                self._settings["steam_error"] = str(e)
+                paths.save_settings(self._settings)
+            raise MergeError(str(e))
+
+    def library_owned(self, refresh=False):
+        """Owned games that aren't on this PC, from the launchers that are switched on."""
+        st = self.library_status()
+        sources = [s for s, on in (("Steam", st["steam"]["on"]), ("Epic", st["epic"]["on"]), ("GOG", st["gog"]["on"])) if on]
+        errors = []
+        if refresh:
+            for src in sources:
+                try:
+                    self._refresh_source(src)
+                except MergeError as e:
+                    errors.append("%s: %s" % (src, e))
+        owned = {src: accounts.cached(src.lower() + ".json") for src in sources}
+        cloud = self._settings.get("cloud_folder")
+        try:
+            accounts.publish_installed(cloud, self._installed_here())
+        except OSError:
+            pass
+        games = accounts.merge_lists(self._installed_here(), owned, accounts.other_devices(cloud))
+        self._owned = {g["key"]: g for g in games}
+        return {"games": games, "errors": errors, "sources": sources}
+
+    def fun_scores(self, base_key, names):
+        """Franklin's fun rating for merging each named game into the base game. Cached per base game,
+        so each pairing is only asked once. Without a Claude key, only the styles Frankenstein has
+        recipes for get rated."""
+        g = self._game(base_key)
+        path = os.path.join(paths.sub("library"), "fun-scores.json")
+        try:
+            with open(path, encoding="utf-8") as f:
+                cache = json.load(f)
+        except (OSError, ValueError):
+            cache = {}
+        mine = cache.setdefault(g.name, {})
+        if g.recipe:  # the styles we have recipes for are hand-picked pairings
+            for t in g.recipe.themes:
+                for n in names:
+                    if n not in mine and any(m in n.lower() for m in t.source_match):
+                        mine[n] = {"rating": "green", "why": "Ready-made merge: " + t.name}
+        todo = [n for n in names if n not in mine and n != g.name][:150]
+        if todo and self._settings.get("claude_api_key"):
+            try:
+                bot = franklin.Franklin(self._settings["claude_api_key"], self._settings.get("explicit", True))
+                for i in range(0, len(todo), 50):
+                    mine.update(bot.fun_scores(g.name, todo[i:i + 50]))
+            except Exception:  # offline, bad key, odd answer: show what we have, ask again next time
+                pass
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(cache, f)
+        return {n: mine[n] for n in names if n in mine}
+
+    def merge_preview(self, base_key, theme_id):
+        """What a merge could look like, before anything is downloaded: low-res trailers streamed from
+        Steam (the base game and the game whose style comes in), pictures of popular mods for each part
+        of the merge from Nexus Mods, and Franklin's quick pitch. It's a preview of the parts, not a render
+        of your merged game."""
+        g = self._game(base_key)
+        r = g.recipe
+        t = next((x for x in (r.themes if r else []) if x.id == theme_id), None)
+        if not t:
+            raise MergeError("Pick a style to merge in first.")
+        out = {"base": g.name, "theme": t.name, "from_game": t.from_game, "clips": [], "pictures": [],
+               "summary": t.description, "videos_url": "https://www.youtube.com/results?search_query=" +
+               urllib.parse.quote("%s %s mod showcase" % (g.name, t.slots[0].search if t.slots else t.from_game))}
+
+        def clip(appid, label):
+            try:
+                c = covers.steam_trailer(appid)
+            except Exception:
+                c = None
+            if c:
+                out["clips"].append(dict(c, label=label))
+
+        def pictures(slot):
+            try:
+                mods = nexus.search(r.nexus_domain, slot.search, count=3)
+            except nexus.NexusError:
+                return
+            for m in mods:
+                if m["picture"]:
+                    out["pictures"].append({"slot": slot.name, "name": m["name"], "url": m["picture"]})
+                    break
+
+        def pitch():
+            if not self._settings.get("claude_api_key"):
+                return
+            try:
+                bot = franklin.Franklin(self._settings["claude_api_key"], self._settings.get("explicit", True))
+                out["summary"] = bot.preview_pitch(g.name, t.from_game, [s.name for s in t.slots]) or out["summary"]
+            except Exception:
+                pass
+
+        base_id = g.appid or (r.steam_appids[0] if r.steam_appids else "")
+        work = [threading.Thread(target=f, args=a, daemon=True) for f, a in
+                [(clip, (base_id, g.name)), (clip, (t.source_appid, t.from_game)), (pitch, ())] +
+                [(pictures, (s,)) for s in t.slots]]
+        for w in work:
+            w.start()
+        for w in work:
+            w.join(25)
+        out["clips"].sort(key=lambda c: c["label"] != g.name)
+        order = [s.name for s in t.slots]
+        out["pictures"].sort(key=lambda p: order.index(p["slot"]))
+        return out
+
+    def owned_cover(self, key):
+        g = getattr(self, "_owned", {}).get(key)
+        if not g:
+            return None
+        if g["source"] == "Steam":
+            return covers.as_data_uri(covers.steam_cover(g["appid"], steam_root=self._steam_root()))
+        return covers.as_data_uri(covers.url_cover(g["image"])) if g.get("image") else None
+
+    def owned_install(self, key):
+        """Open the game's own launcher at its install page."""
+        g = getattr(self, "_owned", {}).get(key)
+        if not g or not g.get("install"):
+            raise MergeError("No install link for that game.")
+        if sys.platform == "win32":
+            try:
+                os.startfile(g["install"])
+            except OSError:
+                raise MergeError("Couldn't open %s. Is it installed on this PC?" % g["source"])
+        return True
 
     def cover(self, key):
         g = self._game(key)
@@ -794,13 +1041,14 @@ class Api:
                 "voice_style": self._settings.get("voice_style", voice.DEFAULT_VOICE),
                 "version": VERSION,
                 "explicit": self._settings.get("explicit", True),
+                "fun_style": self._settings.get("fun_style", "dot"),
                 "cloud_folder": self._settings.get("cloud_folder", ""),
                 "cloud_options": saves.cloud_folders(),
                 "voice_styles": ([["own", "Your own cloned voice (slow to load)"]] if self._own_voice_folder() else [])
                 + [[k, v[1]] for k, v in voice.NEURAL_VOICES.items()]}
 
     def save_settings(self, values):
-        for k in ("mode", "destination", "voice_on", "voice_style", "explicit", "cloud_folder"):
+        for k in ("mode", "destination", "voice_on", "voice_style", "explicit", "cloud_folder", "fun_style"):
             if k in values:
                 self._settings[k] = values[k]
         if self._settings.get("voice_style") != "own":

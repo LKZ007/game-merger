@@ -175,6 +175,7 @@ function renderLibrary() {
         <div class="row">
           <label for="themePick" class="muted">Merge with</label>
           <select id="themePick" class="input">${opts}</select>
+          <button class="btn big" id="previewBtn">Preview</button>
           <button class="btn primary big" id="mergeBtn">Merge</button>
         </div>
       </div></section>`;
@@ -197,7 +198,9 @@ function renderLibrary() {
         <div class="row"><span class="muted small">Glowing edge = can be a base game</span>
           <button class="btn ghost" id="rescan">Rescan</button><button class="btn" id="addFolder">Add game folder</button></div></div>
       ${state.games.length ? `<div class="grid">${tiles}</div>` : `<div class="empty">No games found yet.</div>`}
-    </section>`;
+    </section>
+    <section class="shelf" id="ownedShelf"></section>`;
+  renderOwnedShelf();
   el.querySelectorAll(".tile").forEach((b) => (b.onclick = () => {
     const x = game(b.dataset.key);
     if (!x.base) return toast(`${x.name} can't be a base game yet, but it can be a style you merge in.`);
@@ -208,6 +211,7 @@ function renderLibrary() {
     renderFranklinCard();
   }));
   $("#rescan").onclick = scan;
+  loadFun();
   const add = async () => {
     try { const r = await call("add_game_folder"); if (r) { state.games = r; await scan(); } } catch (e) { toast(errText(e)); }
   };
@@ -215,6 +219,7 @@ function renderLibrary() {
   if ($("#addFolder2")) $("#addFolder2").onclick = add;
   if ($("#themePick")) $("#themePick").onchange = (e) => { state.themeId = e.target.value; renderLibrary(); renderFranklinCard(); };
   if ($("#mergeBtn")) $("#mergeBtn").onclick = startSetup;
+  if ($("#previewBtn")) $("#previewBtn").onclick = () => previewMerge(state.selected, state.themeId);
 }
 
 // ---------- merge setup ----------
@@ -710,6 +715,174 @@ async function loadBackups() {
   }));
 }
 
+// ---------- how fun each pairing would be (Franklin's colour code) ----------
+const FUN_WORDS = { green: "Great pairing", yellow: "OK pairing", red: "Doable, not as great" };
+
+async function loadFun() {
+  const base = game(state.selected);
+  if (!base) return;
+  const names = [...state.games.filter((g) => g.key !== base.key).map((g) => g.name), ...(state.owned?.games || []).map((g) => g.name)];
+  if (state.fun?.base === base.name && names.every((n) => n in state.fun.scores || state.fun.asked.has(n))) return applyFun();
+  const fun = state.fun?.base === base.name ? state.fun : { base: base.name, scores: {}, asked: new Set() };
+  state.fun = fun;
+  names.forEach((n) => fun.asked.add(n));
+  try { Object.assign(fun.scores, await call("fun_scores", base.key, names)); } catch (e) { /* no colours this time */ }
+  applyFun();
+}
+
+function applyFun() {
+  const style = state.settings?.fun_style || "dot";
+  document.body.classList.toggle("fun-halo", style === "halo");
+  const scores = state.fun && game(state.selected)?.name === state.fun.base ? state.fun.scores : {};
+  document.querySelectorAll(".tile").forEach((t) => {
+    const name = t.querySelector(".tile-name")?.textContent;
+    const f = style !== "off" && !t.classList.contains("selected") ? scores[name] : null;
+    if (f) {
+      t.dataset.fun = f.rating;
+      t.title = `${FUN_WORDS[f.rating]}: ${f.why}`;
+    } else {
+      delete t.dataset.fun;
+      t.removeAttribute("title");
+    }
+  });
+}
+
+// ---------- preview: what a merge could look like, before downloading anything ----------
+async function previewMerge(key, themeId) {
+  const g = game(key);
+  const t = g?.themes.find((x) => x.id === themeId);
+  if (!g || !t) return;
+  const box = $("#modal .modal-box");
+  box.classList.add("wide");
+  const done = modal(`Preview: ${g.name} × ${t.from_game}`, `<div class="preview-loading"><canvas class="brain" data-brain="small" style="width:64px;height:64px"></canvas>
+      <p class="muted">Hold up, lemme pull up some clips…</p></div>`,
+    [{ label: "Close", value: false }, { label: "Merge it", value: true, primary: true }]);
+  let p;
+  try { p = await call("merge_preview", key, themeId); } catch (e) { $("#modalBody").innerHTML = `<p class="muted">${esc(errText(e))}</p>`; }
+  if (p && !$("#modal").classList.contains("hidden")) {
+    const clip = (c) => `<figure class="pv-clip">
+        ${c.url ? `<video src="${esc(c.url)}" poster="${esc(c.poster)}" muted loop autoplay playsinline preload="metadata" controls></video>`
+          : `<a href="#" data-url="${esc(c.page)}"><img src="${esc(c.poster)}" alt=""></a>`}
+        <figcaption>${c.label === g.name ? "Your game" : "Bringing in"}: <strong>${esc(c.label)}</strong></figcaption></figure>`;
+    $("#modalBody").innerHTML = `
+      <div class="pv-label">Preview · trailers and mod pictures, not your merged game</div>
+      <div class="pv-pitch"><canvas class="brain" data-brain="tiny" aria-hidden="true"></canvas><p>${esc(p.summary)}</p></div>
+      ${p.clips.length ? `<div class="pv-clips">${p.clips.map(clip).join("")}</div>` : ""}
+      ${p.pictures.length ? `<h3 class="pv-h">What the mods look like</h3><div class="pv-pics">${p.pictures.map((x) => `<figure><img src="${esc(x.url)}" alt="" loading="lazy"><figcaption><strong>${esc(x.slot)}</strong><span>${esc(x.name)}</span></figcaption></figure>`).join("")}</div>` : ""}
+      <p class="muted small">Clips stream straight from Steam and pictures from Nexus Mods at low quality, so nothing is saved to your PC. Your merge will be ${esc(g.name)} with these mods layered on. <a href="#" id="pvVideos">Watch mod showcase videos</a></p>`;
+    $("#pvVideos").onclick = (e) => { e.preventDefault(); call("open_url", p.videos_url); };
+    $("#modalBody").querySelectorAll("[data-url]").forEach((a) => (a.onclick = (e) => { e.preventDefault(); call("open_url", a.dataset.url); }));
+    $("#modalBody").querySelectorAll("canvas[data-brain]").forEach((cv) => window.FranklinBrain.mount(cv, { dense: 300, speed: 0.4 }));
+    speak(p.summary);
+  }
+  const go = await done;
+  box.classList.remove("wide");
+  $("#modalBody").querySelectorAll("video").forEach((v) => { v.pause(); v.removeAttribute("src"); v.load(); }); // stop streaming
+  if (go) startSetup();
+}
+
+// ---------- every game you own ----------
+async function loadOwned(refresh = false, quiet = false) {
+  let r;
+  try { r = await call("library_owned", refresh); } catch (e) { if (!quiet) toast(errText(e)); return; }
+  state.owned = r;
+  if (!quiet) for (const err of r.errors || []) toast(err, 7000);
+  if (state.view === "library") renderOwnedShelf();
+  for (const g of r.games) {
+    if (g.key in state.covers) continue;
+    state.covers[g.key] = null;
+    call("owned_cover", g.key).then((c) => {
+      if (!c) return;
+      state.covers[g.key] = c;
+      document.querySelectorAll(`[data-cover="${CSS.escape(g.key)}"]`).forEach((el) => {
+        el.querySelectorAll(".face, .spine").forEach((f) => { f.style.backgroundImage = `url('${c}')`; f.classList.remove("placeholder"); });
+        el.querySelector(".face").textContent = "";
+      });
+    }).catch(() => {});
+  }
+}
+
+function renderOwnedShelf() {
+  const el = $("#ownedShelf");
+  if (!el) return;
+  const r = state.owned;
+  if (!r || !r.sources.length) {
+    el.innerHTML = `<div class="card row"><div class="grow"><strong>See every game you own</strong>
+        <div class="muted small">Connect Steam, Epic or GOG and games that aren't on this PC show up here too, even ones on your other PC.</div></div>
+        <button class="btn" id="ownedConnect">Connect launchers</button></div>`;
+    $("#ownedConnect").onclick = () => show("settings");
+    return;
+  }
+  const tiles = r.games.map((g) => `
+      <button class="tile owned" data-owned="${esc(g.key)}" data-cover="${esc(g.key)}">
+        ${caseHtml(g.name, state.covers[g.key])}
+        <div class="tile-name">${esc(g.name)}</div>
+        <div class="tile-sub">${esc(g.source)} · ${g.elsewhere ? "on " + esc(g.elsewhere) : "not installed"}</div>
+      </button>`).join("");
+  el.innerHTML = `<div class="shelf-head"><h2>Not on this PC <span class="muted small">${r.games.length}</span></h2>
+      <div class="row"><span class="muted small">From ${esc(r.sources.join(", "))}</span><button class="btn ghost" id="ownedRefresh">Refresh</button></div></div>
+    ${r.games.length ? `<div class="grid">${tiles}</div>` : `<div class="empty">Everything you own is installed here.</div>`}`;
+  $("#ownedRefresh").onclick = async () => { $("#ownedRefresh").disabled = true; await loadOwned(true); };
+  loadFun();
+  el.querySelectorAll("[data-owned]").forEach((b) => (b.onclick = async () => {
+    const g = r.games.find((x) => x.key === b.dataset.owned);
+    const go = await modal(g.name, `<p class="muted">${g.elsewhere ? `Installed on <strong>${esc(g.elsewhere)}</strong>, not on this PC.` : "You own this but it isn't installed here."}
+      Install it with ${esc(g.source)}, then press Rescan and it can join your merges.</p>`,
+      [{ label: "Close", value: false }, ...(g.install ? [{ label: `Install with ${g.source}`, value: true, primary: true }] : [])]);
+    if (go) { try { await call("owned_install", g.key); } catch (e) { toast(errText(e)); } }
+  }));
+}
+
+async function renderAccounts() {
+  const el = $("#accountsCard");
+  if (!el) return;
+  let st;
+  try { st = await call("library_status"); } catch (e) { return; }
+  const row = (name, status, actions) => `<div class="row" style="padding:10px 0;border-top:1px solid var(--line)"><div class="grow"><strong>${name}</strong><div class="muted small">${status}</div></div>${actions}</div>`;
+  const steamStatus = st.steam.on ? (st.steam.error ? esc(st.steam.error) : `Connected${st.steam.name ? " as " + esc(st.steam.name) : ""}${st.steam.has_key ? " · with your Web API key" : ""}`)
+    : st.steam.id ? `Found ${st.steam.name ? esc(st.steam.name) : "your account"} in Steam on this PC.` : "Steam isn't signed in on this PC. Paste your profile link to connect.";
+  el.innerHTML = `<h2>Your game accounts</h2>
+    <p class="muted">Connect your launchers and the Library shows every game you own, not just what's installed here. With cloud backup on, it also shows which games are on your other PC.</p>
+    ${row("Steam", steamStatus, st.steam.on ? `<button class="btn" data-acc="steamKey">Add Web API key</button><button class="btn ghost danger" data-off="Steam">Disconnect</button>`
+      : `${st.steam.id ? "" : `<input class="input" id="steamProfile" placeholder="steamcommunity.com/profiles/7656…" style="width:260px">`}<button class="btn primary" data-acc="steam">Connect</button>`)}
+    ${row("Epic Games", st.epic.on ? `Signed in${st.epic.name ? " as " + esc(st.epic.name) : ""}` : "Sign in once in a small Epic window.",
+      st.epic.on ? `<button class="btn ghost danger" data-off="Epic">Sign out</button>` : `<button class="btn primary" data-acc="epic">Sign in</button>`)}
+    ${row("GOG", st.gog.on ? "Connected through GOG Galaxy" : st.gog.available ? "GOG Galaxy is on this PC, so your whole GOG library can show." : "Install GOG Galaxy and sign in there to show your GOG library.",
+      st.gog.on ? `<button class="btn ghost danger" data-off="GOG">Disconnect</button>` : st.gog.available ? `<button class="btn primary" data-acc="gog">Connect</button>` : "")}
+    ${row("Xbox / Microsoft Store", "Microsoft doesn't let other apps list the games you own, so only games installed here show.", "")}
+    <p class="muted small">Sign-ins are kept in Windows Credential Manager on this PC.${st.devices.length ? " Other PCs seen: " + esc(st.devices.join(", ")) + "." : ""}</p>`;
+  const busy = (b, on) => { b.disabled = on; };
+  el.querySelectorAll("[data-acc]").forEach((b) => (b.onclick = async () => {
+    busy(b, true);
+    try {
+      if (b.dataset.acc === "steam") await call("steam_connect", $("#steamProfile")?.value || null, null);
+      else if (b.dataset.acc === "steamKey") {
+        const asked = modal("Steam Web API key", `<p class="muted">Only needed if your Steam game list is private. Get a free key at <a href="#" id="steamKeyLink">steamcommunity.com/dev/apikey</a> (put anything as the domain), then paste it here.</p>
+          <input class="input" id="steamKeyIn" type="password" placeholder="Steam Web API key" autocomplete="off">`, [{ label: "Cancel", value: null }, { label: "Save", value: "save", primary: true }]);
+        $("#steamKeyLink").onclick = (e) => { e.preventDefault(); call("open_url", "https://steamcommunity.com/dev/apikey"); };
+        if (await asked) await call("steam_connect", null, $("#steamKeyIn").value);
+      } else if (b.dataset.acc === "epic") {
+        toast("Sign in to Epic in the window that opens.");
+        const r = await call("epic_connect");
+        if (r && r.manual) {
+          call("open_url", r.url);
+          const ok = await modal("Sign in to Epic", `<p class="muted">Sign in on the Epic page that opened. It ends on a page of text: copy all of it and paste it here.</p><textarea class="input" id="epicCode" rows="4"></textarea>`,
+            [{ label: "Cancel", value: false }, { label: "Done", value: true, primary: true }]);
+          if (ok) await call("epic_paste", $("#epicCode").value);
+        }
+      } else if (b.dataset.acc === "gog") await call("gog_connect");
+      toast("Connected. Your games are in the Library.");
+      loadOwned(false);
+    } catch (e) { toast(errText(e), 7000); }
+    renderAccounts();
+  }));
+  el.querySelectorAll("[data-off]").forEach((b) => (b.onclick = async () => {
+    await call("library_disconnect", b.dataset.off);
+    loadOwned(false);
+    renderAccounts();
+  }));
+}
+
 async function loadSettings() {
   const el = $("#view-settings");
   try { state.settings = await call("get_settings"); } catch (e) { toast(errText(e)); return; }
@@ -739,6 +912,12 @@ async function loadSettings() {
       <div class="field"><label for="nexusKey">API key <span id="nexusTag"></span></label>
         <div class="row" style="flex-wrap:nowrap"><input class="input" type="password" id="nexusKey" placeholder="Paste your Nexus API key" autocomplete="off"><button class="btn primary" id="saveNexus">Save</button></div></div>
     </div>
+    <div class="card"><h2>Library</h2>
+      <p class="muted">When you pick a base game, Franklin colour-codes your other games by how fun they'd be to merge in: green is a great pairing, yellow is OK, red is doable but not as great. Hover a game to see why.</p>
+      <div class="field"><label for="funStyle">Show it as</label>
+        <select class="input" id="funStyle">${[["dot", "A dot in the corner"], ["halo", "A glow around the box"], ["off", "Off"]].map(([v, n]) => `<option value="${v}" ${(s.fun_style || "dot") === v ? "selected" : ""}>${n}</option>`).join("")}</select></div>
+    </div>
+    <div class="card" id="accountsCard"></div>
     <div class="card"><h2>Cloud backup of saves</h2>
       <p class="muted">Every merge's saves get copied to your cloud drive after you play, so your PC and laptop stay in step. Pick the same drive on both.</p>
       <select class="input" id="cloudPick"><option value="">Off</option>${(s.cloud_options || []).map(([n, p]) => `<option value="${esc(p)}" ${s.cloud_folder === p ? "selected" : ""}>${esc(n)} (${esc(p)})</option>`).join("")}</select>
@@ -763,6 +942,7 @@ async function loadSettings() {
   };
   if ($("#clearKey")) $("#clearKey").onclick = async () => { await call("save_settings", { claude_api_key: "" }); loadSettings(); renderFranklinCard(); };
   $("#nexusLink").onclick = (e) => { e.preventDefault(); call("open_url", "https://next.nexusmods.com/settings/api-keys"); };
+  renderAccounts();
   call("nexus_status").then((n) => { if (n.has_key) $("#nexusTag").innerHTML = `<span class="tag">Saved · ${esc(n.name)}${n.premium ? " · Premium" : ""}</span>`; }).catch(() => {});
   $("#saveNexus").onclick = async () => {
     try { const n = await call("nexus_set_key", $("#nexusKey").value); toast(n.has_key ? "Nexus is hooked up." : "Nexus key removed."); loadSettings(); }
@@ -779,6 +959,7 @@ async function loadSettings() {
     }
     speak(line("voiceTest"), true);
   };
+  $("#funStyle").onchange = async () => { state.settings = await call("save_settings", { fun_style: $("#funStyle").value }); };
   $("#explicit").onchange = async () => {
     state.settings = await call("save_settings", { explicit: $("#explicit").checked });
     toast($("#explicit").checked ? "18+ mode on." : "Clean mode on. No cussing.");
@@ -1102,6 +1283,7 @@ function franklinSays(k, vars = {}) {
   call("franklin_voice_warm", ["splash", "found", "foundOne", "permDone", "voiceTest", "hello", "goodGame", "goodMod"].flatMap(lineSet)
     .filter((t) => !t.includes("{"))).catch(() => {});
   await scan();
+  loadOwned(false, true).then(() => state.owned?.sources.length && loadOwned(true, true));
   await sleep(Math.max(0, 2200 - (Date.now() - started)));
   clearInterval(rotate);
   const n = state.games.length;

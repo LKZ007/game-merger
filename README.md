@@ -19,6 +19,9 @@ built-in AI assistant, explains the merge, finds mods, checks them for clashes a
 - **Play together**: a private network for you and your friends, like Hamachi (built on ZeroTier).
 - **Share a merge** as a `.gmerge` file your friend double-clicks.
 - **Gallery**: Ctrl+Alt+S screenshots plus Game Bar clips.
+- **Every game you own**: connect Steam, Epic and GOG to see games that aren't installed here, and which ones are on your other PC.
+- **Fun rating**: green / yellow / red colour code on every game for how fun it'd be to merge into the one you picked.
+- **Preview before merging**: streamed trailers and mod pictures with Franklin's pitch, nothing downloaded.
 - **Borderless full screen** launcher (F11 or Esc for a window), dark violet look, auto-updates.
 
 ## What it can merge right now
