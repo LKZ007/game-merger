@@ -852,38 +852,62 @@ document.querySelectorAll("canvas[data-brain]").forEach((cv) => {
 });
 
 // ---------- start ----------
-// Franklin's fixed lines, with and without the explicit language (Settings > Franklin's voice).
+// Franklin's fixed lines. Each has several versions, picked at random without saying the same
+// one twice in a row. "explicit" is used in 18+ mode, "clean" when it's off.
 const LINES = {
   explicit: {
-    splash: ["Yo, what's good! Gimme a sec, I'm finding your games…", "Checking Steam, Epic, GOG and the Xbox app…", "Almost there, grabbing the box art…"],
-    found: "Bet, found {n} games. This shit's gonna be fire, dawg.", foundOne: "Bet, found 1 game. Let's get it, dawg.",
-    none: "Damn, couldn't spot any games yet. You can add one in a sec.",
-    updateTitle: "New update just dropped", importDone: "Say less, “{name}” is ready to play.",
-    voiceTest: "Yo, how's this sound?", voiceSaved: "Bet, voice is locked in.",
-    hello: "Yo, it's Franklin. Pick a game and let's cook, dawg.",
-    permTitle: "Quick thing before we cook", permDone: "Bet, all sorted.",
+    splash: ["Yo. Give me a sec, I'm finding your games…", "Aight, pulling up your library…",
+      "Let's see what you got installed…", "Checking Steam, Epic, GOG and the Xbox app…",
+      "Grabbing your box art, hold up…", "Damn, you got a collection. Sorting it out…"],
+    found: ["Found {n} games. Let's see what we can make.", "Aight, {n} games. Pick one and we'll get into it.",
+      "{n} games, no cap. Time to make some wild shit.", "Got {n} games ready. Your move."],
+    foundOne: ["Found 1 game. We can work with that.", "Just the one game, but damn, that's enough to start."],
+    none: ["Damn, no games showing up yet. Point me at a folder.", "Couldn't spot any games. Add one and we're good."],
+    updateTitle: ["New update's out", "Got an update for you", "Yo, there's an update"],
+    importDone: ["Say less, “{name}” is ready.", "“{name}” is in. Go have fun.", "Bet. “{name}” is set up."],
+    voiceTest: ["Yo, how's this sound?", "This is me now. Smooth as hell, right?", "Check it. That's the voice."],
+    voiceSaved: ["Bet, voice is locked in.", "Aight, that's my voice sorted."],
+    hello: ["Yo, it's Franklin. Pick a game and let's get into it.", "What's good, it's Franklin. What we merging?",
+      "Franklin here. Let's make something wild."],
+    permTitle: ["Quick thing first", "One sec before we get into it", "Real quick"],
+    permDone: ["Bet, all sorted.", "Done. Easy.", "Sorted, no stress."],
   },
   clean: {
-    splash: ["Yo, what's good! Gimme a sec, I'm finding your games…", "Checking Steam, Epic, GOG and the Xbox app…", "Almost there, grabbing the box art…"],
-    found: "Bet, found {n} games. This is gonna be fire, dawg.", foundOne: "Bet, found 1 game. Let's get it, dawg.",
-    none: "Couldn't spot any games yet. You can add one in a sec.",
-    updateTitle: "New update just dropped", importDone: "Say less, “{name}” is ready to play.",
-    voiceTest: "Yo, how's this sound?", voiceSaved: "Bet, voice is locked in.",
-    hello: "Yo, it's Franklin. Pick a game and let's cook, dawg.",
-    permTitle: "Quick thing before we cook", permDone: "Bet, all sorted.",
+    splash: ["Yo. Give me a sec, I'm finding your games…", "Aight, pulling up your library…",
+      "Let's see what you got installed…", "Checking Steam, Epic, GOG and the Xbox app…", "Grabbing your box art, hold up…"],
+    found: ["Found {n} games. Let's see what we can make.", "Aight, {n} games. Pick one and we'll get into it.",
+      "Got {n} games ready. Your move."],
+    foundOne: ["Found 1 game. We can work with that.", "Just the one game, but that's enough to start."],
+    none: ["No games showing up yet. Point me at a folder.", "Couldn't spot any games. Add one and we're good."],
+    updateTitle: ["New update's out", "Got an update for you", "Yo, there's an update"],
+    importDone: ["Say less, “{name}” is ready.", "“{name}” is in. Go have fun."],
+    voiceTest: ["Yo, how's this sound?", "Check it. That's the voice."],
+    voiceSaved: ["Bet, voice is locked in.", "Aight, that's my voice sorted."],
+    hello: ["Yo, it's Franklin. Pick a game and let's get into it.", "What's good, it's Franklin. What we merging?"],
+    permTitle: ["Quick thing first", "One sec before we get into it"],
+    permDone: ["Bet, all sorted.", "Done. Easy."],
   },
 };
-const line = (k) => LINES[state.settings && state.settings.explicit === false ? "clean" : "explicit"][k];
+const lastLine = {};
+const lineSet = (k) => LINES[state.settings && state.settings.explicit === false ? "clean" : "explicit"][k];
+function line(k) {
+  const opts = lineSet(k);
+  let pick;
+  do { pick = opts[Math.floor(Math.random() * opts.length)]; } while (opts.length > 1 && pick === lastLine[k]);
+  lastLine[k] = pick;
+  return pick;
+}
 (async () => {
   const started = Date.now();
   let i = 0;
-  const rotate = setInterval(() => { const L = line("splash"); i = (i + 1) % L.length; $("#splashLine").textContent = L[i]; }, 1600);
+  const rotate = setInterval(() => { $("#splashLine").textContent = line("splash"); }, 1600);
   renderLibrary();
   renderFranklinCard();
   try { state.settings = await call("get_settings"); } catch (e) { /* shown when needed */ }
   renderFranklinCard();
   renderMute();
-  call("franklin_voice_warm", [...line("splash"), line("permDone"), line("voiceTest"), line("hello")]).catch(() => {});
+  call("franklin_voice_warm", ["splash", "found", "foundOne", "permDone", "voiceTest", "hello"].flatMap(lineSet)
+    .filter((t) => !t.includes("{"))).catch(() => {});
   await scan();
   await sleep(Math.max(0, 2200 - (Date.now() - started)));
   clearInterval(rotate);

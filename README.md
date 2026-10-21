@@ -30,6 +30,18 @@ and copying them would break those games' terms.
 Windows may show "Windows protected your PC" because the installer isn't signed. Click
 **More info**, then **Run anyway**. For `.7z` and `.rar` mods, install 7-Zip from https://www.7-zip.org.
 
+**If Windows Defender blocks or quarantines it:** that's a false positive. Small unsigned apps
+built with Python and PyInstaller get flagged by Defender's machine-learning check
+(names like `Trojan:Win32/Bearfoos.A!ml` or `Wacatac`). From 3.4.0 the app is built with its own
+compiled launcher, which avoids most of these. If it still happens:
+1. Open **Windows Security > Virus & threat protection > Protection history**, pick the item and
+   choose **Restore**.
+2. Report it to Microsoft so it's fixed for everyone: https://www.microsoft.com/en-us/wdsi/filesubmission
+   (choose "Software developer" or "Home customer", "Incorrectly detected as malware").
+
+Code signing would remove the warnings completely. Free signing for open-source projects is
+available from SignPath Foundation (https://signpath.org), which needs an application.
+
 Uninstall from **Settings > Apps**. Your merged copies, their saves and your settings
 (in `%LOCALAPPDATA%\GameMerger`) are kept.
 
