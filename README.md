@@ -1,9 +1,25 @@
 # Frankenstein
 
+**Download: [FrankensteinSetup.exe](https://github.com/LKZ007/game-merger/releases/latest/download/FrankensteinSetup.exe)** (Windows 10/11, free)
+
 A Windows game launcher that "merges" games the realistic way. You pick a base game you
 actually play, pick the style of another game to bring in, and Frankenstein makes a safe
 copy, installs the mod frameworks, and installs the mods you choose. **Franklin**, the
-built-in assistant, explains the merge, checks your mods for clashes and reads crash logs.
+built-in AI assistant, explains the merge, finds mods, checks them for clashes and reads crash logs.
+
+![Frankenstein's library: pick a base game, pick a style to merge in, and Franklin explains the merge](docs/screenshot.png)
+
+## Features
+
+- **One-click merges**: safe copy of the game (fast copy uses almost no extra space), mod frameworks downloaded for you, undo any time.
+- **Franklin**: AI assistant on Claude with a voice. Explains merges, suggests and checks mods, reads crash logs, fixes crashes in one click, remembers what you like.
+- **Nexus Mods inside the app**: search and download mods straight into a merge (needs your Nexus API key).
+- **Own saves per merge**, with optional cloud backup to OneDrive or Google Drive.
+- **Mod profiles** (chill / chaos), **Defender scan** of every mod, **online-safety lock** for GTA V.
+- **Play together**: a private network for you and your friends, like Hamachi (built on ZeroTier).
+- **Share a merge** as a `.gmerge` file your friend double-clicks.
+- **Gallery**: Ctrl+Alt+S screenshots plus Game Bar clips.
+- **Borderless full screen** launcher (F11 or Esc for a window), dark violet look, auto-updates.
 
 ## What it can merge right now
 
@@ -76,25 +92,52 @@ voice with XTTS on this PC, it shows up in Settings too. An ElevenLabs key is op
 6. **My merges**: Play, Add mods, Why did it crash? (Franklin reads the logs), Undo all mods, Delete.
 7. **Backups**: restore any original install you modded directly.
 
-## Coming next
-
-**Questlines**: Franklin writes new missions in the style of the merged game, and a small
-quest-loader mod per base game plays them (GTA V first, then Schedule I, then Cyberpunk).
-
 ## Sharing a merge
 
 In **My merges**, press **Share**. Frankenstein saves a `.gmerge` file in your Downloads folder
 with the mods in it (never the game itself). Your friend double-clicks it and gets the same
 merge built from their own copy of the game, with its own saves.
 
+## Repository layout
+
+| Folder | What's in it |
+|---|---|
+| `gamemerger/` | The app (Python). `api.py` is everything the UI can call; `franklin.py`, `voice.py`, `nexus.py`, `network.py`, `installer.py` (merges and undo), `saves.py`, `updater.py` |
+| `gamemerger/web/` | The UI (HTML, CSS, JS) shown in the app window |
+| `gamemerger/recipes/` | One JSON recipe per base game: frameworks, styles, where mods go |
+| `installer/` | NSIS installer script, icon and art, release notes for the next release |
+| `tests/` | Unit tests |
+| `docs/` | Screenshots for this page |
+| `.github/workflows/release.yml` | Builds the installer on Windows and publishes a release |
+
+The `gamemerger` folder keeps its old name on purpose: the app was called Game Merger before 3.8.0,
+and renaming the package would break installed copies and their data folder.
+
 ## For developers
 
-- Release build (Windows): `pip install pyinstaller -r requirements.txt`, then
-  `pyinstaller --onedir --windowed --name Frankenstein --icon installer\Frankenstein.ico --collect-data edge_tts --add-data "gamemerger\recipes;gamemerger\recipes" --add-data "gamemerger\web;gamemerger\web" --add-data "gamemerger\xtts_server.py;gamemerger" Frankenstein.pyw`,
-  then `makensis -DVER=x.y.z installer\Frankenstein.nsi` makes `dist\FrankensteinSetup.exe`.
-- Bump `gamemerger/version.py` and publish the setup file as a GitHub release asset named
-  `FrankensteinSetup.exe` with tag `vX.Y.Z`; installed apps pick it up on their next start.
-
-- `python -m unittest discover -s tests` runs the tests.
+- Run from source: `pip install -r requirements.txt`, then `Run Frankenstein.bat` (or `python Frankenstein.pyw`; add `--browser` to open it in a browser).
+- Tests: `python -m unittest discover -s tests`.
+- Local build: `Build exe.bat` makes `dist\Frankenstein\Frankenstein.exe`; then
+  `makensis -DVER=x.y.z installer\Frankenstein.nsi` makes `dist\FrankensteinSetup.exe`.
+- **Releasing**: bump `gamemerger/version.py`, write `installer/release-notes.md`, add the notes to
+  `CHANGELOG.md`, and push to `main`. The workflow builds the installer and publishes release `vX.Y.Z`
+  with two copies of it: `FrankensteinSetup.exe`, and `GameMergerSetup.exe` for installs from before
+  the rename (their updater looks for that name). Installed apps offer the update on their next start.
 - Add a base game by dropping a recipe `.json` (same format as `gamemerger\recipes`) into
   `%LOCALAPPDATA%\GameMerger\recipes`.
+
+## Licences and credits
+
+Frankenstein uses, downloads or works with these projects, each under its own licence:
+
+- [pywebview](https://github.com/r0x0r/pywebview) (BSD-3-Clause) for the app window, on Microsoft Edge WebView2.
+- [edge-tts](https://github.com/rany2/edge-tts) (LGPL-3.0) for Franklin's free voice, using Microsoft's online voices.
+- **Coqui XTTS v2**, only if you set up your own cloned voice: the model is under the
+  [Coqui Public Model License (CPML)](https://coqui.ai/cpml), which allows **non-commercial use only**.
+  It isn't bundled; it runs from your own install, and Frankenstein only starts it when you pick it in Settings.
+- [ZeroTier One](https://www.zerotier.com/) for Play together, downloaded from ZeroTier when you set it up (ZeroTier's own licence).
+- [Anthropic Claude API](https://www.anthropic.com/) for Franklin, with your own API key; [Nexus Mods API](https://www.nexusmods.com/) with your own key.
+- [Pillow](https://python-pillow.org/), [icoextract](https://github.com/jlu5/icoextract), [PyInstaller](https://pyinstaller.org/) (GPL with the bootloader exception) and [NSIS](https://nsis.sourceforge.io/) (zlib) to build it.
+
+Mods, frameworks and games belong to their authors and publishers. Frankenstein never copies files
+out of the game whose style you merge in.

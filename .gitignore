@@ -3,3 +3,9 @@ __pycache__/
 build/
 dist/
 *.spec
+.venv/
+.deps-installed
+installer/version_info.txt
+*.log
+*.exe
+*.zip
