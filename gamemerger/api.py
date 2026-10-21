@@ -43,6 +43,12 @@ class Api:
     def __init__(self):
         self._window = None  # set by app.py when running inside pywebview
         self._settings = paths.load_settings()
+        if not self._settings.get("voice_defaults_v2"):
+            # Andrew is Franklin's voice now; the cloned XTTS voice is opt-in from Settings
+            if self._settings.get("voice_style") == "own":
+                self._settings["voice_style"] = voice.DEFAULT_VOICE
+            self._settings["voice_defaults_v2"] = True
+            paths.save_settings(self._settings)
         self._recipes = load_recipes([resource_dir(), paths.user_recipes_dir()])
         self._games = []
         self._jobs = {}
@@ -750,6 +756,28 @@ class Api:
     def now(self):
         return time.time()
 
+    # ---------- window (borderless, so the page has its own buttons) ----------
+
+    def win_state(self):
+        return {"framed": self._window is not None, "fullscreen": self._settings.get("fullscreen", True)}
+
+    def win_minimize(self):
+        if self._window is not None:
+            self._window.minimize()
+
+    def win_close(self):
+        if self._window is not None:
+            self._window.destroy()
+
+    def win_fullscreen(self, on):
+        """Switch between full screen and a window. Remembered for next time."""
+        on = bool(on)
+        if self._window is not None and on != self._settings.get("fullscreen", True):
+            self._window.toggle_fullscreen()
+        self._settings["fullscreen"] = on
+        paths.save_settings(self._settings)
+        return self.win_state()
+
     # ---------- settings ----------
 
     def get_settings(self):
@@ -766,13 +794,15 @@ class Api:
                 "explicit": self._settings.get("explicit", True),
                 "cloud_folder": self._settings.get("cloud_folder", ""),
                 "cloud_options": saves.cloud_folders(),
-                "voice_styles": ([["own", "Your own cloned voice (made on this PC)"]] if self._own_voice() else [])
+                "voice_styles": ([["own", "Your own cloned voice (slow to load)"]] if self._own_voice_folder() else [])
                 + [[k, v[1]] for k, v in voice.NEURAL_VOICES.items()]}
 
     def save_settings(self, values):
         for k in ("mode", "destination", "voice_on", "voice_style", "explicit", "cloud_folder"):
             if k in values:
                 self._settings[k] = values[k]
+        if self._settings.get("voice_style") != "own":
+            self._stop_own_voice()
         if values.get("elevenlabs_key") is not None:
             self._settings["elevenlabs_key"] = values["elevenlabs_key"].strip()
             self._settings.pop("voice_id", None)
@@ -862,17 +892,32 @@ class Api:
             self._chat_history = []
         return True
 
+    def _own_voice_folder(self):
+        """Where the XTTS cloned voice is set up on this PC, or None. Only looks, never starts it."""
+        if sys.platform != "win32":
+            return None
+        if not hasattr(self, "_own_folder"):
+            self._own_folder = voice.LocalVoice.find(self._settings.get("xtts_folder"))
+        return self._own_folder
+
     def _own_voice(self):
-        """Franklin's own XTTS voice, started on first use, or None if it isn't set up on this PC."""
-        if getattr(self, "_own", None) is None:
-            folder = voice.LocalVoice.find(self._settings.get("xtts_folder"))
-            if not folder or sys.platform != "win32":
-                self._own = False
-            else:
-                self._own = voice.LocalVoice(folder, os.path.join(os.path.dirname(resource_dir()), "xtts_server.py"),
-                                             paths.sub("voice-cache"))
-                self._own.start()
-        return self._own or None
+        """Franklin's own XTTS voice, or None. It's slow to load (a minute or two of CPU), so it only
+        starts when the player has picked it in Settings."""
+        if self._settings.get("voice_style") != "own":
+            return None
+        if not getattr(self, "_own", None):
+            folder = self._own_voice_folder()
+            if not folder:
+                return None
+            self._own = voice.LocalVoice(folder, os.path.join(os.path.dirname(resource_dir()), "xtts_server.py"),
+                                         paths.sub("voice-cache"))
+            self._own.start()
+        return self._own
+
+    def _stop_own_voice(self):
+        own, self._own = getattr(self, "_own", None), None
+        if own:
+            own.stop()
 
     def franklin_voice_warm(self, lines):
         """Make the clips for lines Franklin says a lot, in the background, once his voice is loaded."""
@@ -894,13 +939,13 @@ class Api:
         return True
 
     def franklin_voice(self, text, force=False):
-        """Franklin's voice as mp3: your cloned voice or ElevenLabs if set up, otherwise a free natural
-        British voice. None means use the voice built into Windows."""
+        """Franklin's voice as mp3: your cloned voice or ElevenLabs if set up, otherwise the free Andrew
+        voice (or whichever free voice is picked). None means use the voice built into Windows."""
         if not force and not self._settings.get("voice_on", True):
             return None
         text = text[:1200]
         own = self._own_voice()
-        if own and self._settings.get("voice_style") == "own":
+        if own:
             try:
                 return own.wav(text)
             except voice.VoiceError:
@@ -916,6 +961,7 @@ class Api:
             except voice.VoiceError:
                 pass
         try:
-            return voice.neural(text, self._settings.get("voice_style", voice.DEFAULT_VOICE))
+            style = self._settings.get("voice_style", voice.DEFAULT_VOICE)
+            return voice.neural(text, voice.DEFAULT_VOICE if style == "own" else style)
         except voice.VoiceError:
             return None

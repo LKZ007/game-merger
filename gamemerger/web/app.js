@@ -21,6 +21,33 @@ async function call(name, ...args) {
   return j.result;
 }
 
+// ---------- borderless window ----------
+async function setFullscreen(on) {
+  const w = await call("win_fullscreen", on);
+  document.body.classList.toggle("fullscreen", w.fullscreen);
+  $("#winbar").classList.toggle("pywebview-drag-region", !w.fullscreen); // nothing to drag when it fills the screen
+  $("#winFull").title = w.fullscreen ? "Windowed (Esc or F11)" : "Full screen (F11)";
+  $("#winFull").setAttribute("aria-label", w.fullscreen ? "Windowed" : "Full screen");
+}
+
+async function initWindow() {
+  const w = await call("win_state");
+  if (!w.framed) return; // browser mode: the browser has its own buttons
+  document.body.classList.add("framed");
+  document.body.classList.toggle("fullscreen", w.fullscreen);
+  $("#winbar").classList.toggle("pywebview-drag-region", !w.fullscreen);
+  $("#winbar").classList.remove("hidden");
+  $("#winMin").onclick = () => call("win_minimize");
+  $("#winClose").onclick = () => call("win_close");
+  $("#winFull").onclick = () => setFullscreen(!document.body.classList.contains("fullscreen"));
+  $("#winbar").ondblclick = (e) => { if (!e.target.closest("button")) setFullscreen(!document.body.classList.contains("fullscreen")); };
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "F11") { e.preventDefault(); setFullscreen(!document.body.classList.contains("fullscreen")); }
+    else if (e.key === "Escape" && document.body.classList.contains("fullscreen") && $("#modal").classList.contains("hidden")) setFullscreen(false);
+  });
+}
+initWindow();
+
 // ---------- small helpers ----------
 const $ = (sel, el = document) => el.querySelector(sel);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -746,6 +773,10 @@ async function loadSettings() {
   $("#elevenLink").onclick = (e) => { e.preventDefault(); call("open_url", "https://elevenlabs.io/"); };
   $("#voiceStyle").onchange = async () => {
     state.settings = await call("save_settings", { voice_style: $("#voiceStyle").value });
+    if (state.settings.voice_style === "own") {
+      call("franklin_voice_warm", lineSet("voiceTest")).catch(() => {});
+      toast("Loading your own voice. It takes a minute or two the first time, Andrew covers till then.", 6000);
+    }
     speak(line("voiceTest"), true);
   };
   $("#explicit").onchange = async () => {
@@ -876,7 +907,7 @@ const CHIPS = {
 };
 document.querySelectorAll("#franklinChips [data-ask]").forEach((b) => (b.onclick = () => { const [t, o] = CHIPS[b.dataset.ask]; askFranklin(t, o); }));
 $("#franklinForm").onsubmit = (e) => { e.preventDefault(); const v = $("#franklinText").value; $("#franklinText").value = ""; askFranklin(v); };
-$("#modal").addEventListener("keydown", (e) => { if (e.key === "Escape" && $("#modalActions").children.length) closeModal(); });
+$("#modal").addEventListener("keydown", (e) => { if (e.key === "Escape" && $("#modalActions").children.length) { e.stopPropagation(); closeModal(); } });
 
 // ---------- Franklin's voice ----------
 // Your own cloned voice or ElevenLabs if set up, otherwise a free natural voice, and offline the Windows one.

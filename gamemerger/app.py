@@ -80,8 +80,11 @@ def main():
     api._handoffs = [arg] if arg else []
     api._register_nxm = register_nxm
     instance.listen(api._handoffs.append)
+    # borderless like a game launcher: the page draws its own minimise / full screen / close buttons
     window = webview.create_window("Frankenstein", os.path.join(WEB, "index.html"), js_api=api,
-                                   width=1360, height=860, min_size=(1100, 700), background_color="#0c0912")
+                                   width=1360, height=860, min_size=(1100, 700), background_color="#0c0912",
+                                   frameless=True, easy_drag=False,
+                                   fullscreen=api._settings.get("fullscreen", True))
     api._window = window  # underscore: keeps it out of what the page can call
     try:
         webview.start()

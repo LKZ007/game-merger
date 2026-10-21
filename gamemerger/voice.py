@@ -69,7 +69,7 @@ DEFAULT_VOICE = "andrew"
 
 
 def neural(text, style=DEFAULT_VOICE):
-    """Return an mp3 data URI of `text` in a natural British voice, or raise VoiceError."""
+    """Return an mp3 data URI of `text` in a free natural voice (Andrew by default), or raise VoiceError."""
     try:
         import edge_tts
     except ImportError:
