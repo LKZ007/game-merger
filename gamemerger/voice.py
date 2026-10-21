@@ -95,6 +95,15 @@ def neural(text, style=DEFAULT_VOICE):
 
 # ---------- Franklin's own voice (local XTTS clone) ----------
 
+def _kill_tree(pid):
+    import subprocess
+    try:
+        subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"], capture_output=True, timeout=15,
+                       creationflags=0x08000000)
+    except (OSError, subprocess.SubprocessError):
+        pass
+
+
 class LocalVoice:
     """Runs xtts_server.py with the Python from the franklin-voice folder and keeps it running.
     Clips are cached, so lines Franklin says often (greetings) are instant after the first time."""
@@ -131,8 +140,31 @@ class LocalVoice:
                                      creationflags=0x08000000)  # no console window
 
     def stop(self):
+        # the venv's python.exe is a launcher that starts the real Python as a child, so end the whole tree
         if self.proc and self.proc.poll() is None:
-            self.proc.terminate()
+            _kill_tree(self.proc.pid)
+        self.proc = None
+
+    @staticmethod
+    def stop_leftover():
+        """End an XTTS server left running by an earlier copy of the app (older versions only stopped
+        the launcher, not the Python it started). Only touches a process running xtts_server.py."""
+        import subprocess
+        import sys
+        if sys.platform != "win32":
+            return False
+        ps = ("$c = Get-NetTCPConnection -LocalPort %d -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1; "
+              "if ($c) { $p = Get-CimInstance Win32_Process -Filter \"ProcessId=$($c.OwningProcess)\"; "
+              "if ($p.CommandLine -like '*xtts_server.py*') { $p.ProcessId } }") % LocalVoice.PORT
+        try:
+            out = subprocess.run(["powershell", "-NoProfile", "-Command", ps], capture_output=True, text=True,
+                                 timeout=20, creationflags=0x08000000).stdout.strip()
+        except (OSError, subprocess.SubprocessError):
+            return False
+        if out.isdigit():
+            _kill_tree(int(out))
+            return True
+        return False
 
     def ready(self):
         try:

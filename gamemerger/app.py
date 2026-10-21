@@ -53,6 +53,21 @@ def register_nxm():
         pass
 
 
+def bring_to_front(window):
+    """Show the open window when someone starts the app again (un-minimise it, put it on top)."""
+    if sys.platform != "win32":
+        return
+    try:
+        import ctypes
+        hwnd = window.native.Handle.ToInt32()
+        u32 = ctypes.windll.user32
+        if u32.IsIconic(hwnd):
+            u32.ShowWindow(hwnd, 9)  # SW_RESTORE: back to how it was, full screen included
+        u32.SetForegroundWindow(hwnd)
+    except Exception:
+        pass  # not worth failing over; the window is still open
+
+
 def opened_arg():
     """A .gmerge file or nxm:// link the app was started with."""
     for a in sys.argv[1:]:
@@ -65,8 +80,10 @@ def opened_arg():
 
 def main():
     arg = opened_arg()
-    if arg and instance.hand_off(arg):
-        return  # the open window takes it from here
+    if "--browser" not in sys.argv and not instance.claim():
+        # already open: pass on what we were opened with (or just bring it to the front) and leave
+        instance.hand_off_patiently(arg or instance.FOCUS)
+        return
     register_file_type()
     if "--browser" in sys.argv:
         return run_browser()
@@ -79,13 +96,18 @@ def main():
     api = Api()
     api._handoffs = [arg] if arg else []
     api._register_nxm = register_nxm
-    instance.listen(api._handoffs.append)
     # borderless like a game launcher: the page draws its own minimise / full screen / close buttons
     window = webview.create_window("Frankenstein", os.path.join(WEB, "index.html"), js_api=api,
                                    width=1360, height=860, min_size=(1100, 700), background_color="#0c0912",
                                    frameless=True, easy_drag=False,
                                    fullscreen=api._settings.get("fullscreen", True))
     api._window = window  # underscore: keeps it out of what the page can call
+
+    def on_handoff(msg):
+        if msg != instance.FOCUS:
+            api._handoffs.append(msg)
+        bring_to_front(window)
+    instance.listen(on_handoff)
     try:
         webview.start()
     finally:

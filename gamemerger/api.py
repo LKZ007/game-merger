@@ -49,6 +49,8 @@ class Api:
                 self._settings["voice_style"] = voice.DEFAULT_VOICE
             self._settings["voice_defaults_v2"] = True
             paths.save_settings(self._settings)
+        if self._settings.get("voice_style") != "own":
+            threading.Thread(target=voice.LocalVoice.stop_leftover, daemon=True).start()
         self._recipes = load_recipes([resource_dir(), paths.user_recipes_dir()])
         self._games = []
         self._jobs = {}

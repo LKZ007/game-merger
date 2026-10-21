@@ -4,11 +4,43 @@ Download" link while the app is open, the new copy hands it to the open one and 
 import json
 import os
 import secrets
+import sys
 import threading
+import time
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from . import paths
+
+
+FOCUS = "--focus"  # what a second copy sends when it was opened with nothing to hand over
+_mutex = None
+
+
+def claim():
+    """True if this is the only running copy. Holds a Windows mutex for the life of the process,
+    so two copies started at the same moment can't both win."""
+    global _mutex
+    if sys.platform != "win32":
+        return True
+    import ctypes
+    k32 = ctypes.windll.kernel32
+    k32.CreateMutexW.restype = ctypes.c_void_p
+    _mutex = k32.CreateMutexW(None, False, "Local\\FrankensteinApp")
+    return k32.GetLastError() != 183  # ERROR_ALREADY_EXISTS
+
+
+def hand_off_patiently(arg, wait=15):
+    """Hand arg to the running copy, giving it time to finish starting up."""
+    if sys.platform == "win32":
+        import ctypes
+        ctypes.windll.user32.AllowSetForegroundWindow(-1)  # we were just started by the player, so we may pass focus on
+    end = time.time() + wait
+    while time.time() < end:
+        if hand_off(arg):
+            return True
+        time.sleep(0.5)
+    return False
 
 
 def _file():
