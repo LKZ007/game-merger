@@ -891,7 +891,7 @@ document.querySelectorAll("canvas[data-brain]").forEach((cv) => {
 // one twice in a row. "explicit" is used in 18+ mode, "clean" when it's off.
 const LINES = {
   explicit: {
-    splash: ["Yo, what's up bro. Hold up, lemme find your games…", "What's up bro. Lemme pull up your games…",
+    splash: ["Yo, what's up bro. Hold up, lemme find your games…", "What's up, man. Lemme find your games…", "What's up bro. Lemme pull up your games…",
       "Aight brudda, lemme see what you got installed…", "Checking Steam, Epic, GOG and the Xbox app…",
       "Hold up, grabbing your box art…", "Damn bro, you got a collection. Sorting it out…"],
     found: ["Bet, got 'em. {n} games ready, bro.", "Found {n} games. Aight, let's mix some shit up.", "{n} games, bro. Pick one and we'll get into it.",
@@ -902,7 +902,7 @@ const LINES = {
     importDone: ["Aight, “{name}” is ready, bro.", "“{name}” is in, bro. Go have fun.", "Done brudda, “{name}” is set up."],
     voiceTest: ["Yo bro, how's this sound?", "This is me now, bro. Smooth as hell, right?", "Check it brudda. That's the voice."],
     voiceSaved: ["Aight, voice is locked in.", "That's my voice sorted, brudda."],
-    hello: ["Yo, what's up bro. Pick a game and let's mix some shit up.", "What's up bro, it's Franklin. What we merging?",
+    hello: ["What's up, man. It's Franklin. What we merging?", "Yo, what's up bro. Pick a game and let's mix some shit up.", "What's up bro, it's Franklin. What we merging?",
       "Yo, what's up brudda. Franklin here.", "What's up bro. Ready when you are."],
     goodGame: ["Good choice, bro.", "Good choice. {game} is a solid base.", "Ohh, good choice, brudda.", "{game}? Good choice, bro.",
       "Damn, good choice.", "Solid pick, bro.", "Aight, {game} it is."],
@@ -912,7 +912,7 @@ const LINES = {
     permDone: ["Bet, all sorted.", "Done, bro. Easy.", "Sorted bro, no stress."],
   },
   clean: {
-    splash: ["Yo, what's up bro. Hold up, lemme find your games…", "What's up bro. Lemme pull up your games…",
+    splash: ["Yo, what's up bro. Hold up, lemme find your games…", "What's up, man. Lemme find your games…", "What's up bro. Lemme pull up your games…",
       "Aight brudda, lemme see what you got installed…", "Checking Steam, Epic, GOG and the Xbox app…", "Grabbing your box art, hold up…"],
     found: ["Aight, got 'em. {n} games ready, bro.", "Found {n} games. Let's mix some stuff up.", "{n} games, bro. Pick one and we'll get into it.",
       "Got {n} games ready, brudda. Your move."],
@@ -922,7 +922,7 @@ const LINES = {
     importDone: ["Aight, “{name}” is ready, bro.", "“{name}” is in, bro. Go have fun."],
     voiceTest: ["Yo bro, how's this sound?", "Check it brudda. That's the voice."],
     voiceSaved: ["Aight, voice is locked in.", "That's my voice sorted, brudda."],
-    hello: ["Yo, what's up bro. Pick a game and let's mix some stuff up.", "What's up bro, it's Franklin. What we merging?",
+    hello: ["What's up, man. It's Franklin. What we merging?", "Yo, what's up bro. Pick a game and let's mix some stuff up.", "What's up bro, it's Franklin. What we merging?",
       "What's up bro. Ready when you are."],
     goodGame: ["Good choice, bro.", "Good choice. {game} is a solid base.", "Ooh, good choice.", "Solid pick, brudda.", "Aight, {game} it is."],
     goodMod: ["Good choice, brudda.", "Aight, got 'em.", "Good choice on that one, bro.", "Good pick, brudda."],
