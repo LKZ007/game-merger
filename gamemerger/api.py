@@ -2,6 +2,7 @@
 pywebview (or the local browser bridge in server.py); every argument and return value is plain JSON."""
 
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -12,7 +13,7 @@ import urllib.parse
 import uuid
 import webbrowser
 
-from . import covers, detect, downloader, franklin, network, paths, permissions, saves, scan, sharing, updater, voice
+from . import covers, detect, downloader, franklin, gallery, network, paths, permissions, saves, scan, sharing, specs, updater, voice
 from .version import VERSION
 from .installer import MODE_COPY, MODE_HARDLINK, MODE_INPLACE, Merge, MergeError, find_clashes, preview
 from .recipes import load_recipes, resource_dir
@@ -50,6 +51,7 @@ class Api:
         self._lock = threading.Lock()
         self._playing = None
         self._recover_saves()
+        self._start_hotkey()
 
     # ---------- helpers ----------
 
@@ -122,8 +124,15 @@ class Api:
         saves.swap_out()
 
     def _game_closed(self):
+        mid = self._playing or (saves.active() or {}).get("merge_id")
         saves.swap_out()
         self._playing = None
+        cloud = self._settings.get("cloud_folder")
+        if cloud and mid:
+            try:
+                saves.push_cloud(mid, cloud, Merge.load(mid).name)
+            except OSError:
+                pass  # cloud folder offline: next session tries again
 
     def _steam_root(self):
         if detect.winreg is not None:
@@ -274,6 +283,33 @@ class Api:
             job.write("This merge has its own save games, so your normal saves stay safe.")
         job.progress = None
         return merge
+
+    # ---------- gallery ----------
+
+    def _start_hotkey(self):
+        def name():
+            try:
+                return Merge.load(self._playing).name if self._playing else "Other"
+            except (OSError, ValueError):
+                return "Other"
+        self._shots = 0
+        gallery.listen(name, lambda p: setattr(self, "_shots", self._shots + 1))
+
+    def gallery(self):
+        return {"hotkey": gallery.HOTKEY, "items": [dict(i, thumb=None) for i in gallery.items()]}
+
+    def gallery_thumb(self, path):
+        if path.lower().endswith(".png") and any(i["path"] == path for i in gallery.items(1000)):
+            return gallery.thumb(path)
+        return None
+
+    def open_path(self, path):
+        if sys.platform == "win32" and any(i["path"] == path for i in gallery.items(1000)):
+            os.startfile(path)
+        return True
+
+    def shots_taken(self):
+        return getattr(self, "_shots", 0)
 
     # ---------- updates ----------
 
@@ -486,6 +522,14 @@ class Api:
         exe = r.launch_exe(m.target_path) if r else None
         if not exe:
             raise MergeError("Couldn't find the game's .exe in %s." % m.target_path)
+        m.data["plays"] = m.data.get("plays", 0) + 1
+        m.save()
+        cloud = self._settings.get("cloud_folder")
+        if cloud and r and r.saves and self._playing != merge_id:
+            try:
+                saves.pull_cloud(merge_id, cloud, m.name)
+            except OSError:
+                pass
         if r.saves and self._playing != merge_id:
             saves.swap_in(merge_id, r)
             self._playing = merge_id
@@ -652,11 +696,13 @@ class Api:
                 "voice_style": self._settings.get("voice_style", voice.DEFAULT_VOICE),
                 "version": VERSION,
                 "explicit": self._settings.get("explicit", True),
+                "cloud_folder": self._settings.get("cloud_folder", ""),
+                "cloud_options": saves.cloud_folders(),
                 "voice_styles": ([["own", "Your own cloned voice (made on this PC)"]] if self._own_voice() else [])
                 + [[k, v[1]] for k, v in voice.NEURAL_VOICES.items()]}
 
     def save_settings(self, values):
-        for k in ("mode", "destination", "voice_on", "voice_style", "explicit"):
+        for k in ("mode", "destination", "voice_on", "voice_style", "explicit", "cloud_folder"):
             if k in values:
                 self._settings[k] = values[k]
         if values.get("elevenlabs_key") is not None:
@@ -673,6 +719,8 @@ class Api:
     def franklin_send(self, text, context, include_logs_for=None):
         """Start a Franklin reply. include_logs_for: a merge id or "game:<key>" whose logs to attach."""
         ctx = dict(context or {})
+        ctx["about_player"] = self._about_player()
+        ctx["pc"] = specs.summary()
         if include_logs_for:
             if include_logs_for.startswith("game:"):
                 g = self._game(include_logs_for[5:])
@@ -700,6 +748,7 @@ class Api:
                 bot = franklin.Franklin(self._settings.get("claude_api_key", ""), self._settings.get("explicit", True))
                 for chunk in bot.stream_reply(history):
                     stream["text"] += chunk
+                self._remember(stream["text"])
                 with self._lock:
                     self._chat_history.append({"role": "assistant", "content": stream["text"]})
             except franklin.FranklinError as e:
@@ -714,6 +763,27 @@ class Api:
                 stream["done"] = True
         threading.Thread(target=run, daemon=True).start()
         return sid
+
+    def _about_player(self):
+        """What Franklin remembers between sessions: notes he saved, and the merges played most."""
+        out = list(self._settings.get("franklin_memory", []))
+        played = sorted((m for m in Merge.all() if m.data.get("plays")), key=lambda m: -m.data["plays"])[:3]
+        for m in played:
+            out.append("Plays \"%s\" (%s with %s style) a lot: %d times." % (m.name, m.data.get("game_name"),
+                                                                      m.data.get("theme_name"), m.data["plays"]))
+        return out
+
+    def _remember(self, reply):
+        notes = [n.strip() for n in re.findall(r"\[remember:\s*([^\]]+)\]", reply) if n.strip()]
+        if notes:
+            mem = [n for n in self._settings.get("franklin_memory", []) if n not in notes] + notes
+            self._settings["franklin_memory"] = mem[-30:]
+            paths.save_settings(self._settings)
+
+    def franklin_forget(self):
+        self._settings["franklin_memory"] = []
+        paths.save_settings(self._settings)
+        return True
 
     def franklin_poll(self, sid, since=0):
         s = self._chat_streams[sid]

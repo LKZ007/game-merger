@@ -246,6 +246,22 @@ class SavesTests(unittest.TestCase):
         self.assertEqual(closed, [1])
 
 
+class CloudSaveTests(unittest.TestCase):
+    def test_push_then_pull_newer_on_other_pc(self):
+        import time
+        from gamemerger import saves
+        cloud = tempfile.mkdtemp(dir=TMP)
+        write(os.path.join(saves.slot_root("pc1"), "0", "a.sav"), "day 1")
+        self.assertTrue(saves.push_cloud("pc1", cloud, "Night City"))
+        write(os.path.join(saves.slot_root("laptop"), "0", "a.sav"), "old")
+        old = time.time() - 3600
+        os.utime(os.path.join(saves.slot_root("laptop"), "0", "a.sav"), (old, old))
+        self.assertTrue(saves.pull_cloud("laptop", cloud, "Night City"))
+        with open(os.path.join(saves.slot_root("laptop"), "0", "a.sav")) as f:
+            self.assertEqual(f.read(), "day 1")
+        self.assertFalse(saves.pull_cloud("laptop", cloud, "Night City"))  # already up to date
+
+
 class PermissionAndCoverTests(unittest.TestCase):
     def test_library_root_covers_whole_steam_library(self):
         from gamemerger import permissions

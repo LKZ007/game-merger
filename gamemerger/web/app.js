@@ -80,7 +80,7 @@ function show(view) {
   document.querySelectorAll(".nav-item[data-view]").forEach((b) =>
     b.classList.toggle("active", b.dataset.view === view || (view === "setup" && b.dataset.view === "library")));
   $("#main").scrollTop = 0;
-  ({ library: renderLibrary, setup: renderSetup, merges: loadMerges, party: loadParty, quests: renderQuests, backups: loadBackups, settings: loadSettings }[view])();
+  ({ library: renderLibrary, setup: renderSetup, merges: loadMerges, party: loadParty, gallery: loadGallery, quests: renderQuests, backups: loadBackups, settings: loadSettings }[view])();
   renderFranklinCard();
 }
 document.querySelectorAll(".nav-item[data-view]").forEach((b) => (b.onclick = () => show(b.dataset.view)));
@@ -522,6 +522,24 @@ async function mergeAction(id, act) {
   } catch (e) { modal("That didn't work", `<p>${esc(errText(e))}</p>`); }
 }
 
+// ---------- gallery ----------
+async function loadGallery() {
+  const el = $("#view-gallery");
+  let g;
+  try { g = await call("gallery"); } catch (e) { toast(errText(e)); return; }
+  const groups = {};
+  g.items.forEach((x) => (groups[x.merge] = groups[x.merge] || []).push(x));
+  el.innerHTML = `<div class="page"><h1>Gallery</h1>
+    <p class="lede">Press <strong>${esc(g.hotkey)}</strong> while you play to grab a screenshot. For video clips use Windows Game Bar (<strong>Win+Alt+R</strong>); they show up here too.</p>
+    ${Object.keys(groups).length ? Object.entries(groups).map(([name, list]) => `<div class="card"><h2>${esc(name)}</h2>
+      <div class="shots">${list.map((x) => `<button class="shot" data-path="${esc(x.path)}" title="${esc(basename(x.path))}">${x.kind === "clip" ? `<span class="clip">▶ ${esc(basename(x.path))}</span>` : `<img alt="" data-thumb="${esc(x.path)}">`}</button>`).join("")}</div></div>`).join("")
+      : `<div class="empty">No screenshots yet. Play a merge and press ${esc(g.hotkey)}.</div>`}</div>`;
+  el.querySelectorAll("[data-path]").forEach((b) => (b.onclick = () => call("open_path", b.dataset.path)));
+  for (const img of el.querySelectorAll("img[data-thumb]")) {
+    call("gallery_thumb", img.dataset.thumb).then((u) => { if (u) img.src = u; }).catch(() => {});
+  }
+}
+
 // ---------- play together ----------
 let partyTimer = null;
 async function loadParty() {
@@ -614,6 +632,7 @@ async function loadSettings() {
         <div class="row" style="flex-wrap:nowrap"><input class="input" type="password" id="apiKey" placeholder="${s.has_key ? "Paste a new key to replace it" : "sk-ant-…"}" autocomplete="off">
           <button class="btn primary" id="saveKey">Save key</button>${s.has_key ? `<button class="btn ghost danger" id="clearKey">Remove</button>` : ""}</div></div>
       <p class="muted small">Saved only on this PC, in ${esc(s.data_folder)}.</p>
+      <div class="row"><div class="grow muted small">Franklin remembers your favourite merges, mods and playstyle between sessions.</div><button class="btn ghost" id="forget">Forget all that</button></div>
     </div>
     <div class="card"><h2>Franklin's voice</h2>
       <label class="switch"><input type="checkbox" id="voiceOn" ${s.voice_on ? "checked" : ""}> Franklin talks out loud</label>
@@ -626,6 +645,11 @@ async function loadSettings() {
         <div class="row" style="flex-wrap:nowrap"><input class="input" type="password" id="elevenKey" placeholder="${s.has_eleven ? "Paste a new key to replace it" : "Paste your ElevenLabs key"}" autocomplete="off">
           <button class="btn primary" id="saveEleven">Save</button>${s.has_eleven ? `<button class="btn ghost danger" id="clearEleven">Remove</button>` : ""}</div></div>
     </div>
+    <div class="card"><h2>Cloud backup of saves</h2>
+      <p class="muted">Every merge's saves get copied to your cloud drive after you play, so your PC and laptop stay in step. Pick the same drive on both.</p>
+      <select class="input" id="cloudPick"><option value="">Off</option>${(s.cloud_options || []).map(([n, p]) => `<option value="${esc(p)}" ${s.cloud_folder === p ? "selected" : ""}>${esc(n)} (${esc(p)})</option>`).join("")}</select>
+      ${(s.cloud_options || []).length ? "" : `<p class="muted small">No OneDrive or Google Drive folder found on this PC. Install one of them and it shows up here.</p>`}
+    </div>
     <div class="card"><h2>Updates</h2>
       <div class="row"><div class="grow muted">You're on Game Merger ${esc(s.version)}. It checks for updates every time it opens.</div><button class="btn" id="checkUpdate">Check now</button></div>
     </div>
@@ -636,6 +660,7 @@ async function loadSettings() {
         <div class="row" style="flex-wrap:nowrap"><input class="input" id="defDest" value="${esc(s.destination)}" placeholder="Same drive as the game, in a GameMerger folder"><button class="btn" id="defBrowse">Browse</button></div></div>
       <div class="row" style="margin-top:14px;justify-content:flex-end"><button class="btn primary" id="saveMerging">Save</button></div>
     </div></div>`;
+  if ($("#forget")) $("#forget").onclick = async () => { await call("franklin_forget"); toast("Franklin's memory is wiped."); };
   $("#consoleLink").onclick = (e) => { e.preventDefault(); call("open_url", "https://console.anthropic.com/"); };
   $("#saveKey").onclick = async () => {
     const v = $("#apiKey").value.trim();
@@ -643,6 +668,7 @@ async function loadSettings() {
     await call("save_settings", { claude_api_key: v }); toast("Saved. Franklin is ready."); loadSettings(); renderFranklinCard();
   };
   if ($("#clearKey")) $("#clearKey").onclick = async () => { await call("save_settings", { claude_api_key: "" }); loadSettings(); renderFranklinCard(); };
+  $("#cloudPick").onchange = async () => { state.settings = await call("save_settings", { cloud_folder: $("#cloudPick").value }); toast($("#cloudPick").value ? "Cloud backup is on." : "Cloud backup is off."); };
   $("#checkUpdate").onclick = async () => offerUpdate(await call("check_update").catch(() => null), true);
   $("#elevenLink").onclick = (e) => { e.preventDefault(); call("open_url", "https://elevenlabs.io/"); };
   $("#voiceStyle").onchange = async () => {
@@ -676,7 +702,7 @@ $("#franklinMute").onclick = () => setVoice(!voiceOn());
 $("#franklinNew").onclick = async () => { await call("franklin_reset"); $("#franklinMessages").innerHTML = ""; renderFranklinCard(); };
 
 function franklinContext() {
-  const ctx = { screen: { library: "Library", setup: "Merge setup", merges: "My merges", party: "Play together", quests: "Questlines", backups: "Backups", settings: "Settings" }[state.view] };
+  const ctx = { screen: { library: "Library", setup: "Merge setup", merges: "My merges", party: "Play together", gallery: "Gallery", quests: "Questlines", backups: "Backups", settings: "Settings" }[state.view] };
   ctx.installed_games = state.games.map((g) => `${g.name} (${g.source}${g.base ? ", can be base" : ""})`);
   const s = state.setup && state.view === "setup" ? state.setup : null;
   const g = game(s ? s.key : state.selected);
@@ -709,8 +735,9 @@ function renderFranklinCard() {
 }
 
 // Minimal, safe formatting for Franklin's replies: paragraphs, bullet lists and **bold**.
+const hideNotes = (t) => t.replace(/\[remember:[^\]]*\]?/gi, "").trim();
 function formatReply(text) {
-  const blocks = esc(text).split(/\n{2,}/);
+  const blocks = esc(hideNotes(text)).split(/\n{2,}/);
   return blocks.map((b) => {
     const lines = b.split("\n");
     if (lines.every((l) => /^\s*([-*•]|\d+\.)\s+/.test(l)))
@@ -762,7 +789,7 @@ async function askFranklin(text, opts = {}) {
   }
   window.FranklinBrain.talking(false);
   franklinBusy = false;
-  if (full) speak(full);
+  if (full) speak(hideNotes(full));
 }
 
 const CHIPS = {
@@ -771,6 +798,8 @@ const CHIPS = {
   check: ["Check the mods I've added. Do any clash, need something that's missing, or look like they're for a different game?", {}],
   crash: ["My game crashed or a mod isn't working. Check the logs and tell me what went wrong.", { crashLogs: true }],
   online: ["Is it safe to play this merged game online?", {}],
+  ideas: ["Give me some merge ideas from the games I've got installed.", {}],
+  perf: ["Will my PC run this merge well? If not, which lighter mods should I go for?", {}],
 };
 document.querySelectorAll("#franklinChips [data-ask]").forEach((b) => (b.onclick = () => { const [t, o] = CHIPS[b.dataset.ask]; askFranklin(t, o); }));
 $("#franklinForm").onsubmit = (e) => { e.preventDefault(); const v = $("#franklinText").value; $("#franklinText").value = ""; askFranklin(v); };

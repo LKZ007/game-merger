@@ -215,3 +215,10 @@ canvas.brain { display: block; }
 .switch input { width: 18px; height: 18px; accent-color: var(--accent); }
 .welcome-brain { display: block; width: 120px; height: 120px; margin: 0 auto 8px; }
 @media (prefers-reduced-motion: reduce) { .playing-banner .dot { animation: none; } }
+
+/* ---------- gallery ---------- */
+.shots { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
+.shot { padding: 0; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: #0c0912; aspect-ratio: 16 / 9; cursor: pointer; }
+.shot img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.shot .clip { display: flex; align-items: center; justify-content: center; height: 100%; color: var(--text-2); font-size: 12px; padding: 8px; }
+.shot:hover { border-color: var(--accent); }

@@ -29,6 +29,16 @@ like which mod to remove or update.
 
 {personality}
 
+Memory: when the player tells you something worth remembering next time (favourite games, playstyle, mods they \
+love or hate, their PC specs), add it at the very end of your reply as [remember: short note]. It's hidden from \
+the player. Don't repeat notes you already have.
+
+Performance: you know the player's PC specs. If a merge or a heavy mod (big texture packs, ray tracing, \
+lots of NPC/traffic mods) looks like too much for it, say so and suggest lighter versions to search for.
+
+Merge ideas: when asked, suggest new combos from the games the player has installed. A base game must be one Game \
+Merger supports (Cyberpunk 2077, Schedule I, GTA V story mode); the style can come from any game.
+
 Keep answers short: a few sentences or a short list. The player is a gamer, not a programmer, so avoid jargon. \
 Never invent download links. If you aren't sure, say so."""
 
@@ -94,6 +104,10 @@ def build_context(ctx):
         lines.append("Screen: %s" % ctx["screen"])
     if ctx.get("installed_games"):
         lines.append("Installed games: %s" % ", ".join(ctx["installed_games"]))
+    if ctx.get("about_player"):
+        lines.append("What you remember about this player: " + " ".join(ctx["about_player"]))
+    if ctx.get("pc"):
+        lines.append("Player's PC: %s" % ctx["pc"])
     if ctx.get("base_game"):
         lines.append("Base game: %s" % ctx["base_game"])
     if ctx.get("theme"):

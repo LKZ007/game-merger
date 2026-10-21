@@ -142,3 +142,62 @@ def watch_until_closed(exe_names, on_closed, grace=90, poll=5, is_running=runnin
     t = threading.Thread(target=loop, daemon=True)
     t.start()
     return t
+
+
+# ---------- cloud backup ----------
+# Merge saves are mirrored into a OneDrive or Google Drive folder after every session, so a PC and a
+# laptop stay in step: when the cloud copy is newer, it's used the next time you press Play.
+
+def cloud_folders():
+    """OneDrive / Google Drive folders found on this PC: [(label, path)]."""
+    home = os.path.expanduser("~")
+    out = []
+    for env in ("OneDrive", "OneDriveConsumer", "OneDriveCommercial"):
+        p = os.environ.get(env)
+        if p and os.path.isdir(p) and all(p != x[1] for x in out):
+            out.append(("OneDrive", p))
+    for p in [os.path.join(home, "Google Drive", "My Drive"), os.path.join(home, "Google Drive")] + \
+             ["%s:\\My Drive" % d for d in "GHIJKLM"]:
+        if os.path.isdir(p):
+            out.append(("Google Drive", p))
+            break
+    return out
+
+
+def _newest(folder):
+    newest = 0
+    for root, _dirs, files in os.walk(folder):
+        for f in files:
+            newest = max(newest, os.path.getmtime(os.path.join(root, f)))
+    return newest
+
+
+def cloud_slot(cloud_root, merge_name):
+    return os.path.join(cloud_root, "Game Merger saves", merge_name)
+
+
+def push_cloud(merge_id, cloud_root, merge_name):
+    """Copy this merge's saves to the cloud folder."""
+    src = slot_root(merge_id)
+    if not cloud_root or not os.path.isdir(src):
+        return False
+    dest = cloud_slot(cloud_root, merge_name)
+    tmp = dest + ".uploading"
+    shutil.rmtree(tmp, ignore_errors=True)
+    shutil.copytree(src, tmp)
+    shutil.rmtree(dest, ignore_errors=True)
+    os.replace(tmp, dest)
+    return True
+
+
+def pull_cloud(merge_id, cloud_root, merge_name):
+    """Use the cloud copy if it's newer than the saves on this PC (played on another PC since)."""
+    src = cloud_slot(cloud_root, merge_name) if cloud_root else None
+    if not src or not os.path.isdir(src):
+        return False
+    local = slot_root(merge_id)
+    if os.path.isdir(local) and _newest(local) >= _newest(src):
+        return False
+    shutil.rmtree(local, ignore_errors=True)
+    shutil.copytree(src, local)
+    return True

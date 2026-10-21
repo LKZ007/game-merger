@@ -75,6 +75,8 @@ jobs:
           path: dist/GameMergerSetup.exe
 
       - name: Publish release
+        id: publish
+        continue-on-error: true
         if: steps.ver.outputs.new == 'true' && github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
@@ -83,3 +85,21 @@ jobs:
           target_commitish: ${{ github.sha }}
           files: dist/GameMergerSetup.exe
           body_path: installer/release-notes.md
+
+      - name: Publish release (retry)
+        if: steps.publish.outcome == 'failure'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          v=v${{ steps.ver.outputs.version }}
+          for i in 1 2 3; do
+            sleep $((i * 20))
+            if gh release view "$v" >/dev/null 2>&1; then
+              gh release upload "$v" dist/GameMergerSetup.exe --clobber && exit 0
+            else
+              gh release create "$v" dist/GameMergerSetup.exe --title "Game Merger ${{ steps.ver.outputs.version }}" \
+                --notes-file installer/release-notes.md --target "$GITHUB_SHA" && exit 0
+            fi
+          done
+          exit 1
