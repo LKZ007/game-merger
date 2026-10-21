@@ -80,7 +80,7 @@ function show(view) {
   document.querySelectorAll(".nav-item[data-view]").forEach((b) =>
     b.classList.toggle("active", b.dataset.view === view || (view === "setup" && b.dataset.view === "library")));
   $("#main").scrollTop = 0;
-  ({ library: renderLibrary, setup: renderSetup, merges: loadMerges, quests: renderQuests, backups: loadBackups, settings: loadSettings }[view])();
+  ({ library: renderLibrary, setup: renderSetup, merges: loadMerges, party: loadParty, quests: renderQuests, backups: loadBackups, settings: loadSettings }[view])();
   renderFranklinCard();
 }
 document.querySelectorAll(".nav-item[data-view]").forEach((b) => (b.onclick = () => show(b.dataset.view)));
@@ -478,6 +478,52 @@ async function mergeAction(id, act) {
   } catch (e) { modal("That didn't work", `<p>${esc(errText(e))}</p>`); }
 }
 
+// ---------- play together ----------
+let partyTimer = null;
+async function loadParty() {
+  clearTimeout(partyTimer);
+  const el = $("#view-party");
+  let p;
+  try { p = await call("party"); } catch (e) { el.innerHTML = `<div class="page"><h1>Play together</h1><p class="note">${esc(errText(e))}</p></div>`; return; }
+  const games = p.games.map((g) => `<div style="padding:10px 0;border-top:1px solid var(--line)"><strong>${esc(g.name)}</strong><div class="muted small">${esc(g.how)}</div></div>`).join("");
+  let main;
+  if (!p.ready) {
+    main = `<div class="card"><h2>Set up your private network</h2>
+      <p class="muted">Like Hamachi: your PC and your friends' PCs act like they're on the same home network, so LAN games and private servers can see each other. It uses ZeroTier, which is free and needs no account.</p>
+      <p class="muted">Windows will ask once. After that it's one click to host or join.</p>
+      <button class="btn primary" id="partySetup">Set it up</button></div>`;
+  } else if (!p.party) {
+    main = `<div class="card"><h2>Host a party</h2><p class="muted">You get a code to send your friends. Your PC runs the party, so keep Game Merger open while you play.</p>
+        <button class="btn primary" id="partyHost">Host a party</button></div>
+      <div class="card"><h2>Join a friend</h2><p class="muted">Type the code your friend sent you.</p>
+        <div class="row" style="flex-wrap:nowrap"><input class="input" id="partyCode" placeholder="16-character party code" autocomplete="off" spellcheck="false"><button class="btn primary" id="partyJoin">Join</button></div></div>`;
+  } else {
+    const q = p.party;
+    const badge = q.connected ? `<span class="tag live">Connected</span>` : q.waiting ? `<span class="tag">Waiting for the host to let you in</span>` : `<span class="tag">Connecting…</span>`;
+    const members = q.host ? q.members.map((m) => `<div class="row" style="padding:10px 0;border-top:1px solid var(--line)">
+        <div class="grow"><strong>${m.you ? "You (host)" : esc(m.name || "Friend " + m.id.slice(0, 4))}</strong> <span class="muted small">${esc(m.ip || "")}</span></div>
+        ${m.you ? "" : m.authorized ? `<button class="btn ghost" data-kick="${esc(m.id)}">Remove</button>` : `<button class="btn primary" data-letin="${esc(m.id)}">Let in</button>`}</div>`).join("") : "";
+    main = `<div class="card"><div class="row"><h2 class="grow" style="margin:0">${q.host ? "Your party" : "You're in a party"}</h2>${badge}</div>
+        <div class="field" style="margin-top:12px"><label>Party code</label><div class="row" style="flex-wrap:nowrap"><input class="input" readonly value="${esc(q.code)}" style="font-family:monospace;font-size:18px;letter-spacing:2px"><button class="btn" id="partyCopy">Copy</button></div></div>
+        <p class="muted small">Your party IP: <strong>${esc(q.my_ip || "getting one…")}</strong>. In games that ask for an IP, use the host's party IP.</p>
+        ${q.host ? `<h2 style="margin-top:18px">Who's here</h2>${members || `<p class="muted">Nobody yet. Send your friends the code.</p>`}` : ""}
+        <div class="row" style="justify-content:flex-end;margin-top:14px"><button class="btn ghost danger" id="partyLeave">${q.host ? "End party" : "Leave"}</button></div></div>`;
+    partyTimer = setTimeout(() => state.view === "party" && loadParty(), 5000);
+  }
+  el.innerHTML = `<div class="page"><h1>Play together</h1>
+    <p class="lede">Share a merge so your friends have the same mods, then play over your own private network.</p>
+    ${p.error ? `<div class="note">${esc(p.error)}</div>` : ""}${main}
+    <div class="card"><h2>What works with friends</h2>${games}</div></div>`;
+  const on = (id, fn) => { const b = $("#" + id); if (b) b.onclick = async () => { try { await fn(); } catch (e) { modal("That didn't work", `<p>${esc(errText(e))}</p>`); } loadParty(); }; };
+  on("partySetup", async () => { await followJob(await call("party_setup"), "Setting up Play together"); });
+  on("partyHost", () => call("party_host"));
+  on("partyJoin", () => call("party_join", $("#partyCode").value));
+  on("partyLeave", () => call("party_leave"));
+  on("partyCopy", async () => { await call("copy_text", p.party.code); toast("Code copied. Send it to your friends."); });
+  el.querySelectorAll("[data-letin]").forEach((b) => (b.onclick = async () => { await call("party_let_in", b.dataset.letin, ""); loadParty(); }));
+  el.querySelectorAll("[data-kick]").forEach((b) => (b.onclick = async () => { await call("party_kick", b.dataset.kick); loadParty(); }));
+}
+
 // ---------- questlines, backups, settings ----------
 function renderQuests() {
   $("#view-quests").innerHTML = `<div class="page"><h1>Questlines</h1>
@@ -530,7 +576,7 @@ async function loadSettings() {
       <div class="field" style="margin-top:12px"><label for="voiceStyle">Voice</label>
         <div class="row" style="flex-wrap:nowrap"><select class="input" id="voiceStyle">${(s.voice_styles || []).map(([id, name]) => `<option value="${id}" ${s.voice_style === id ? "selected" : ""}>${esc(name)}</option>`).join("")}</select>
           <button class="btn" id="testVoice">Hear Franklin</button></div></div>
-      <p class="muted">These are free, natural-sounding British voices, no key needed. If you're offline he falls back to the voice built into Windows. For a proper Manchester accent, paste an <a href="#" id="elevenLink">ElevenLabs</a> key (it has a free tier) and Franklin picks a Manc voice for you.</p>
+      <p class="muted">These are free, natural-sounding voices, no key needed. If you're offline he falls back to the voice built into Windows. For an even more lifelike voice, paste an <a href="#" id="elevenLink">ElevenLabs</a> key (it has a free tier).</p>
       <div class="field"><label for="elevenKey">ElevenLabs key (optional) ${s.has_eleven ? `<span class="tag">Saved${s.voice_name ? " · " + esc(s.voice_name) : ""}</span>` : ""}</label>
         <div class="row" style="flex-wrap:nowrap"><input class="input" type="password" id="elevenKey" placeholder="${s.has_eleven ? "Paste a new key to replace it" : "Paste your ElevenLabs key"}" autocomplete="off">
           <button class="btn primary" id="saveEleven">Save</button>${s.has_eleven ? `<button class="btn ghost danger" id="clearEleven">Remove</button>` : ""}</div></div>
@@ -562,7 +608,7 @@ async function loadSettings() {
   $("#saveEleven").onclick = async () => {
     const v = $("#elevenKey").value.trim();
     if (!v) return toast("Paste your ElevenLabs key first.");
-    await call("save_settings", { elevenlabs_key: v }); toast("Saved. Finding Franklin a Manchester voice…"); await loadSettings();
+    await call("save_settings", { elevenlabs_key: v }); toast("Saved. Finding Franklin a voice…"); await loadSettings();
     speak("Alright our kid, that's me sorted. Sound.");
   };
   if ($("#clearEleven")) $("#clearEleven").onclick = async () => { await call("save_settings", { elevenlabs_key: "" }); loadSettings(); };
@@ -581,7 +627,7 @@ $("#franklinMute").onclick = () => setVoice(!voiceOn());
 $("#franklinNew").onclick = async () => { await call("franklin_reset"); $("#franklinMessages").innerHTML = ""; renderFranklinCard(); };
 
 function franklinContext() {
-  const ctx = { screen: { library: "Library", setup: "Merge setup", merges: "My merges", quests: "Questlines", backups: "Backups", settings: "Settings" }[state.view] };
+  const ctx = { screen: { library: "Library", setup: "Merge setup", merges: "My merges", party: "Play together", quests: "Questlines", backups: "Backups", settings: "Settings" }[state.view] };
   ctx.installed_games = state.games.map((g) => `${g.name} (${g.source}${g.base ? ", can be base" : ""})`);
   const s = state.setup && state.view === "setup" ? state.setup : null;
   const g = game(s ? s.key : state.selected);
@@ -682,7 +728,7 @@ $("#franklinForm").onsubmit = (e) => { e.preventDefault(); const v = $("#frankli
 $("#modal").addEventListener("keydown", (e) => { if (e.key === "Escape" && $("#modalActions").children.length) closeModal(); });
 
 // ---------- Franklin's voice ----------
-// ElevenLabs (Manchester voice) when a key is saved, otherwise the British male voice built into Windows.
+// Your own cloned voice or ElevenLabs if set up, otherwise a free natural voice, and offline the Windows one.
 const voiceOn = () => !state.settings || state.settings.voice_on !== false;
 let speaking = null;
 
@@ -708,11 +754,11 @@ function renderMute() {
   b.setAttribute("aria-label", b.title);
 }
 
-function britishVoice() {
+function fallbackVoice() {
   const voices = window.speechSynthesis ? speechSynthesis.getVoices() : [];
-  const gb = voices.filter((v) => /en[-_]GB/i.test(v.lang));
-  const male = /Ryan|George|Thomas|Alfie|Elliot|Ethan|Noah|Oliver|Daniel|Male/i;
-  return gb.find((v) => male.test(v.name) && /Natural|Online/i.test(v.name)) || gb.find((v) => male.test(v.name)) || gb[0] || null;
+  const en = voices.filter((v) => /en[-_]US/i.test(v.lang));
+  const male = /Andrew|Brian|Christopher|Roger|Guy|Eric|Davis|Mark|David|Male/i;
+  return en.find((v) => male.test(v.name) && /Natural|Online/i.test(v.name)) || en.find((v) => male.test(v.name)) || en[0] || null;
 }
 if (window.speechSynthesis) speechSynthesis.onvoiceschanged = () => {};
 
@@ -764,9 +810,9 @@ function sayBuiltIn(line) {
   return new Promise((done) => {
     if (!window.speechSynthesis) return done();
     const u = new SpeechSynthesisUtterance(line);
-    const v = britishVoice();
+    const v = fallbackVoice();
     if (v) u.voice = v;
-    u.lang = "en-GB";
+    u.lang = "en-US";
     u.pitch = 0.9;
     u.onend = u.onerror = done;
     speechSynthesis.speak(u);

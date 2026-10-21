@@ -59,6 +59,7 @@ class Recipe:
     logs: list = field(default_factory=list)  # crash/debug logs, relative to the game folder (globs allowed)
     saves: list = field(default_factory=list)  # save folders, see saves.expand()
     processes: list = field(default_factory=list)  # .exe names to watch while the game runs
+    multiplayer: str = ""  # how to play this game's merges with friends (shown on Play together)
 
     def framework(self, fid):
         return self.frameworks[fid]
@@ -100,6 +101,7 @@ def _parse(data):
         logs=data.get("logs", []),
         saves=data.get("saves", []),
         processes=data.get("processes", []),
+        multiplayer=data.get("multiplayer", ""),
     )
 
 

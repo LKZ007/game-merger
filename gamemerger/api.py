@@ -12,7 +12,7 @@ import urllib.parse
 import uuid
 import webbrowser
 
-from . import covers, detect, downloader, franklin, paths, permissions, saves, sharing, updater, voice
+from . import covers, detect, downloader, franklin, network, paths, permissions, saves, sharing, updater, voice
 from .version import VERSION
 from .installer import MODE_COPY, MODE_HARDLINK, MODE_INPLACE, Merge, MergeError, find_clashes, preview
 from .recipes import load_recipes, resource_dir
@@ -308,6 +308,62 @@ class Api:
         finally:
             os._exit(0)
 
+    # ---------- play together ----------
+
+    def party(self):
+        """Everything the Play together screen needs."""
+        out = {"ready": network.ready(), "installed": network.installed(), "party": None, "error": None,
+               "games": [{"name": r.name, "how": r.multiplayer} for r in self._recipes if r.multiplayer]}
+        code = self._settings.get("party")
+        if out["ready"] and code:
+            try:
+                out["party"] = network.status(code)
+            except network.NetworkError as e:
+                out["error"] = str(e)
+        return out
+
+    def party_setup(self):
+        def work(job):
+            network.setup(lambda url, dest: downloader.download_file(url, dest), log=job.write)
+            job.write("All set. You can host or join a party now.")
+            return True
+        return self._run(work)
+
+    def party_host(self):
+        code = network.host()
+        self._settings["party"] = code
+        paths.save_settings(self._settings)
+        return network.status(code)
+
+    def party_join(self, code):
+        code = network.join(code)
+        self._settings["party"] = code
+        paths.save_settings(self._settings)
+        return network.status(code)
+
+    def party_leave(self):
+        code = self._settings.pop("party", None)
+        paths.save_settings(self._settings)
+        if code:
+            try:
+                network.leave(code, end=network.is_host(code))
+            except network.NetworkError:
+                pass
+        return True
+
+    def party_let_in(self, member, name=""):
+        network.let_in(self._settings["party"], member, name)
+        return network.status(self._settings["party"])
+
+    def party_kick(self, member):
+        network.kick(self._settings["party"], member)
+        return network.status(self._settings["party"])
+
+    def copy_text(self, text):
+        if sys.platform == "win32":
+            subprocess.run(["clip"], input=text.encode("utf-16-le"), creationflags=0x08000000)
+        return True
+
     # ---------- sharing ----------
 
     def share_merge(self, merge_id):
@@ -523,9 +579,9 @@ class Api:
                 "voice_on": self._settings.get("voice_on", True),
                 "has_eleven": bool(self._settings.get("elevenlabs_key")),
                 "voice_name": self._settings.get("voice_name", ""),
-                "voice_style": self._settings.get("voice_style", "own" if self._own_voice() else "ryan"),
+                "voice_style": self._settings.get("voice_style", voice.DEFAULT_VOICE),
                 "version": VERSION,
-                "voice_styles": ([["own", "Franklin's own voice (made on this PC)"]] if self._own_voice() else [])
+                "voice_styles": ([["own", "Your own cloned voice (made on this PC)"]] if self._own_voice() else [])
                 + [[k, v[1]] for k, v in voice.NEURAL_VOICES.items()]}
 
     def save_settings(self, values):
@@ -635,7 +691,7 @@ class Api:
             return None
         text = text[:1200]
         own = self._own_voice()
-        if own and self._settings.get("voice_style", "own") == "own":
+        if own and self._settings.get("voice_style") == "own":
             try:
                 return own.wav(text)
             except voice.VoiceError:
@@ -651,6 +707,6 @@ class Api:
             except voice.VoiceError:
                 pass
         try:
-            return voice.neural(text, self._settings.get("voice_style", "ryan"))
+            return voice.neural(text, self._settings.get("voice_style", voice.DEFAULT_VOICE))
         except voice.VoiceError:
             return None

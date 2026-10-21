@@ -46,9 +46,10 @@ It never uploads your game files. The key is stored on your PC only, in
 
 ## Franklin's voice
 
-Franklin talks with a free, natural-sounding British voice (Ryan or Thomas, pick in Settings),
-with a mute button at the top of his panel. Offline, he falls back to the voice built into
-Windows. For a proper Manchester accent, paste an ElevenLabs key in Settings.
+Franklin talks with a free, natural-sounding voice: a warm, smooth radio-host style by default
+(Andrew, Brian, Christopher or Roger, pick in Settings), with a mute button at the top of his
+panel. Offline, he falls back to the voice built into Windows. If you've made your own cloned
+voice with XTTS on this PC, it shows up in Settings too. An ElevenLabs key is optional.
 
 ## How to use it
 

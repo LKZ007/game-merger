@@ -1,12 +1,6 @@
-First installable release of Game Merger.
+- **Play together**: your own private network, like Hamachi. Host a party and send the code; friends join and you let them in with one click. Shows what works with friends for each game.
+- **Franklin's voice**: a warm, smooth radio-host style voice by default (Andrew, Brian, Christopher or Roger in Settings). Speaks a sentence at a time so he starts talking faster.
+- **Your own cloned voice** (XTTS) shows up in Settings when it's set up on your PC.
+- Share and auto-update from 3.1.0.
 
-- Installer with desktop and Start menu shortcuts (pin to taskbar from either), uninstaller in Settings > Apps
-- Updates itself: Franklin offers new versions and installs them in one click
-- Dark violet launcher with real 3D cover art, combined covers for merges
-- Franklin, your Claude-powered merge assistant, with a natural British voice and a mute button
-- Asks Windows for permission once, never again
-- Every merge has its own save games
-- Share a merge with friends as a .gmerge file (double-click to import)
-- Script Hook V downloads automatically for GTA V
-
-Download GameMergerSetup.exe below. If Windows says it protected your PC, click More info, then Run anyway.
+Already installed? Franklin will offer this update when you open Game Merger.

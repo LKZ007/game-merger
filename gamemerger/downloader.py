@@ -63,3 +63,15 @@ def fetch_framework(fw, log=lambda *_: None):
             f.write(chunk)
     os.replace(tmp, dest)
     return dest
+
+
+def download_file(url, dest):
+    tmp = dest + ".part"
+    with _get(url) as r, open(tmp, "wb") as f:
+        while True:
+            chunk = r.read(1 << 16)
+            if not chunk:
+                break
+            f.write(chunk)
+    os.replace(tmp, dest)
+    return dest

@@ -49,13 +49,25 @@ def grant(folders):
     Returns True if it worked."""
     if sys.platform != "win32" or not folders:
         return not folders
-    user = "%s\\%s" % (os.environ.get("USERDOMAIN", ""), os.environ.get("USERNAME", ""))
-    script = os.path.join(tempfile.gettempdir(), "gamemerger-permissions.cmd")
+    user = current_user()
+    lines = []
+    for folder in folders:
+        lines.append('if not exist "%s" mkdir "%s"' % (folder, folder))
+        lines.append('icacls "%s" /grant "%s":(OI)(CI)M /C /Q >nul' % (folder, user))
+    return run_elevated(lines) and all(writable(f) for f in folders)
+
+
+def current_user():
+    return "%s\\%s" % (os.environ.get("USERDOMAIN", ""), os.environ.get("USERNAME", ""))
+
+
+def run_elevated(lines, name="gamemerger-admin"):
+    """Run these cmd lines as administrator after one UAC prompt. True if it ran and exited 0."""
+    if sys.platform != "win32":
+        return False
+    script = os.path.join(tempfile.gettempdir(), name + ".cmd")
     with open(script, "w", encoding="utf-8") as f:
-        f.write("@echo off\r\n")
-        for folder in folders:
-            f.write('if not exist "%s" mkdir "%s"\r\n' % (folder, folder))
-            f.write('icacls "%s" /grant "%s":(OI)(CI)M /C /Q >nul\r\n' % (folder, user))
+        f.write("@echo off\r\n" + "\r\n".join(lines) + "\r\nexit /b 0\r\n")
     ps = ("$p = Start-Process -FilePath cmd.exe -ArgumentList '/c \"\"%s\"\"' -Verb RunAs -WindowStyle Hidden "
           "-Wait -PassThru; exit $p.ExitCode" % script.replace("'", "''"))
     try:
@@ -63,4 +75,4 @@ def grant(folders):
                            capture_output=True, creationflags=0x08000000)
     except OSError:
         return False
-    return r.returncode == 0 and all(writable(f) for f in folders)
+    return r.returncode == 0
