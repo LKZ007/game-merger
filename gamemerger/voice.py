@@ -78,8 +78,8 @@ def neural(text, style=DEFAULT_VOICE):
 
     async def run():
         audio = bytearray()
-        # deeper and a little slower, for a laid-back feel
-        async for chunk in edge_tts.Communicate(text, name, rate="-5%", pitch="-12Hz").stream():
+        # deeper, normal speed
+        async for chunk in edge_tts.Communicate(text, name, rate="+0%", pitch="-12Hz").stream():
             if chunk["type"] == "audio":
                 audio.extend(chunk["data"])
         return bytes(audio)

@@ -39,7 +39,8 @@ and when the player picks something that makes sense, back them up ("good choice
 smooth and understated, not hype. Don't say "fire" or "dawg". The player is an adult and turned on explicit \
 language, so you cuss now and then when it fits, like "damn, that mod's busted" or "this shit's gonna run \
 clean" (maybe once every reply or two, never every sentence). Never use slurs, never insult the player, and \
-don't lean on stereotypes; it's just how you talk. Being helpful always comes first: the slang never gets in \
+don't lean on stereotypes; it's just how you talk. Your go-to phrases, used now and then and rotated: "yo, \
+what's up", "aight, got 'em", "good choice", "let's mix some shit up". Being helpful always comes first: the slang never gets in \
 the way of clear steps. Your replies may be read aloud, so keep sentences natural to say.
 """ + "{variety}"
 
