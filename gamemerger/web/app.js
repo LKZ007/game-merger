@@ -174,6 +174,7 @@ function renderLibrary() {
   el.querySelectorAll(".tile").forEach((b) => (b.onclick = () => {
     const x = game(b.dataset.key);
     if (!x.base) return toast(`${x.name} can't be a base game yet, but it can be a style you merge in.`);
+    if (state.selected !== x.key) franklinSays("goodGame", { game: x.name });
     state.selected = x.key;
     state.themeId = x.themes[0]?.id;
     renderLibrary();
@@ -279,6 +280,7 @@ function renderSetup() {
     const files = await call("pick_mod_files");
     if (!files || !files.length) return;
     files.forEach((p) => s.mods.push({ slot: s.options.slots[+b.dataset.add].name, path: p }));
+    franklinSays("goodMod");
     renderSetup();
     checkMods();
   }));
@@ -314,7 +316,7 @@ async function checkDownloads() {
     toast(`Added ${d.name} to “${watcher.slot}”.`);
     added++;
   }
-  if (added) { renderSetup(); checkMods(); }
+  if (added) { franklinSays("goodMod"); renderSetup(); checkMods(); }
 }
 
 async function checkMods() {
@@ -856,7 +858,7 @@ document.querySelectorAll("canvas[data-brain]").forEach((cv) => {
 // one twice in a row. "explicit" is used in 18+ mode, "clean" when it's off.
 const LINES = {
   explicit: {
-    splash: ["Yo. Give me a sec, I'm finding your games…", "Aight, pulling up your library…",
+    splash: ["What's up! Give me a sec, I'm finding your games…", "Yo, what's up. Pulling up your games…", "Aight, pulling up your library…",
       "Let's see what you got installed…", "Checking Steam, Epic, GOG and the Xbox app…",
       "Grabbing your box art, hold up…", "Damn, you got a collection. Sorting it out…"],
     found: ["Found {n} games. Let's see what we can make.", "Aight, {n} games. Pick one and we'll get into it.",
@@ -867,13 +869,17 @@ const LINES = {
     importDone: ["Say less, “{name}” is ready.", "“{name}” is in. Go have fun.", "Bet. “{name}” is set up."],
     voiceTest: ["Yo, how's this sound?", "This is me now. Smooth as hell, right?", "Check it. That's the voice."],
     voiceSaved: ["Bet, voice is locked in.", "Aight, that's my voice sorted."],
-    hello: ["Yo, it's Franklin. Pick a game and let's get into it.", "What's good, it's Franklin. What we merging?",
-      "Franklin here. Let's make something wild."],
+    hello: ["What's up, it's Franklin. Pick a game and let's get into it.", "What's good, it's Franklin. What we merging?",
+      "Yo, what's up. Franklin here. Let's make something wild.", "What's up. Ready when you are."],
+    goodGame: ["Good choice.", "Good choice. {game} is a solid base.", "Ooh, good choice.", "{game}? Good choice, no cap.",
+      "Damn, good choice.", "Solid pick.", "Bet, {game} it is."],
+    goodMod: ["Good choice.", "Nice, good choice on that one.", "Good pick.", "Oh that's a good one.", "Bet, that's going in.",
+      "Damn, good choice."],
     permTitle: ["Quick thing first", "One sec before we get into it", "Real quick"],
     permDone: ["Bet, all sorted.", "Done. Easy.", "Sorted, no stress."],
   },
   clean: {
-    splash: ["Yo. Give me a sec, I'm finding your games…", "Aight, pulling up your library…",
+    splash: ["What's up! Give me a sec, I'm finding your games…", "Yo, what's up. Pulling up your games…", "Aight, pulling up your library…",
       "Let's see what you got installed…", "Checking Steam, Epic, GOG and the Xbox app…", "Grabbing your box art, hold up…"],
     found: ["Found {n} games. Let's see what we can make.", "Aight, {n} games. Pick one and we'll get into it.",
       "Got {n} games ready. Your move."],
@@ -883,11 +889,22 @@ const LINES = {
     importDone: ["Say less, “{name}” is ready.", "“{name}” is in. Go have fun."],
     voiceTest: ["Yo, how's this sound?", "Check it. That's the voice."],
     voiceSaved: ["Bet, voice is locked in.", "Aight, that's my voice sorted."],
-    hello: ["Yo, it's Franklin. Pick a game and let's get into it.", "What's good, it's Franklin. What we merging?"],
+    hello: ["What's up, it's Franklin. Pick a game and let's get into it.", "What's good, it's Franklin. What we merging?",
+      "What's up. Ready when you are."],
+    goodGame: ["Good choice.", "Good choice. {game} is a solid base.", "Ooh, good choice.", "Solid pick.", "Bet, {game} it is."],
+    goodMod: ["Good choice.", "Nice, good choice on that one.", "Good pick.", "Bet, that's going in."],
     permTitle: ["Quick thing first", "One sec before we get into it"],
     permDone: ["Bet, all sorted.", "Done. Easy."],
   },
 };
+// A quick spoken reaction plus a toast, e.g. "Good choice" when a game or mod is picked.
+function franklinSays(k, vars = {}) {
+  let t = line(k);
+  for (const [a, b] of Object.entries(vars)) t = t.replace("{" + a + "}", b);
+  toast("Franklin: " + t);
+  speak(t);
+}
+
 const lastLine = {};
 const lineSet = (k) => LINES[state.settings && state.settings.explicit === false ? "clean" : "explicit"][k];
 function line(k) {
@@ -906,7 +923,7 @@ function line(k) {
   try { state.settings = await call("get_settings"); } catch (e) { /* shown when needed */ }
   renderFranklinCard();
   renderMute();
-  call("franklin_voice_warm", ["splash", "found", "foundOne", "permDone", "voiceTest", "hello"].flatMap(lineSet)
+  call("franklin_voice_warm", ["splash", "found", "foundOne", "permDone", "voiceTest", "hello", "goodGame", "goodMod"].flatMap(lineSet)
     .filter((t) => !t.includes("{"))).catch(() => {});
   await scan();
   await sleep(Math.max(0, 2200 - (Date.now() - started)));
