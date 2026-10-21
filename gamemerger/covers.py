@@ -31,7 +31,7 @@ CDN = ["https://cdn.cloudflare.steamstatic.com/steam/apps/%s/library_600x900_2x.
        "https://cdn.cloudflare.steamstatic.com/steam/apps/%s/library_600x900.jpg",
        "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/%s/library_600x900.jpg"]
 SEARCH = "https://store.steampowered.com/api/storesearch/?term=%s&cc=us&l=english"
-UA = {"User-Agent": "GameMerger/3.0"}
+UA = {"User-Agent": "Frankenstein/3.0"}
 W, H = 600, 900
 
 

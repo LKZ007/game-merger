@@ -354,5 +354,38 @@ class SharingTests(MergeTests):
             sharing.read(bad)
 
 
+class RenameAndNexusTests(unittest.TestCase):
+    def test_updater_finds_new_then_old_installer(self):
+        from unittest import mock
+        from gamemerger import updater
+
+        def latest(assets):
+            body = json.dumps({"tag_name": "v99.0.0", "assets": [
+                {"name": n, "browser_download_url": "https://x/" + n, "size": 1} for n in assets]}).encode()
+            r = mock.MagicMock()
+            r.__enter__.return_value.read.return_value = body
+            return r
+
+        with mock.patch("urllib.request.urlopen", return_value=latest(["GameMergerSetup.exe", "FrankensteinSetup.exe"])), \
+                mock.patch("json.load", lambda f: json.loads(f.read())):
+            self.assertTrue(updater.latest()["url"].endswith("FrankensteinSetup.exe"))
+        with mock.patch("urllib.request.urlopen", return_value=latest(["GameMergerSetup.exe"])), \
+                mock.patch("json.load", lambda f: json.loads(f.read())):
+            self.assertTrue(updater.latest()["url"].endswith("GameMergerSetup.exe"))
+
+    def test_old_cloud_folder_is_renamed(self):
+        from gamemerger import saves
+        d = tempfile.mkdtemp()
+        os.makedirs(os.path.join(d, "Game Merger saves", "Night City"))
+        self.assertEqual(saves.cloud_slot(d, "Night City"), os.path.join(d, "Frankenstein saves", "Night City"))
+        self.assertTrue(os.path.isdir(os.path.join(d, "Frankenstein saves", "Night City")))
+
+    def test_parse_nxm(self):
+        from gamemerger import nexus
+        got = nexus.parse_nxm("nxm://Cyberpunk2077/mods/107/files/12345?key=abc&expires=1700000000&user_id=9")
+        self.assertEqual(got, {"domain": "cyberpunk2077", "mod": "107", "file": "12345", "key": "abc", "expires": "1700000000"})
+        self.assertIsNone(nexus.parse_nxm("https://www.nexusmods.com/"))
+
+
 if __name__ == "__main__":
     unittest.main()

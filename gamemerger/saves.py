@@ -3,7 +3,7 @@
 When you press Play on a merge, the game's normal save folder is moved aside and the
 merge's own saves are put in its place. When the game closes they are swapped back, so
 the original game never sees the merge's saves (and modded saves can't break it).
-If the PC crashes mid-game, the swap is undone the next time Game Merger starts."""
+If the PC crashes mid-game, the swap is undone the next time Frankenstein starts."""
 
 import json
 import os
@@ -173,7 +173,13 @@ def _newest(folder):
 
 
 def cloud_slot(cloud_root, merge_name):
-    return os.path.join(cloud_root, "Game Merger saves", merge_name)
+    new, old = os.path.join(cloud_root, "Frankenstein saves"), os.path.join(cloud_root, "Game Merger saves")
+    if os.path.isdir(old) and not os.path.exists(new):
+        try:
+            os.rename(old, new)  # the app was called Game Merger before
+        except OSError:
+            return os.path.join(old, merge_name)
+    return os.path.join(new, merge_name)
 
 
 def push_cloud(merge_id, cloud_root, merge_name):

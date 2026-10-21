@@ -1,7 +1,7 @@
-"""Keeps Game Merger up to date from its GitHub releases.
+"""Keeps Frankenstein up to date from its GitHub releases.
 
 On start the app asks GitHub for the latest release. If it's newer, Franklin offers it; one
-click downloads GameMergerSetup.exe, closes the app, and the installer updates it silently and
+click downloads FrankensteinSetup.exe, closes the app, and the installer updates it silently and
 opens it again. Merges, saves and settings live in %LOCALAPPDATA%\\GameMerger, so updates never
 touch them."""
 
@@ -15,8 +15,9 @@ import urllib.request
 from . import paths
 from .version import REPO, VERSION
 
-UA = {"User-Agent": "GameMerger/" + VERSION, "Accept": "application/vnd.github+json"}
-ASSET = re.compile(r"GameMergerSetup.*\.exe$", re.I)
+UA = {"User-Agent": "Frankenstein/" + VERSION, "Accept": "application/vnd.github+json"}
+ASSET = re.compile(r"FrankensteinSetup.*\.exe$", re.I)
+OLD_ASSET = re.compile(r"GameMergerSetup.*\.exe$", re.I)  # releases from before the rename
 
 
 def _v(tag):
@@ -31,15 +32,15 @@ def latest(timeout=10):
     tag = rel.get("tag_name", "")
     if _v(tag) <= _v(VERSION):
         return None
-    for a in rel.get("assets", []):
-        if ASSET.search(a["name"]):
-            return {"version": tag.lstrip("v"), "notes": (rel.get("body") or "").strip()[:2000],
-                    "url": a["browser_download_url"], "size": a.get("size", 0)}
+    assets = rel.get("assets", [])
+    for a in [a for a in assets if ASSET.search(a["name"])] or [a for a in assets if OLD_ASSET.search(a["name"])]:
+        return {"version": tag.lstrip("v"), "notes": (rel.get("body") or "").strip()[:2000],
+                "url": a["browser_download_url"], "size": a.get("size", 0)}
     return None
 
 
 def download(info, progress=lambda done, total: None):
-    dest = os.path.join(paths.sub("updates"), "GameMergerSetup-%s.exe" % info["version"])
+    dest = os.path.join(paths.sub("updates"), "FrankensteinSetup-%s.exe" % info["version"])
     if os.path.isfile(dest) and os.path.getsize(dest) == info.get("size"):
         return dest
     tmp = dest + ".part"

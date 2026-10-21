@@ -1,6 +1,6 @@
 """Play together: a private network between you and your friends, like Hamachi.
 
-Built on ZeroTier One (free). Game Merger installs it once (one Windows prompt), then:
+Built on ZeroTier One (free). Frankenstein installs it once (one Windows prompt), then:
   * Host: your own PC runs the network, no account or website needed. You get a party code.
   * Join: your friend types the code. The host lets them in with one click.
 Everyone in the party then sees each other as if on the same home network (LAN), so games and
@@ -92,7 +92,7 @@ def node_id():
     return _call("GET", "/status")["address"]
 
 
-def host(name="Game Merger party"):
+def host(name="Frankenstein party"):
     """Create a private network run by this PC and join it. Returns the party code."""
     me = node_id()
     third = random.randint(20, 250)

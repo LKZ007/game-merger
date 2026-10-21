@@ -37,10 +37,10 @@ def export(merge, recipe, dest_folder, log=lambda *_: None):
         installs.append({"label": inst["label"], "file": inst["file"], "flat_root": inst.get("flat_root", False),
                          "subdir": inst.get("subdir", ""), "entry": "mods/%02d-%s" % (i, os.path.basename(archive))})
     if missing:
-        raise MergeError("These mods were added before sharing existed, so Game Merger doesn't have their files: %s. "
+        raise MergeError("These mods were added before sharing existed, so Frankenstein doesn't have their files: %s. "
                          "Use Add mods on this merge to add them again, then share." % ", ".join(missing))
     info = {
-        "format": FORMAT, "app": "Game Merger",
+        "format": FORMAT, "app": "Frankenstein",
         "name": merge.name, "recipe_id": merge.data.get("recipe_id"), "game_name": merge.data.get("game_name"),
         "theme_id": merge.data.get("theme_id"), "theme_name": merge.data.get("theme_name"),
         "source_appid": merge.data.get("source_appid", ""), "source_name": merge.data.get("source_name", ""),
@@ -67,9 +67,9 @@ def read(path):
             info = json.loads(z.read("merge.json").decode("utf-8"))
             names = set(z.namelist())
     except (OSError, KeyError, ValueError, zipfile.BadZipFile):
-        raise MergeError("That file isn't a Game Merger share file, or it's damaged.")
+        raise MergeError("That file isn't a Frankenstein share file, or it's damaged.")
     if info.get("format", 0) > FORMAT:
-        raise MergeError("That merge was shared from a newer Game Merger. Update the app, then try again.")
+        raise MergeError("That merge was shared from a newer Frankenstein. Update the app, then try again.")
     for inst in info.get("installs", []):
         e = inst.get("entry", "")
         if e not in names or not e.startswith("mods/") or ".." in e:

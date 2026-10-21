@@ -1,6 +1,6 @@
 """Franklin's own voice: a tiny local server around Coqui XTTS v2.
 
-Game Merger starts this with the Python from your franklin-voice folder (the one with XTTS
+Frankenstein starts this with the Python from your franklin-voice folder (the one with XTTS
 installed), so the model is loaded once and stays loaded. It only listens on 127.0.0.1.
 
     POST /speak  {"text": "..."}  ->  audio/wav

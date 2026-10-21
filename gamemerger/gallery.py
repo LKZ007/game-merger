@@ -1,6 +1,6 @@
 """Screenshots from your merged games, and a gallery to look through them.
 
-Press Ctrl+Alt+S while playing: Game Merger saves a screenshot into the merge's gallery. For video
+Press Ctrl+Alt+S while playing: Frankenstein saves a screenshot into the merge's gallery. For video
 clips, Windows' own Game Bar (Win+Alt+R) is the best recorder; its clips show up in the gallery too."""
 
 import base64

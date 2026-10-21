@@ -8,7 +8,7 @@ import urllib.request
 
 from . import paths
 
-UA = {"User-Agent": "GameMerger/1.0"}
+UA = {"User-Agent": "Frankenstein/1.0"}
 
 
 def _get(url, timeout=30):

@@ -1,4 +1,4 @@
-"""Where Game Merger keeps its own data (settings, downloads, backups, merge records)."""
+"""Where Frankenstein keeps its own data (settings, downloads, backups, merge records)."""
 
 import json
 import os

@@ -2,7 +2,7 @@ import sys, time, os
 from playwright.sync_api import sync_playwright
 from PIL import Image
 OUT = sys.argv[1]
-js = open("/home/claude/GameMerger/gamemerger/web/brain.js").read()
+js = open("/home/claude/game-merger/gamemerger/web/brain.js").read()
 html = """<html><head><style>
 body{margin:0;background:transparent;font-family:'DejaVu Sans',sans-serif}
 #icon{position:absolute;left:0;top:0;width:512px;height:512px;border-radius:112px;
@@ -13,14 +13,14 @@ body{margin:0;background:transparent;font-family:'DejaVu Sans',sans-serif}
 #small canvas{position:absolute;left:-20px;top:-10px;width:600px;height:620px}
 #wel{position:absolute;left:600px;top:0;width:164px;height:314px;background:linear-gradient(180deg,#24124a 0%,#110a22 60%,#0c0912 100%);overflow:hidden}
 #wel canvas{position:absolute;left:12px;top:40px;width:140px;height:150px}
-#wel .t{position:absolute;left:0;right:0;top:212px;text-align:center;color:#ece8f5;font-weight:700;font-size:19px;letter-spacing:1px}
+#wel .t{position:absolute;left:0;right:0;top:214px;text-align:center;color:#ece8f5;font-weight:700;font-size:16px;letter-spacing:.5px}
 #wel .t span{color:#a78bfa}
 #wel .s{position:absolute;left:0;right:0;top:244px;text-align:center;color:#b9b0cf;font-size:10px}
 #hdr{position:absolute;left:800px;top:0;width:150px;height:57px;background:#ffffff}
 #hdr canvas{position:absolute;left:96px;top:3px;width:50px;height:51px}
 </style></head><body>
 <div id=icon><canvas data-b=1></canvas></div>
-<div id=wel><canvas data-b=2></canvas><div class=t>GAME<span>MERGER</span></div><div class=s>with Franklin, your merge assistant</div></div>
+<div id=wel><canvas data-b=2></canvas><div class=t>FRANKEN<span>STEIN</span></div><div class=s>with Franklin, your merge assistant</div></div>
 <div id=small><canvas data-b=1></canvas></div>
 <div id=hdr><canvas data-b=3></canvas></div>
 <script>JSHERE</script>
@@ -39,7 +39,7 @@ ic = Image.open(OUT + "/icon-hi.png").convert("RGBA").resize((256, 256), Image.L
 sm = Image.open(OUT + "/small-hi.png").convert("RGBA")
 big = [ic.resize((n, n), Image.LANCZOS) for n in (40, 48, 64, 128)]
 small = [sm.resize((n, n), Image.LANCZOS) for n in (16, 20, 24, 32)]
-ic.save(OUT + "/GameMerger.ico", format="ICO", append_images=small + big, sizes=[(n, n) for n in (16, 20, 24, 32, 40, 48, 64, 128, 256)])
+ic.save(OUT + "/Frankenstein.ico", format="ICO", append_images=small + big, sizes=[(n, n) for n in (16, 20, 24, 32, 40, 48, 64, 128, 256)])
 ic.save(OUT + "/icon256.png")
 Image.open(OUT + "/welcome-hi.png").convert("RGB").resize((164, 314), Image.LANCZOS).save(OUT + "/welcome.bmp")
 Image.open(OUT + "/header-hi.png").convert("RGB").resize((150, 57), Image.LANCZOS).save(OUT + "/header.bmp")

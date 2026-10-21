@@ -19,7 +19,7 @@ class InstalledGame:
     path: str
     source: str
     appid: str = ""
-    recipe: object = None  # set when Game Merger knows how to mod this game
+    recipe: object = None  # set when Frankenstein knows how to mod this game
 
 
 def _reg_value(root, key, value):

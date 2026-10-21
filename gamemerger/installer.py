@@ -1,6 +1,6 @@
 """Backups, separate game copies, mod installs, and undo.
 
-Every change Game Merger makes is written to a manifest, so a merge can always
+Every change Frankenstein makes is written to a manifest, so a merge can always
 be rolled back: files it added are deleted and files it replaced are restored.
 """
 
@@ -279,7 +279,7 @@ class Merge:
         if mode != MODE_INPLACE:
             os.makedirs(target, exist_ok=True)
             with open(os.path.join(target, COPY_MARKER), "w", encoding="utf-8") as f:
-                f.write("Made by Game Merger from %s\n" % base_path)
+                f.write("Made by Frankenstein from %s\n" % base_path)
             log("Copying %s to %s ..." % (base_path, target))
             linked = clone_tree(base_path, target, hardlink=(mode == MODE_HARDLINK), log=log, progress=progress)
             if mode == MODE_HARDLINK and not linked:
@@ -379,7 +379,7 @@ class Merge:
         return p if os.path.isfile(p) else None
 
     def undo(self, log=_noop):
-        """Remove everything Game Merger added and put replaced files back."""
+        """Remove everything Frankenstein added and put replaced files back."""
         for rel, entry in sorted(self.data["files"].items(), key=lambda kv: -kv[0].count(os.sep)):
             dest = os.path.join(self.target_path, rel)
             if os.path.lexists(dest):
@@ -420,7 +420,7 @@ class Merge:
         order = self.all_mods()
         missing = [m["label"] for m in order if m["label"] in wanted and not self.kept_archive(m)]
         if missing:
-            raise MergeError("Game Merger doesn't have the files for: %s. Add them again with Add mods." % ", ".join(missing))
+            raise MergeError("Frankenstein doesn't have the files for: %s. Add them again with Add mods." % ", ".join(missing))
         self.undo(log)
         self.data["parked"] = []
         for m in order:
@@ -451,5 +451,5 @@ class Merge:
                 shutil.rmtree(self.target_path)
                 log("Deleted %s." % self.target_path)
             elif os.path.exists(self.target_path):
-                raise MergeError("%s doesn't look like a Game Merger copy, so it was left alone." % self.target_path)
+                raise MergeError("%s doesn't look like a Frankenstein copy, so it was left alone." % self.target_path)
         shutil.rmtree(self.record_dir(self.id), ignore_errors=True)

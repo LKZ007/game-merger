@@ -1,4 +1,4 @@
-"""Writes installer/version_info.txt (Windows file version info for GameMerger.exe) from version.py."""
+"""Writes installer/version_info.txt (Windows file version info for Frankenstein.exe) from version.py."""
 import os
 import sys
 
@@ -10,13 +10,13 @@ text = """VSVersionInfo(
   ffi=FixedFileInfo(filevers=%(n)s, prodvers=%(n)s, mask=0x3f, flags=0x0, OS=0x40004, fileType=0x1, subtype=0x0, date=(0, 0)),
   kids=[
     StringFileInfo([StringTable('040904B0', [
-      StringStruct('CompanyName', 'Game Merger'),
-      StringStruct('FileDescription', 'Game Merger'),
+      StringStruct('CompanyName', 'Frankenstein'),
+      StringStruct('FileDescription', 'Frankenstein'),
       StringStruct('FileVersion', '%(v)s'),
-      StringStruct('InternalName', 'GameMerger'),
-      StringStruct('LegalCopyright', 'Game Merger contributors'),
-      StringStruct('OriginalFilename', 'GameMerger.exe'),
-      StringStruct('ProductName', 'Game Merger'),
+      StringStruct('InternalName', 'Frankenstein'),
+      StringStruct('LegalCopyright', 'Frankenstein contributors'),
+      StringStruct('OriginalFilename', 'Frankenstein.exe'),
+      StringStruct('ProductName', 'Frankenstein'),
       StringStruct('ProductVersion', '%(v)s')])]),
     VarFileInfo([VarStruct('Translation', [1033, 1200])])
   ]

@@ -1,7 +1,7 @@
 """One-time permission setup.
 
 Games usually live in protected folders (like C:\\Program Files (x86)\\Steam). Instead of asking
-for admin rights every time, Game Merger asks Windows once and gives your own account
+for admin rights every time, Frankenstein asks Windows once and gives your own account
 permission to change those game folders and its own merge folder. After that it never asks
 again for the same game libraries."""
 

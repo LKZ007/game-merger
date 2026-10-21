@@ -154,7 +154,7 @@ function renderLibrary() {
   } else {
     banner = `<section class="banner"><div class="banner-content">
         <div class="eyebrow">Welcome</div><h1>Pick a base game</h1>
-        <p>Game Merger supports Cyberpunk 2077, Schedule I and GTA V as base games. If yours isn't found below, add its install folder.</p>
+        <p>Frankenstein supports Cyberpunk 2077, Schedule I and GTA V as base games. If yours isn't found below, add its install folder.</p>
         <div class="row"><button class="btn primary" id="addFolder2">Add game folder</button></div>
       </div></section>`;
   }
@@ -271,8 +271,11 @@ function renderSetup() {
   v.querySelectorAll("[data-manual]").forEach((b) => (b.onclick = async () => {
     const p = await call("pick_file"); if (p) { s.manual[b.dataset.manual] = p; renderSetup(); }
   }));
-  v.querySelectorAll("[data-find]").forEach((b) => (b.onclick = () => {
+  v.querySelectorAll("[data-find]").forEach((b) => (b.onclick = async () => {
     const slot = s.options.slots[+b.dataset.find];
+    watcher.slot = slot.name;
+    const nx = await call("nexus_status").catch(() => ({}));
+    if (nx.has_key) return nexusSearch(slot);
     call("find_mods", s.key, slot.search);
     watchDownloads(slot.name);
   }));
@@ -290,6 +293,65 @@ function renderSetup() {
   $("#mDest").oninput = (e) => { if (s.mode !== "inplace") s.destination = e.target.value; };
   $("#mBrowse").onclick = async () => { const p = await call("pick_folder"); if (p) { s.destination = p; renderSetup(); } };
   $("#go").onclick = runMerge;
+}
+
+// ---------- Nexus Mods inside the app ----------
+function addToSetup(path, name) {
+  const s = state.setup;
+  if (s && state.view === "setup") {
+    const slot = watcher.slot || s.options.slots[0]?.name || "Mods";
+    s.mods.push({ slot, path });
+    franklinSays("goodMod");
+    renderSetup(); checkMods();
+    toast(`Added ${name} to “${slot}”.`);
+  } else {
+    toast(`Downloaded ${name}. Open a merge setup or use Add mods to put it in.`, 5000);
+  }
+}
+
+async function nexusSearch(slot) {
+  const g = game(state.setup.key);
+  const recipe = g.recipe_id;
+  const nx = await call("nexus_status");
+  const render = (list) => list.length ? list.map((m) => `<div class="row" style="padding:10px 0;border-top:1px solid var(--line);flex-wrap:nowrap">
+      ${m.picture ? `<img src="${esc(m.picture)}" alt="" style="width:96px;height:54px;object-fit:cover;border-radius:6px">` : ""}
+      <div class="grow"><strong>${esc(m.name)}</strong> <span class="muted small">by ${esc(m.author)} · ${m.endorsements} endorsements</span><div class="muted small">${esc(m.summary)}</div></div>
+      <button class="btn primary" data-get="${m.id}">Get</button></div>`).join("") : `<p class="muted">Nothing found. Try other words.</p>`;
+  modal("Find mods: " + slot.name, `
+    <div class="row" style="flex-wrap:nowrap"><input class="input" id="nxq" value="${esc(slot.search)}" autocomplete="off"><button class="btn" id="nxgo" type="button">Search</button></div>
+    ${nx.premium ? "" : `<p class="muted small">Free Nexus account: Get opens the mod's Files page. Press <strong>Mod Manager Download</strong> there and it lands here automatically.</p>`}
+    <div id="nxres" style="max-height:380px;overflow:auto;margin-top:10px"><p class="muted">Searching…</p></div>`, [{ label: "Done", value: true, primary: true }]);
+  const run = async () => {
+    $("#nxres").innerHTML = `<p class="muted">Searching…</p>`;
+    let list;
+    try { list = await call("nexus_search", recipe, $("#nxq").value); } catch (e) { $("#nxres").innerHTML = `<p class="note">${esc(errText(e))}</p>`; return; }
+    $("#nxres").innerHTML = render(list);
+    $("#nxres").querySelectorAll("[data-get]").forEach((b) => (b.onclick = async () => {
+      b.disabled = true;
+      try {
+        const job = await call("nexus_get", recipe, +b.dataset.get);
+        if (!job) { b.textContent = "Opened"; return; }
+        const r = (await followJob(job, "Downloading"))?.result;
+        if (r) addToSetup(r.path, r.name);
+      } catch (e) { toast(errText(e)); b.disabled = false; }
+    }));
+  };
+  $("#nxgo").onclick = run;
+  $("#nxq").onkeydown = (e) => { if (e.key === "Enter") { e.preventDefault(); run(); } };
+  run();
+}
+
+// Files and links handed to the app (double-clicked .gmerge files, Nexus "Mod Manager Download").
+async function checkHandoffs() {
+  const items = await call("handoffs").catch(() => []);
+  for (const a of items) {
+    if (/^nxm:\/\//i.test(a)) {
+      try {
+        const r = (await followJob(await call("nexus_link", a), "Downloading from Nexus"))?.result;
+        if (r) addToSetup(r.path, r.name);
+      } catch (e) { modal("That didn't work", `<p>${esc(errText(e))}</p>`); }
+    } else await importMerge(a);
+  }
 }
 
 // After "Find mods", watch the Downloads folder and add new mod downloads automatically.
@@ -419,10 +481,10 @@ async function loadMerges() {
 async function offerUpdate(u, asked = false) {
   if (!u) { if (asked) toast("You're on the newest version."); return; }
   const go = await modal(line("updateTitle"), `
-    <p>Game Merger <strong>${esc(u.version)}</strong> is out. It takes a few seconds: the app closes, updates and opens again. Your merges and saves aren't touched.</p>
+    <p>Frankenstein <strong>${esc(u.version)}</strong> is out. It takes a few seconds: the app closes, updates and opens again. Your merges and saves aren't touched.</p>
     ${u.notes ? `<div class="log">${esc(u.notes)}</div>` : ""}`,
     [{ label: "Later", value: false }, { label: "Update now", value: true, primary: true }]);
-  if (go) followJob(await call("install_update"), "Updating Game Merger");
+  if (go) followJob(await call("install_update"), "Updating Frankenstein");
 }
 
 // ---------- mod profiles ----------
@@ -464,7 +526,7 @@ async function shareMerge(m) {
   const r = (await followJob(job, "Packing " + m.name))?.result;
   if (!r) return;
   modal("Ready to share", `<p>Saved <strong>${esc(basename(r.path))}</strong> (${mb(r.size)}) in your Downloads folder.</p>
-    <p class="muted">Send it to your friend (Discord, Google Drive, a USB stick). They double-click it and Game Merger builds the same merge from their own copy of the game. Only the mods are shared, never game files.</p>`);
+    <p class="muted">Send it to your friend (Discord, Google Drive, a USB stick). They double-click it and Frankenstein builds the same merge from their own copy of the game. Only the mods are shared, never game files.</p>`);
 }
 
 async function importMerge(path) {
@@ -555,7 +617,7 @@ async function loadParty() {
       <p class="muted">Windows will ask once. After that it's one click to host or join.</p>
       <button class="btn primary" id="partySetup">Set it up</button></div>`;
   } else if (!p.party) {
-    main = `<div class="card"><h2>Host a party</h2><p class="muted">You get a code to send your friends. Your PC runs the party, so keep Game Merger open while you play.</p>
+    main = `<div class="card"><h2>Host a party</h2><p class="muted">You get a code to send your friends. Your PC runs the party, so keep Frankenstein open while you play.</p>
         <button class="btn primary" id="partyHost">Host a party</button></div>
       <div class="card"><h2>Join a friend</h2><p class="muted">Type the code your friend sent you.</p>
         <div class="row" style="flex-wrap:nowrap"><input class="input" id="partyCode" placeholder="16-character party code" autocomplete="off" spellcheck="false"><button class="btn primary" id="partyJoin">Join</button></div></div>`;
@@ -594,7 +656,7 @@ function renderQuests() {
       <ul class="muted" style="line-height:1.8">
         <li>Pick a merge and a theme, like “street race series” or “take back the block”.</li>
         <li>Franklin writes the quests: objectives, places, enemies, rewards.</li>
-        <li>Game Merger installs the quest loader for that game and the quests with it.</li>
+        <li>Frankenstein installs the quest loader for that game and the quests with it.</li>
       </ul>
       <div class="row small"><span class="tag">GTA V: script missions</span><span class="tag">Schedule I: MelonLoader</span><span class="tag">Cyberpunk: fixer-style jobs</span></div>
     </div></div>`;
@@ -645,19 +707,24 @@ async function loadSettings() {
         <div class="row" style="flex-wrap:nowrap"><input class="input" type="password" id="elevenKey" placeholder="${s.has_eleven ? "Paste a new key to replace it" : "Paste your ElevenLabs key"}" autocomplete="off">
           <button class="btn primary" id="saveEleven">Save</button>${s.has_eleven ? `<button class="btn ghost danger" id="clearEleven">Remove</button>` : ""}</div></div>
     </div>
+    <div class="card"><h2>Nexus Mods</h2>
+      <p class="muted">Add your Nexus Mods API key and Franklin finds and downloads mods right here, no browsing. Get it at <a href="#" id="nexusLink">nexusmods.com → Settings → API keys</a>. Premium accounts download in one click; free accounts click "Mod Manager Download" once and the file comes straight back.</p>
+      <div class="field"><label for="nexusKey">API key <span id="nexusTag"></span></label>
+        <div class="row" style="flex-wrap:nowrap"><input class="input" type="password" id="nexusKey" placeholder="Paste your Nexus API key" autocomplete="off"><button class="btn primary" id="saveNexus">Save</button></div></div>
+    </div>
     <div class="card"><h2>Cloud backup of saves</h2>
       <p class="muted">Every merge's saves get copied to your cloud drive after you play, so your PC and laptop stay in step. Pick the same drive on both.</p>
       <select class="input" id="cloudPick"><option value="">Off</option>${(s.cloud_options || []).map(([n, p]) => `<option value="${esc(p)}" ${s.cloud_folder === p ? "selected" : ""}>${esc(n)} (${esc(p)})</option>`).join("")}</select>
       ${(s.cloud_options || []).length ? "" : `<p class="muted small">No OneDrive or Google Drive folder found on this PC. Install one of them and it shows up here.</p>`}
     </div>
     <div class="card"><h2>Updates</h2>
-      <div class="row"><div class="grow muted">You're on Game Merger ${esc(s.version)}. It checks for updates every time it opens.</div><button class="btn" id="checkUpdate">Check now</button></div>
+      <div class="row"><div class="grow muted">You're on Frankenstein ${esc(s.version)}. It checks for updates every time it opens.</div><button class="btn" id="checkUpdate">Check now</button></div>
     </div>
     <div class="card"><h2>Merging</h2>
       <div class="field"><label for="defMode">Default type</label>
         <select class="input" id="defMode">${MODES.map(([id, name]) => `<option value="${id}" ${s.mode === id ? "selected" : ""}>${name}</option>`).join("")}</select></div>
       <div class="field" style="margin-top:12px"><label for="defDest">Default folder for copies</label>
-        <div class="row" style="flex-wrap:nowrap"><input class="input" id="defDest" value="${esc(s.destination)}" placeholder="Same drive as the game, in a GameMerger folder"><button class="btn" id="defBrowse">Browse</button></div></div>
+        <div class="row" style="flex-wrap:nowrap"><input class="input" id="defDest" value="${esc(s.destination)}" placeholder="Same drive as the game, in a Frankenstein folder"><button class="btn" id="defBrowse">Browse</button></div></div>
       <div class="row" style="margin-top:14px;justify-content:flex-end"><button class="btn primary" id="saveMerging">Save</button></div>
     </div></div>`;
   if ($("#forget")) $("#forget").onclick = async () => { await call("franklin_forget"); toast("Franklin's memory is wiped."); };
@@ -668,6 +735,12 @@ async function loadSettings() {
     await call("save_settings", { claude_api_key: v }); toast("Saved. Franklin is ready."); loadSettings(); renderFranklinCard();
   };
   if ($("#clearKey")) $("#clearKey").onclick = async () => { await call("save_settings", { claude_api_key: "" }); loadSettings(); renderFranklinCard(); };
+  $("#nexusLink").onclick = (e) => { e.preventDefault(); call("open_url", "https://next.nexusmods.com/settings/api-keys"); };
+  call("nexus_status").then((n) => { if (n.has_key) $("#nexusTag").innerHTML = `<span class="tag">Saved · ${esc(n.name)}${n.premium ? " · Premium" : ""}</span>`; }).catch(() => {});
+  $("#saveNexus").onclick = async () => {
+    try { const n = await call("nexus_set_key", $("#nexusKey").value); toast(n.has_key ? "Nexus is hooked up." : "Nexus key removed."); loadSettings(); }
+    catch (e) { modal("That didn't work", `<p>${esc(errText(e))}</p>`); }
+  };
   $("#cloudPick").onchange = async () => { state.settings = await call("save_settings", { cloud_folder: $("#cloudPick").value }); toast($("#cloudPick").value ? "Cloud backup is on." : "Cloud backup is off."); };
   $("#checkUpdate").onclick = async () => offerUpdate(await call("check_update").catch(() => null), true);
   $("#elevenLink").onclick = (e) => { e.preventDefault(); call("open_url", "https://elevenlabs.io/"); };
@@ -906,7 +979,7 @@ async function firstRun() {
   const list = st.needs.map((f) => `<li>${esc(f)}</li>`).join("");
   const go = await modal(line("permTitle"), `
     <canvas class="welcome-brain brain" data-brain="welcome" aria-hidden="true"></canvas>
-    <p>Your games live in protected folders, so Windows needs to say it's OK for Game Merger to make copies and add mods there.</p>
+    <p>Your games live in protected folders, so Windows needs to say it's OK for Frankenstein to make copies and add mods there.</p>
     <p class="muted">Windows will pop up <strong>once</strong>. Press Yes and you'll never be asked again, even for games you install later in the same library.</p>
     <details class="advanced"><summary>Which folders?</summary><ul class="muted small">${list}</ul></details>`,
     [{ label: "Later", value: false }, { label: "Sort it", value: true, primary: true }]);
@@ -929,7 +1002,7 @@ document.querySelectorAll("canvas[data-brain]").forEach((cv) => {
 // one twice in a row. "explicit" is used in 18+ mode, "clean" when it's off.
 const LINES = {
   explicit: {
-    splash: ["Yo, what's up bro. Hold up, lemme find your games…", "What's up, man. Lemme find your games…", "What's up bro. Lemme pull up your games…",
+    splash: ["It's alive! Hold up, lemme find your games…", "Yo, what's up bro. Hold up, lemme find your games…", "What's up, man. Lemme find your games…", "What's up bro. Lemme pull up your games…",
       "Aight brudda, lemme see what you got installed…", "Checking Steam, Epic, GOG and the Xbox app…",
       "Hold up, grabbing your box art…", "Damn bro, you got a collection. Sorting it out…", "Hold up, lemme find all your shit…"],
     found: ["Bet, got 'em. {n} games ready, bro.", "Found {n} games. Aight, let's mix some shit up.", "{n} games, bro. Pick one and we'll get into it.",
@@ -940,7 +1013,7 @@ const LINES = {
     importDone: ["Aight, “{name}” is ready, bro.", "“{name}” is in, bro. Go have fun.", "Done brudda, “{name}” is set up."],
     voiceTest: ["Yo bro, how's this sound?", "This is me now, bro. Smooth as hell, right?", "Check it brudda. That's the voice."],
     voiceSaved: ["Aight, voice is locked in.", "That's my voice sorted, brudda."],
-    hello: ["What's up, man. It's Franklin. What we merging?", "Yo, what's up bro. Pick a game and let's mix some shit up.", "What's up bro, it's Franklin. What we merging?",
+    hello: ["Yo, welcome to Frankenstein, bro. Let's stitch some games together.", "What's up, man. It's Franklin. What we merging?", "Yo, what's up bro. Pick a game and let's mix some shit up.", "What's up bro, it's Franklin. What we merging?",
       "Yo, what's up brudda. Franklin here.", "What's up bro. Ready when you are."],
     goodGame: ["Good choice, bro.", "Good choice. {game} is a solid base.", "Ohh, good choice, brudda.", "{game}? Good choice, bro.",
       "Damn, good choice.", "Solid pick, bro.", "Aight, {game} it is."],
@@ -950,7 +1023,7 @@ const LINES = {
     permDone: ["Bet, all sorted.", "Done, bro. Easy.", "Sorted bro, no stress."],
   },
   clean: {
-    splash: ["Yo, what's up bro. Hold up, lemme find your games…", "What's up, man. Lemme find your games…", "What's up bro. Lemme pull up your games…",
+    splash: ["It's alive! Hold up, lemme find your games…", "Yo, what's up bro. Hold up, lemme find your games…", "What's up, man. Lemme find your games…", "What's up bro. Lemme pull up your games…",
       "Aight brudda, lemme see what you got installed…", "Checking Steam, Epic, GOG and the Xbox app…", "Grabbing your box art, hold up…"],
     found: ["Aight, got 'em. {n} games ready, bro.", "Found {n} games. Let's mix some stuff up.", "{n} games, bro. Pick one and we'll get into it.",
       "Got {n} games ready, brudda. Your move."],
@@ -960,7 +1033,7 @@ const LINES = {
     importDone: ["Aight, “{name}” is ready, bro.", "“{name}” is in, bro. Go have fun."],
     voiceTest: ["Yo bro, how's this sound?", "Check it brudda. That's the voice."],
     voiceSaved: ["Aight, voice is locked in.", "That's my voice sorted, brudda."],
-    hello: ["What's up, man. It's Franklin. What we merging?", "Yo, what's up bro. Pick a game and let's mix some stuff up.", "What's up bro, it's Franklin. What we merging?",
+    hello: ["Yo, welcome to Frankenstein, bro. Let's stitch some games together.", "What's up, man. It's Franklin. What we merging?", "Yo, what's up bro. Pick a game and let's mix some stuff up.", "What's up bro, it's Franklin. What we merging?",
       "What's up bro. Ready when you are."],
     goodGame: ["Good choice, bro.", "Good choice. {game} is a solid base.", "Ooh, good choice.", "Solid pick, brudda.", "Aight, {game} it is."],
     goodMod: ["Good choice, brudda.", "Aight, got 'em.", "Good choice on that one, bro.", "Good pick, brudda."],
@@ -1009,7 +1082,7 @@ function franklinSays(k, vars = {}) {
   if (await call("playing").catch(() => null)) watchPlaying();
   await sleep(700);
   await firstRun();
-  const opened = await call("pending_import").catch(() => null);
-  if (opened) await importMerge(opened);
+  await checkHandoffs();
+  setInterval(checkHandoffs, 2000);
   offerUpdate(await call("check_update").catch(() => null));
 })();

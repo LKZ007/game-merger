@@ -13,7 +13,7 @@ import urllib.parse
 import uuid
 import webbrowser
 
-from . import covers, detect, downloader, franklin, gallery, network, paths, permissions, saves, scan, sharing, specs, updater, voice
+from . import covers, detect, downloader, franklin, gallery, network, nexus, paths, permissions, saves, scan, sharing, specs, updater, voice
 from .version import VERSION
 from .installer import MODE_COPY, MODE_HARDLINK, MODE_INPLACE, Merge, MergeError, find_clashes, preview
 from .recipes import load_recipes, resource_dir
@@ -25,8 +25,8 @@ MOD_TYPES = ("Mod files (*.zip;*.7z;*.rar;*.archive;*.dll;*.asi;*.reds;*.lua;*.y
 def default_destination(base_path):
     if sys.platform == "win32":
         drive = os.path.splitdrive(os.path.abspath(base_path))[0] or "C:"
-        return drive + "\\GameMerger"
-    return os.path.join(os.path.expanduser("~"), "GameMerger")
+        return drive + "\\Frankenstein"
+    return os.path.join(os.path.expanduser("~"), "Frankenstein")
 
 
 class Job:
@@ -189,6 +189,73 @@ class Api:
         webbrowser.open("https://www.nexusmods.com/games/%s/mods?keyword=%s"
                         % (r.nexus_domain, urllib.parse.quote(query)))
 
+    # ---------- Nexus Mods ----------
+
+    def _nexus_key(self):
+        key = self._settings.get("nexus_key", "")
+        if not key:
+            raise MergeError("Add your Nexus Mods API key in Settings first.")
+        return key
+
+    def nexus_status(self):
+        return {"has_key": bool(self._settings.get("nexus_key")), "premium": self._settings.get("nexus_premium", False),
+                "name": self._settings.get("nexus_name", "")}
+
+    def nexus_set_key(self, key):
+        key = (key or "").strip()
+        if not key:
+            for k in ("nexus_key", "nexus_premium", "nexus_name"):
+                self._settings.pop(k, None)
+            paths.save_settings(self._settings)
+            return self.nexus_status()
+        try:
+            acct = nexus.account(key)
+        except nexus.NexusError as e:
+            raise MergeError(str(e))
+        self._settings.update(nexus_key=key, nexus_premium=acct["premium"], nexus_name=acct["name"])
+        paths.save_settings(self._settings)
+        if getattr(self, "_register_nxm", None):
+            self._register_nxm()
+        return self.nexus_status()
+
+    def nexus_search(self, recipe_id, text):
+        r = self._recipe(recipe_id)
+        try:
+            return nexus.search(r.nexus_domain, text)
+        except nexus.NexusError as e:
+            raise MergeError(str(e))
+
+    def nexus_get(self, recipe_id, mod_id):
+        """Premium: download the mod's main file now. Free: open its Files page, where "Mod Manager
+        Download" sends it back to the app."""
+        r = self._recipe(recipe_id)
+        key = self._nexus_key()
+        if not self._settings.get("nexus_premium"):
+            webbrowser.open(nexus.files_page(r.nexus_domain, mod_id))
+            return None
+
+        def work(job):
+            f = nexus.main_file(r.nexus_domain, mod_id, key)
+            job.write("Downloading %s ..." % f.get("file_name", f.get("name", "")))
+            path = nexus.download(r.nexus_domain, mod_id, f["file_id"], key,
+                                  progress=lambda d, t: setattr(job, "progress", [d, t] if t else None))
+            return {"path": path, "name": os.path.basename(path)}
+        return self._run(work)
+
+    def nexus_link(self, link):
+        """Download from a "Mod Manager Download" (nxm://) link."""
+        info = nexus.parse_nxm(link)
+        if not info:
+            raise MergeError("That Nexus link didn't look right.")
+        key = self._nexus_key()
+
+        def work(job):
+            job.write("Downloading from Nexus Mods ...")
+            path = nexus.download(info["domain"], info["mod"], info["file"], key, info["key"], info["expires"],
+                                  progress=lambda d, t: setattr(job, "progress", [d, t] if t else None))
+            return {"path": path, "name": os.path.basename(path), "domain": info["domain"]}
+        return self._run(work)
+
     def open_url(self, url):
         if url.startswith(("https://", "http://")):
             webbrowser.open(url)
@@ -234,7 +301,7 @@ class Api:
             if needs:
                 job.write("Asking Windows for permission to change: %s" % ", ".join(needs))
                 if not permissions.grant(needs):
-                    raise MergeError("Game Merger needs permission to change %s. Press Merge again and click Yes "
+                    raise MergeError("Frankenstein needs permission to change %s. Press Merge again and click Yes "
                                      "when Windows asks." % needs[0])
             merge = self._new_merge(g, t, p["mode"], p["destination"], p["name"], job)
             problems = []
@@ -329,9 +396,9 @@ class Api:
             raise MergeError("You're already on the newest version.")
 
         def work(job):
-            job.write("Downloading Game Merger %s ..." % info["version"])
+            job.write("Downloading Frankenstein %s ..." % info["version"])
             setup = updater.download(info, progress=lambda d, n: setattr(job, "progress", [d, n]))
-            job.write("Installing. Game Merger will close and open again in a few seconds.")
+            job.write("Installing. Frankenstein will close and open again in a few seconds.")
             updater.run_installer(setup)
             threading.Timer(1.5, self._quit).start()
             return {"version": info["version"]}
@@ -421,10 +488,11 @@ class Api:
     def pick_share_file(self):
         return (self._dialog("files", title="Pick the merge your friend sent", types=SHARE_TYPES) or [None])[0]
 
-    def pending_import(self):
-        """A .gmerge file the app was opened with (double-clicked), once."""
-        p, self._pending = getattr(self, "_pending", None), None
-        return p
+    def handoffs(self):
+        """.gmerge files and nxm:// links the app was opened with or handed since (taken once)."""
+        items = list(getattr(self, "_handoffs", []))
+        del getattr(self, "_handoffs", [])[:]
+        return items
 
     def import_info(self, path):
         info = sharing.read(path)
@@ -444,7 +512,7 @@ class Api:
         try:
             t = r.theme(info.get("theme_id"))
         except Exception:
-            raise MergeError("This merge uses a style this version of Game Merger doesn't know. Update the app.")
+            raise MergeError("This merge uses a style this version of Frankenstein doesn't know. Update the app.")
         mode = self._settings.get("mode", MODE_HARDLINK)
         mode = MODE_HARDLINK if mode == MODE_INPLACE else mode  # never change a friend's original install
         dest = self._settings.get("destination") or default_destination(g.path)
@@ -455,7 +523,7 @@ class Api:
             try:
                 needs = permissions.folders_needing_access([g.path], [dest])
                 if needs and not permissions.grant(needs):
-                    raise MergeError("Game Merger needs permission to change %s." % needs[0])
+                    raise MergeError("Frankenstein needs permission to change %s." % needs[0])
                 merge = self._new_merge(g, t, mode, dest, info["name"], job)
                 merge.data["shared_from"] = os.path.basename(path)
                 merge.save()
@@ -647,7 +715,7 @@ class Api:
     # ---------- first run and downloads ----------
 
     def setup_status(self):
-        """Folders Game Merger still needs permission for (asked once, on first run)."""
+        """Folders Frankenstein still needs permission for (asked once, on first run)."""
         bases = [g.path for g in self._games if g.recipe]
         dest = self._settings.get("destination") or (default_destination(bases[0]) if bases else None)
         needs = permissions.folders_needing_access(bases, [dest] if dest else [])

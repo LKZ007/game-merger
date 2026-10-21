@@ -1,5 +1,5 @@
-; Game Merger installer. Build with:  makensis -DVER=3.1.0 installer\GameMerger.nsi
-; (after PyInstaller has made dist\GameMerger\). Installs for the current user, so no admin
+; Frankenstein installer. Build with:  makensis -DVER=3.1.0 installer\Frankenstein.nsi
+; (after PyInstaller has made dist\Frankenstein\). Installs for the current user, so no admin
 ; prompt; adds desktop and Start menu shortcuts and an uninstaller in Apps & features.
 
 Unicode true
@@ -9,13 +9,17 @@ Unicode true
 !ifndef VER
   !define VER "0.0.0"
 !endif
-!define APP "Game Merger"
-!define EXE "GameMerger.exe"
+!define APP "Frankenstein"
+!define EXE "Frankenstein.exe"
+!define OLDAPP "Game Merger"  ; the app's name before 3.8.0
+!define OLDEXE "GameMerger.exe"
+!define PINS "$APPDATA\Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar"
 !define UNKEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\GameMerger"
 
 Name "${APP}"
-OutFile "..\dist\GameMergerSetup.exe"
-InstallDir "$LOCALAPPDATA\Programs\Game Merger"
+OutFile "..\dist\FrankensteinSetup.exe"
+InstallDir "$LOCALAPPDATA\Programs\Frankenstein"
+; installs from before the rename stay where they are
 InstallDirRegKey HKCU "Software\GameMerger" "InstallDir"
 RequestExecutionLevel user
 SetCompressor /SOLID lzma
@@ -26,11 +30,11 @@ VIAddVersionKey "ProductName" "${APP}"
 VIAddVersionKey "FileDescription" "${APP} Setup"
 VIAddVersionKey "FileVersion" "${VER}"
 VIAddVersionKey "ProductVersion" "${VER}"
-VIAddVersionKey "CompanyName" "Game Merger"
-VIAddVersionKey "LegalCopyright" "Game Merger"
+VIAddVersionKey "CompanyName" "Frankenstein"
+VIAddVersionKey "LegalCopyright" "Frankenstein"
 
-!define MUI_ICON "GameMerger.ico"
-!define MUI_UNICON "GameMerger.ico"
+!define MUI_ICON "Frankenstein.ico"
+!define MUI_UNICON "Frankenstein.ico"
 !define MUI_WELCOMEFINISHPAGE_BITMAP "welcome.bmp"
 !define MUI_UNWELCOMEFINISHPAGE_BITMAP "welcome.bmp"
 !define MUI_HEADERIMAGE
@@ -39,18 +43,18 @@ VIAddVersionKey "LegalCopyright" "Game Merger"
 !define MUI_HEADERIMAGE_UNBITMAP "header.bmp"
 !define MUI_ABORTWARNING
 
-!define MUI_WELCOMEPAGE_TITLE "Alright! Let's get Game Merger on your PC"
-!define MUI_WELCOMEPAGE_TEXT "This installs Game Merger ${VER} with Franklin, your merge assistant.$\r$\n$\r$\nYou'll get a desktop shortcut and a Start menu entry. Right-click either one and choose Pin to taskbar to keep it there.$\r$\n$\r$\nClick Install to carry on."
-!define MUI_FINISHPAGE_TITLE "Sorted. Game Merger is installed"
+!define MUI_WELCOMEPAGE_TITLE "Alright! Let's get Frankenstein on your PC"
+!define MUI_WELCOMEPAGE_TEXT "This installs Frankenstein ${VER} with Franklin, your merge assistant.$\r$\n$\r$\nYou'll get a desktop shortcut and a Start menu entry. Right-click either one and choose Pin to taskbar to keep it there.$\r$\n$\r$\nClick Install to carry on."
+!define MUI_FINISHPAGE_TITLE "Sorted. Frankenstein is installed"
 !define MUI_FINISHPAGE_TEXT "Open it from your desktop or the Start menu. Updates install themselves from now on."
 !define MUI_FINISHPAGE_RUN "$INSTDIR\${EXE}"
-!define MUI_FINISHPAGE_RUN_TEXT "Open Game Merger now"
+!define MUI_FINISHPAGE_RUN_TEXT "Open Frankenstein now"
 
 !define MUI_PAGE_CUSTOMFUNCTION_SHOW WelcomeInstallButton
 !insertmacro MUI_PAGE_WELCOME
 !insertmacro MUI_PAGE_INSTFILES
 !insertmacro MUI_PAGE_FINISH
-!define MUI_UNCONFIRMPAGE_TEXT_TOP "This removes the Game Merger app. Your merged game copies, their saves and your settings are kept, so reinstalling picks them back up."
+!define MUI_UNCONFIRMPAGE_TEXT_TOP "This removes the Frankenstein app. Your merged game copies, their saves and your settings are kept, so reinstalling picks them back up."
 !insertmacro MUI_UNPAGE_CONFIRM
 !insertmacro MUI_UNPAGE_INSTFILES
 !insertmacro MUI_LANGUAGE "English"
@@ -71,29 +75,46 @@ Function .onInit
     StrCpy $Update 1
 FunctionEnd
 
-Section "Game Merger"
+Section "Frankenstein"
   ; let the running app close itself (updates), then make sure it's gone
   StrCmp $Update 1 0 +2
     Sleep 2500
   nsExec::Exec 'taskkill /IM "${EXE}" /F'
+  nsExec::Exec 'taskkill /IM "${OLDEXE}" /F'
   Sleep 500
 
   SetOutPath "$INSTDIR"
   RMDir /r "$INSTDIR\_internal"
-  File /r "..\dist\GameMerger\*"
-  File "GameMerger.ico"
+  File /r "..\dist\Frankenstein\*"
+  File "Frankenstein.ico"
   WriteUninstaller "$INSTDIR\Uninstall.exe"
 
-  StrCmp $Update 1 shortcuts_done
-    CreateShortcut "$DESKTOP\${APP}.lnk" "$INSTDIR\${EXE}" "" "$INSTDIR\GameMerger.ico" 0 SW_SHOWNORMAL "" "Merge your games with mods"
+  ; moving over from Game Merger: swap the old exe and shortcuts for the new ones
+  Delete "$INSTDIR\${OLDEXE}"
+  Delete "$INSTDIR\GameMerger.ico"
+  Delete "$SMPROGRAMS\${OLDAPP}.lnk"
+  StrCpy $0 0
+  IfFileExists "$DESKTOP\${OLDAPP}.lnk" 0 +3
+    Delete "$DESKTOP\${OLDAPP}.lnk"
+    StrCpy $0 1
+  ; a pin keeps working when its shortcut is rewritten in place
+  IfFileExists "${PINS}\${OLDAPP}.lnk" 0 +2
+    CreateShortcut "${PINS}\${OLDAPP}.lnk" "$INSTDIR\${EXE}" "" "$INSTDIR\Frankenstein.ico" 0 SW_SHOWNORMAL "" "Merge your games with mods"
+  IfFileExists "${PINS}\${APP}.lnk" 0 +2
+    CreateShortcut "${PINS}\${APP}.lnk" "$INSTDIR\${EXE}" "" "$INSTDIR\Frankenstein.ico" 0 SW_SHOWNORMAL "" "Merge your games with mods"
+
+  StrCmp $Update 0 make_desktop
+  StrCmp $0 1 make_desktop shortcuts_done
+  make_desktop:
+    CreateShortcut "$DESKTOP\${APP}.lnk" "$INSTDIR\${EXE}" "" "$INSTDIR\Frankenstein.ico" 0 SW_SHOWNORMAL "" "Merge your games with mods"
   shortcuts_done:
-  CreateShortcut "$SMPROGRAMS\${APP}.lnk" "$INSTDIR\${EXE}" "" "$INSTDIR\GameMerger.ico" 0 SW_SHOWNORMAL "" "Merge your games with mods"
+  CreateShortcut "$SMPROGRAMS\${APP}.lnk" "$INSTDIR\${EXE}" "" "$INSTDIR\Frankenstein.ico" 0 SW_SHOWNORMAL "" "Merge your games with mods"
 
   WriteRegStr HKCU "Software\GameMerger" "InstallDir" "$INSTDIR"
   WriteRegStr HKCU "${UNKEY}" "DisplayName" "${APP}"
   WriteRegStr HKCU "${UNKEY}" "DisplayVersion" "${VER}"
-  WriteRegStr HKCU "${UNKEY}" "Publisher" "Game Merger"
-  WriteRegStr HKCU "${UNKEY}" "DisplayIcon" "$INSTDIR\GameMerger.ico"
+  WriteRegStr HKCU "${UNKEY}" "Publisher" "Frankenstein"
+  WriteRegStr HKCU "${UNKEY}" "DisplayIcon" "$INSTDIR\Frankenstein.ico"
   WriteRegStr HKCU "${UNKEY}" "InstallLocation" "$INSTDIR"
   WriteRegStr HKCU "${UNKEY}" "UninstallString" '"$INSTDIR\Uninstall.exe"'
   WriteRegStr HKCU "${UNKEY}" "QuietUninstallString" '"$INSTDIR\Uninstall.exe" /S'
@@ -112,6 +133,8 @@ Section "Uninstall"
   Sleep 500
   Delete "$DESKTOP\${APP}.lnk"
   Delete "$SMPROGRAMS\${APP}.lnk"
+  Delete "$DESKTOP\${OLDAPP}.lnk"
+  Delete "$SMPROGRAMS\${OLDAPP}.lnk"
   RMDir /r "$INSTDIR"
   DeleteRegKey HKCU "${UNKEY}"
   DeleteRegKey HKCU "Software\GameMerger"
