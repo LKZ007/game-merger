@@ -1,0 +1,59 @@
+# Builds GameMergerSetup.exe on Windows and publishes it as a GitHub release whenever a
+# version tag (v1.2.3) is pushed. Installed copies of Game Merger update from these releases.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install
+        run: python -m pip install pyinstaller -r requirements.txt
+
+      - name: Test
+        run: python -m unittest discover -s tests
+
+      - name: Check version matches tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: |
+          v=$(python -c "from gamemerger.version import VERSION; print(VERSION)")
+          test "v$v" = "${GITHUB_REF_NAME}" || { echo "version.py says $v but the tag is ${GITHUB_REF_NAME}"; exit 1; }
+
+      - name: Build app
+        run: >
+          pyinstaller --noconfirm --onedir --windowed --name GameMerger
+          --icon installer\GameMerger.ico --collect-data edge_tts
+          --add-data "gamemerger\recipes;gamemerger\recipes"
+          --add-data "gamemerger\web;gamemerger\web" GameMerger.pyw
+
+      - name: Build installer
+        shell: bash
+        run: |
+          v=$(python -c "from gamemerger.version import VERSION; print(VERSION)")
+          "/c/Program Files (x86)/NSIS/makensis.exe" -DVER=$v installer/GameMerger.nsi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GameMergerSetup
+          path: dist/GameMergerSetup.exe
+
+      - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/GameMergerSetup.exe
+          body_path: installer/release-notes.md
