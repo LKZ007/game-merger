@@ -279,6 +279,29 @@ class PermissionAndCoverTests(unittest.TestCase):
         self.assertEqual(url, "http://www.dev-c.com/files/ScriptHookV_1.0.3407.0.zip")
 
 
+class ProfileTests(unittest.TestCase):
+    def test_switch_mods_off_and_on(self):
+        d = tempfile.mkdtemp(dir=TMP)
+        base = fake_cyberpunk(os.path.join(d, "Cyberpunk 2077"))
+        r = RECIPES["cyberpunk2077"]
+        a = make_zip(os.path.join(d, "a.zip"), {"r6/config/settings.json": "chaos"})
+        b = make_zip(os.path.join(d, "b.zip"), {"archive/pc/mod/car.archive": "car"})
+        m = installer.Merge.create(r, r.theme("forza"), base, os.path.join(d, "out"), installer.MODE_COPY, "P")
+        m.install(a, "Chaos", r.layout)
+        m.install(b, "Car", r.layout)
+        m.rebuild(r.layout, ["Car"])
+        t = m.target_path
+        with open(os.path.join(t, "r6", "config", "settings.json")) as f:
+            self.assertEqual(f.read(), "original")
+        self.assertTrue(os.path.isfile(os.path.join(t, "archive", "pc", "mod", "car.archive")))
+        self.assertEqual([(x["label"], x["on"]) for x in m.all_mods()], [("Chaos", False), ("Car", True)])
+        m.rebuild(r.layout, ["Car", "Chaos"])
+        with open(os.path.join(t, "r6", "config", "settings.json")) as f:
+            self.assertEqual(f.read(), "chaos")
+        self.assertEqual(m.data["parked"], [])
+        self.assertEqual([x["label"] for x in m.all_mods()], ["Chaos", "Car"])  # original order kept
+
+
 class SharingTests(MergeTests):
     def test_share_and_rebuild_on_a_friends_pc(self):
         from gamemerger import sharing

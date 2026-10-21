@@ -516,6 +516,38 @@ class Api:
                     job.write("✖ %s failed: %s" % (os.path.basename(p), e))
         return self._run(work)
 
+    # ---------- mod profiles ----------
+
+    def merge_mods(self, merge_id):
+        m = Merge.load(merge_id)
+        return {"mods": [{"label": x["label"], "on": x["on"], "kept": bool(m.kept_archive(x))} for x in m.all_mods()],
+                "profiles": m.data.get("profiles", {}), "profile": m.data.get("profile", "")}
+
+    def set_mods(self, merge_id, enabled, profile=""):
+        """Switch mods on/off (optionally saving the set as a named profile, like "Chill" or "Chaos")."""
+        m = Merge.load(merge_id)
+        r = self._recipe(m.data.get("recipe_id"))
+        if self._playing == merge_id:
+            raise MergeError("Close the game first, then switch mods.")
+
+        def work(job):
+            m.rebuild(r.layout, enabled, log=job.write)
+            if profile:
+                m.data.setdefault("profiles", {})[profile] = list(enabled)
+            m.data["profile"] = profile
+            m.save()
+            job.write("Done. %d mod(s) on." % len(enabled))
+            return True
+        return self._run(work)
+
+    def delete_profile(self, merge_id, name):
+        m = Merge.load(merge_id)
+        m.data.get("profiles", {}).pop(name, None)
+        if m.data.get("profile") == name:
+            m.data["profile"] = ""
+        m.save()
+        return self.merge_mods(merge_id)
+
     def undo(self, merge_id):
         m = Merge.load(merge_id)
         return self._run(lambda job: m.undo(log=job.write))

@@ -319,7 +319,7 @@ class Merge:
         os.makedirs(os.path.dirname(dest), exist_ok=True)
         shutil.copy2(src, dest)
 
-    def install(self, archive, label, layout, flat_root=False, subdir="", log=_noop):
+    def install(self, archive, label, layout, flat_root=False, subdir="", log=_noop, seq=None):
         tmp = tempfile.mkdtemp(prefix="gm-", dir=paths.sub("tmp"))
         try:
             extract(archive, tmp)
@@ -329,7 +329,9 @@ class Merge:
                                  % os.path.basename(archive))
             for src, rel in plan:
                 self.put_file(src, rel)
-            self.data["installs"].append({"label": label, "file": os.path.basename(archive),
+            if seq is None:
+                self.data["seq"] = seq = self.data.get("seq", 0) + 1
+            self.data["installs"].append({"label": label, "file": os.path.basename(archive), "seq": seq,
                                           "paths": [rel for _s, rel in plan], "kept": self._keep(archive),
                                           "flat_root": flat_root, "subdir": subdir})
             self.save()
@@ -402,7 +404,7 @@ class Merge:
         """Every mod this merge knows about, switched on or off, in install order."""
         on = [dict(i, on=True) for i in self.data.get("installs", [])]
         off = [dict(i, on=False) for i in self.data.get("parked", [])]
-        return on + off
+        return sorted(on + off, key=lambda x: x.get("seq", 0))
 
     def rebuild(self, layout, enabled, log=_noop):
         """Switch mods on and off: undo everything, then reinstall the enabled ones (by label) in their
@@ -418,7 +420,7 @@ class Merge:
             archive = self.kept_archive(m)
             if m["label"] in wanted and archive:
                 self.install(archive, m["label"], layout, flat_root=m.get("flat_root", False),
-                             subdir=m.get("subdir", ""), log=log)
+                             subdir=m.get("subdir", ""), log=log, seq=m.get("seq"))
             elif archive:
                 self.data["parked"].append({k: v for k, v in m.items() if k != "on"})
         self.data["status"] = "ready"

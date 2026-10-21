@@ -391,6 +391,7 @@ async function loadMerges() {
       </div>
       <div class="merge-actions">
         <button class="btn primary" data-act="play">▶ Play</button>
+        <button class="btn" data-act="mods">Mods &amp; profiles</button>
         <button class="btn" data-act="add">Add mods</button>
         <button class="btn" data-act="share">Share</button>
         <button class="btn" data-act="crash">Why did it crash?</button>
@@ -421,6 +422,37 @@ async function offerUpdate(u, asked = false) {
     ${u.notes ? `<div class="log">${esc(u.notes)}</div>` : ""}`,
     [{ label: "Later", value: false }, { label: "Update now", value: true, primary: true }]);
   if (go) followJob(await call("install_update"), "Updating Game Merger");
+}
+
+// ---------- mod profiles ----------
+async function modsDialog(m) {
+  const d = await call("merge_mods", m.id);
+  const profiles = Object.keys(d.profiles);
+  const body = `
+    ${profiles.length ? `<div class="field"><label for="profilePick">Profile</label><div class="row" style="flex-wrap:nowrap">
+      <select class="input" id="profilePick"><option value="">Custom</option>${profiles.map((p) => `<option ${p === d.profile ? "selected" : ""}>${esc(p)}</option>`).join("")}</select>
+      <button class="btn ghost danger" id="profileDel" type="button">Delete</button></div></div>` : ""}
+    <div id="modChecks" style="max-height:300px;overflow:auto;margin:10px 0">
+      ${d.mods.map((x, i) => `<label class="switch" style="padding:6px 0"><input type="checkbox" data-i="${i}" ${x.on ? "checked" : ""} ${x.kept ? "" : "disabled"}> ${esc(x.label)}${x.kept ? "" : ` <span class="muted small">(re-add to switch)</span>`}</label>`).join("") || `<p class="muted">No mods yet.</p>`}
+    </div>
+    <div class="field"><label for="profileName">Save these as a profile (optional)</label>
+      <input class="input" id="profileName" placeholder="e.g. Chill or Chaos" value="${esc(d.profile)}" autocomplete="off"></div>`;
+  const pick = () => {
+    const sel = d.profiles[$("#profilePick").value];
+    if (!sel) return;
+    document.querySelectorAll("#modChecks input").forEach((c) => (c.checked = sel.includes(d.mods[+c.dataset.i].label)));
+    $("#profileName").value = $("#profilePick").value;
+  };
+  setTimeout(() => {
+    if ($("#profilePick")) $("#profilePick").onchange = pick;
+    if ($("#profileDel")) $("#profileDel").onclick = async () => { closeModal(); await call("delete_profile", m.id, $("#profilePick").value); modsDialog(m); };
+  });
+  const go = await modal("Mods in “" + m.name + "”", body, [{ label: "Cancel", value: false }, { label: "Apply", value: true, primary: true }]);
+  if (!go) return;
+  const enabled = [...document.querySelectorAll("#modChecks input:checked")].map((c) => d.mods[+c.dataset.i].label);
+  const name = ($("#profileName")?.value || "").trim();
+  const r = await followJob(await call("set_mods", m.id, enabled, name), "Switching mods");
+  if (r) { toast(name ? `Profile “${name}” is on.` : "Mods updated."); loadMerges(); }
 }
 
 // ---------- sharing ----------
@@ -469,6 +501,7 @@ async function mergeAction(id, act) {
     if (act === "play") { await call("play", id); toast("Starting " + m.name + "… its own saves are loaded."); loadMerges(); watchPlaying(); }
     else if (act === "folder") await call("open_folder", id);
     else if (act === "share") await shareMerge(m);
+    else if (act === "mods") await modsDialog(m);
     else if (act === "crash") { openFranklin(); askFranklin("My merged game crashed or a mod isn't working. What went wrong?", { merge: id }); }
     else if (act === "add") { const job = await call("add_mods", id); if (job) { await followJob(job, "Adding mods"); loadMerges(); } }
     else if (act === "undo") {
@@ -858,53 +891,45 @@ document.querySelectorAll("canvas[data-brain]").forEach((cv) => {
 // one twice in a row. "explicit" is used in 18+ mode, "clean" when it's off.
 const LINES = {
   explicit: {
-    splash: ["Yo, what's up! Give me a sec, I'm finding your games…", "Yo, what's up. Pulling up your games…", "Aight, pulling up your library…",
-      "Let's see what you got installed…", "Checking Steam, Epic, GOG and the Xbox app…",
-      "Grabbing your box art, hold up…", "Damn, you got a collection. Sorting it out…"],
-    found: ["Aight, got 'em. {n} games ready.", "Found {n} games. Let's mix some shit up.", "Aight, {n} games. Pick one and we'll get into it.",
-      "{n} games, no cap. Time to make some wild shit.", "Got {n} games ready. Your move."],
-    foundOne: ["Found 1 game. We can work with that.", "Just the one game, but damn, that's enough to start."],
-    none: ["Damn, no games showing up yet. Point me at a folder.", "Couldn't spot any games. Add one and we're good."],
-    updateTitle: ["New update's out", "Got an update for you", "Yo, there's an update"],
-    importDone: ["Say less, “{name}” is ready.", "“{name}” is in. Go have fun.", "Bet. “{name}” is set up."],
-    voiceTest: ["Yo, how's this sound?", "This is me now. Smooth as hell, right?", "Check it. That's the voice."],
-    voiceSaved: ["Bet, voice is locked in.", "Aight, that's my voice sorted."],
-    hello: ["Yo, what's up. Pick a game and let's mix some shit up.", "What's good, it's Franklin. What we merging?",
-      "Yo, what's up. Franklin here.", "What's up. Ready when you are."],
-    goodGame: ["Good choice.", "Good choice. {game} is a solid base.", "Ooh, good choice.", "{game}? Good choice, no cap.",
-      "Damn, good choice.", "Solid pick.", "Bet, {game} it is."],
-    goodMod: ["Good choice.", "Aight, got 'em.", "Nice, good choice on that one.", "Good pick.", "Bet, that's going in.",
+    splash: ["Yo, what's up, G. Hold up bro, lemme find your games…", "What's up G. Lemme pull up your games…",
+      "Aight brudda, lemme see what you got installed…", "Checking Steam, Epic, GOG and the Xbox app…",
+      "Hold up, grabbing your box art…", "Damn bro, you got a collection. Sorting it out…"],
+    found: ["Bet, got 'em. {n} games ready, G.", "Found {n} games. Aight, let's mix some shit up.", "{n} games, bro. Pick one and we'll get into it.",
+      "Got {n} games ready, brudda. Your move.", "{n} games. Time to make some wild shit."],
+    foundOne: ["Found 1 game, G. We can work with that.", "Just the one game bro, but damn, that's enough to start."],
+    none: ["Damn bro, no games showing up yet. Point me at a folder.", "Couldn't spot any games, G. Add one and we're good."],
+    updateTitle: ["New update's out, bro", "Got an update for you, G", "Yo, there's an update"],
+    importDone: ["Aight, “{name}” is ready, bro.", "“{name}” is in, G. Go have fun.", "Done brudda, “{name}” is set up."],
+    voiceTest: ["Yo bro, how's this sound?", "This is me now, G. Smooth as hell, right?", "Check it brudda. That's the voice."],
+    voiceSaved: ["Aight, voice is locked in.", "That's my voice sorted, G."],
+    hello: ["Yo, what's up bro. Pick a game and let's mix some shit up.", "What's up G, it's Franklin. What we merging?",
+      "Yo, what's up brudda. Franklin here.", "What's up bro. Ready when you are."],
+    goodGame: ["Good choice, bro.", "Good choice. {game} is a solid base.", "Ohh, good choice, brudda.", "{game}? Good choice, G.",
+      "Damn, good choice.", "Solid pick, bro.", "Aight, {game} it is."],
+    goodMod: ["Good choice, G.", "Bet, got 'em.", "Good choice on that one, bro.", "Good pick, brudda.", "Bet, that's going in.",
       "Damn, good choice."],
-    permTitle: ["Quick thing first", "One sec before we get into it", "Real quick"],
-    permDone: ["Bet, all sorted.", "Done. Easy.", "Sorted, no stress."],
+    permTitle: ["Quick thing first, bro", "One sec before we get into it, G", "Real quick, brudda"],
+    permDone: ["Bet, all sorted.", "Done, G. Easy.", "Sorted bro, no stress."],
   },
   clean: {
-    splash: ["Yo, what's up! Give me a sec, I'm finding your games…", "Yo, what's up. Pulling up your games…", "Aight, pulling up your library…",
-      "Let's see what you got installed…", "Checking Steam, Epic, GOG and the Xbox app…", "Grabbing your box art, hold up…"],
-    found: ["Aight, got 'em. {n} games ready.", "Found {n} games. Let's mix some stuff up.", "Aight, {n} games. Pick one and we'll get into it.",
-      "Got {n} games ready. Your move."],
-    foundOne: ["Found 1 game. We can work with that.", "Just the one game, but that's enough to start."],
-    none: ["No games showing up yet. Point me at a folder.", "Couldn't spot any games. Add one and we're good."],
-    updateTitle: ["New update's out", "Got an update for you", "Yo, there's an update"],
-    importDone: ["Say less, “{name}” is ready.", "“{name}” is in. Go have fun."],
-    voiceTest: ["Yo, how's this sound?", "Check it. That's the voice."],
-    voiceSaved: ["Bet, voice is locked in.", "Aight, that's my voice sorted."],
-    hello: ["What's up, it's Franklin. Pick a game and let's get into it.", "What's good, it's Franklin. What we merging?",
-      "What's up. Ready when you are."],
-    goodGame: ["Good choice.", "Good choice. {game} is a solid base.", "Ooh, good choice.", "Solid pick.", "Bet, {game} it is."],
-    goodMod: ["Good choice.", "Aight, got 'em.", "Nice, good choice on that one.", "Good pick.", "Bet, that's going in."],
-    permTitle: ["Quick thing first", "One sec before we get into it"],
-    permDone: ["Bet, all sorted.", "Done. Easy."],
+    splash: ["Yo, what's up, G. Hold up bro, lemme find your games…", "What's up G. Lemme pull up your games…",
+      "Aight brudda, lemme see what you got installed…", "Checking Steam, Epic, GOG and the Xbox app…", "Grabbing your box art, hold up…"],
+    found: ["Aight, got 'em. {n} games ready, G.", "Found {n} games. Let's mix some stuff up.", "{n} games, bro. Pick one and we'll get into it.",
+      "Got {n} games ready, brudda. Your move."],
+    foundOne: ["Found 1 game, G. We can work with that.", "Just the one game bro, but that's enough to start."],
+    none: ["No games showing up yet, bro. Point me at a folder.", "Couldn't spot any games, G. Add one and we're good."],
+    updateTitle: ["New update's out, bro", "Got an update for you, G", "Yo, there's an update"],
+    importDone: ["Aight, “{name}” is ready, bro.", "“{name}” is in, G. Go have fun."],
+    voiceTest: ["Yo bro, how's this sound?", "Check it brudda. That's the voice."],
+    voiceSaved: ["Aight, voice is locked in.", "That's my voice sorted, G."],
+    hello: ["Yo, what's up bro. Pick a game and let's mix some stuff up.", "What's up G, it's Franklin. What we merging?",
+      "What's up bro. Ready when you are."],
+    goodGame: ["Good choice, bro.", "Good choice. {game} is a solid base.", "Ooh, good choice G.", "Solid pick, brudda.", "Aight, {game} it is."],
+    goodMod: ["Good choice, G.", "Aight, got 'em.", "Good choice on that one, bro.", "Good pick, brudda."],
+    permTitle: ["Quick thing first, bro", "One sec before we get into it, G"],
+    permDone: ["Aight, all sorted.", "Done, G. Easy."],
   },
 };
-// A quick spoken reaction plus a toast, e.g. "Good choice" when a game or mod is picked.
-function franklinSays(k, vars = {}) {
-  let t = line(k);
-  for (const [a, b] of Object.entries(vars)) t = t.replace("{" + a + "}", b);
-  toast("Franklin: " + t);
-  speak(t);
-}
-
 const lastLine = {};
 const lineSet = (k) => LINES[state.settings && state.settings.explicit === false ? "clean" : "explicit"][k];
 function line(k) {
@@ -914,6 +939,15 @@ function line(k) {
   lastLine[k] = pick;
   return pick;
 }
+
+// A quick spoken reaction plus a toast, e.g. "Good choice" when a game or mod is picked.
+function franklinSays(k, vars = {}) {
+  let t = line(k);
+  for (const [a, b] of Object.entries(vars)) t = t.replace("{" + a + "}", b);
+  toast("Franklin: " + t);
+  speak(t);
+}
+
 (async () => {
   const started = Date.now();
   let i = 0;
