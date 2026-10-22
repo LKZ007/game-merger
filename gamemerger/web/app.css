@@ -223,6 +223,9 @@ body.framed .splash { top: 34px; }
 .tile[data-fun="green"] { --fun: #4ade80; }
 .tile[data-fun="yellow"] { --fun: #facc15; }
 .tile[data-fun="red"] { --fun: #f87171; }
+.tile[data-fun="pending"] { --fun: #6b6480; }
+.tile[data-fun="pending"] .case::after { animation: fun-wait 1.2s ease-in-out infinite; box-shadow: none; }
+@keyframes fun-wait { 50% { opacity: .35; } }
 .tile .case { position: relative; }
 .tile[data-fun] .case::after { content: ""; position: absolute; top: -7px; right: -2px; width: 20px; height: 20px; border-radius: 50%;
   background: var(--fun); border: 3px solid var(--bg); box-shadow: 0 0 14px var(--fun); z-index: 2; }

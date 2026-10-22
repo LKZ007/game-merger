@@ -1115,21 +1115,26 @@ async function loadBackups() {
 
 // ---------- how fun each pairing would be (a colour on every game) ----------
 const FUN_WORDS = { green: "Great pairing", yellow: "OK pairing", red: "Doable, not as great" };
+const ALONE_WORDS = { green: "Fully moddable as a main game", yellow: "Some mod support", red: "No real mod support" };
 const SELF_WORDS = { green: "Main game, fully moddable", yellow: "Main game, limited mod support", red: "Main game, no real mod support" };
 
 // Ratings are made in the background; this keeps asking until every game has one.
 async function loadFun() {
   const base = game(state.selected);
-  if (!base) return;
-  const names = [...state.games.filter((g) => g.key !== base.key).map((g) => g.name), ...(state.owned?.games || []).map((g) => g.name)];
-  if (state.fun?.base !== base.name) state.fun = { base: base.name, scores: {}, self: null };
+  const all = [...state.games.map((g) => g.name), ...(state.owned?.games || []).map((g) => g.name)];
+  const key = base ? base.name : "";  // no main game picked yet: each game's own colour
+  if (state.fun?.base !== key) state.fun = { base: key, scores: {}, self: null, pending: true };
   const fun = state.fun;
+  applyFun();
   clearTimeout(loadFun.timer);
   let r;
-  try { r = await call("fun_scores", base.key, names); } catch (e) { return; }
+  try {
+    r = base ? await call("fun_scores", base.key, all.filter((n) => n !== base.name)) : await call("game_ratings", all);
+  } catch (e) { return; }
   if (state.fun !== fun) return;
   Object.assign(fun.scores, r.scores);
-  fun.self = r.self;
+  fun.self = r.self || null;
+  fun.pending = r.pending;
   applyFun();
   if (r.pending) loadFun.timer = setTimeout(loadFun, 4000);
 }
@@ -1137,17 +1142,21 @@ async function loadFun() {
 function applyFun() {
   const style = state.settings?.fun_style || "dot";
   document.body.classList.toggle("fun-halo", style === "halo");
-  const fun = state.fun && game(state.selected)?.name === state.fun.base ? state.fun : null;
+  const base = game(state.selected);
+  const fun = state.fun && (base ? base.name : "") === state.fun.base ? state.fun : null;
   document.querySelectorAll(".tile").forEach((t) => {
     const name = t.querySelector(".tile-name")?.textContent;
     const mine = t.classList.contains("selected");
     const f = style === "off" || !fun ? null : mine ? fun.self : fun.scores[name];
-    if (f) {
-      t.dataset.fun = f.rating;
-      t.title = `${mine ? SELF_WORDS[f.rating] : FUN_WORDS[f.rating]}: ${f.why}`;
-    } else {
+    if (style === "off") {
       delete t.dataset.fun;
       t.removeAttribute("title");
+    } else if (f) {
+      t.dataset.fun = f.rating;
+      t.title = `${mine ? SELF_WORDS[f.rating] : base ? FUN_WORDS[f.rating] : ALONE_WORDS[f.rating]}: ${f.why}`;
+    } else {
+      t.dataset.fun = "pending";  // every game gets a colour; this one is still being rated
+      t.title = "Rating…";
     }
   });
 }

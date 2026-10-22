@@ -108,6 +108,13 @@ def detect(folder):
     if has("www", "js", "rpg_core.js") or has("js", "rmmz_core.js") or has("Game.rgss3a"):
         return {"engine": "rpgmaker", "label": "RPG Maker", "moddable": "limited", "frameworks": [], "layout": {}, "logs": [],
                 "note": "RPG Maker game: plugin mods go in js/plugins, but each one is wired up by hand."}
+    if has("MonoGame.Framework.dll") or has("FNA.dll") or has("Microsoft.Xna.Framework*.dll"):
+        return {"engine": "xna", "label": "XNA / MonoGame", "moddable": "limited", "frameworks": [], "layout": {}, "logs": [],
+                "note": "XNA / MonoGame game: big ones have their own mod loader (Stardew Valley: SMAPI, Terraria: tModLoader), "
+                        "which you install from its own site."}
+    if has("regulation.bin") or has("Game", "regulation.bin"):
+        return {"engine": "fromsoft", "label": "FromSoftware engine", "moddable": "limited", "frameworks": [], "layout": {},
+                "logs": [], "note": "FromSoftware game: mods load through Mod Engine 2, offline only (keep it away from online play)."}
     return {"engine": "unknown", "label": "Unknown engine", "moddable": "no", "frameworks": [], "layout": {}, "logs": [],
             "note": "Frankenstein can't tell how this game is modded, so it can only copy the game and drop files in where you say."}
 

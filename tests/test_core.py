@@ -614,6 +614,24 @@ class ModSourceAndControllerTests(unittest.TestCase):
         for rid in ("schedule1", "gta5", "cyberpunk2077"):
             self.assertTrue(recipes[rid].sandbox.get("slots"), rid)
 
+    def test_every_game_gets_a_colour_before_a_main_game_is_picked(self):
+        import types
+        from gamemerger import api, storeinfo
+        from gamemerger.recipes import Recipe
+        auto = Recipe("auto-x", "Palworld", [], [], "", {}, {}, [])
+        auto.auto = {"moddable": "limited", "note": ""}
+        fake = types.SimpleNamespace(
+            _games=[types.SimpleNamespace(name="Palworld", recipe=auto), types.SimpleNamespace(name="Odd", recipe=None)],
+            _hand=[RECIPES["gta5"]], _appid_for_name=lambda n: {"Stardew Valley": "413150"}.get(n),
+            _store_info=lambda n, a=None: None)
+        with open(storeinfo._file("413150"), "w") as f:
+            json.dump({"appid": "413150", "genres": [], "workshop": True}, f)
+        r = api.Api.game_ratings(fake, ["Palworld", "Odd", "Grand Theft Auto V", "Stardew Valley", "Never Seen"])
+        got = {n: v["rating"] for n, v in r["scores"].items()}
+        self.assertEqual(got, {"Palworld": "yellow", "Odd": "red", "Grand Theft Auto V": "green",
+                               "Stardew Valley": "green"})
+        self.assertTrue(r["pending"])
+
 
 if __name__ == "__main__":
     unittest.main()

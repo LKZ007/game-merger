@@ -12,7 +12,7 @@ from . import paths
 URL = "https://store.steampowered.com/api/appdetails?appids=%s&filters=basic,genres,categories&cc=us&l=english"
 UA = {"User-Agent": "Frankenstein"}
 GENERIC = {"indie", "free to play", "early access", "casual", "massively multiplayer", "utilities", "software"}
-FULL_PAD, PARTIAL_PAD = 28, 18  # Steam category ids
+FULL_PAD, PARTIAL_PAD, WORKSHOP = 28, 18, 30  # Steam category ids
 
 
 def _file(appid):
@@ -27,7 +27,17 @@ def parse(appid, raw):
     cats = {c.get("id") for c in d.get("categories") or []}
     return {"appid": str(appid), "name": d.get("name", ""),
             "genres": [g.get("description", "") for g in d.get("genres") or []],
-            "controller": "full" if FULL_PAD in cats else "partial" if PARTIAL_PAD in cats else "none"}
+            "controller": "full" if FULL_PAD in cats else "partial" if PARTIAL_PAD in cats else "none",
+            "workshop": WORKSHOP in cats}
+
+
+def cached(appid):
+    """The saved store info, without going online. None if it hasn't been fetched yet."""
+    try:
+        with open(_file(appid), encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return None
 
 
 def details(appid, max_age=30 * 86400):

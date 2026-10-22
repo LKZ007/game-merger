@@ -503,6 +503,51 @@ class Api:
                      "limited": ("yellow", "Limited mod support"), "no": ("red", "No real mod support")}[moddable]
         return {"scores": out, "self": {"rating": mine_self[0], "why": mine_self[1]}, "pending": pending}
 
+    def game_ratings(self, names):
+        """Before a main game is picked: every game's own colour, for how much you can mod it as the main game.
+        {"scores": {name: {rating, why}}, "pending"}. Installed games are judged from their files; games that
+        are only owned are judged from a built-in recipe or Steam Workshop, and say so when it can't be told yet."""
+        out, todo = {}, []
+        installed = {g.name: g for g in self._games}
+        words = {"yes": ("green", "Fully moddable"), "limited": ("yellow", "Limited mod support"),
+                 "no": ("red", "No real mod support that Frankenstein can find")}
+        for n in names:
+            g = installed.get(n)
+            if g is not None:
+                moddable = (getattr(g.recipe, "auto", None) or {}).get("moddable", "yes") if g.recipe else "no"
+                note = (getattr(g.recipe, "auto", None) or {}).get("note") if g.recipe else ""
+                r, why = words[moddable]
+                out[n] = {"rating": r, "why": why + (": " + note if note and moddable == "yes" else "")}
+                continue
+            appid = self._appid_for_name(n)
+            key = re.sub(r"[^a-z0-9]", "", n.lower())
+            if any((appid and str(appid) in [str(a) for a in r.steam_appids]) or
+                   (len(key) > 3 and re.sub(r"[^a-z0-9]", "", r.name.split("(")[0].lower()) == key) for r in self._hand):
+                out[n] = {"rating": "green", "why": "Fully moddable: built-in recipe"}
+                continue
+            info = storeinfo.cached(appid) if appid else None
+            if info is None:
+                if n in self.__dict__.setdefault("_store_tried", set()):
+                    out[n] = {"rating": "yellow", "why": "Couldn't look this game up; its mod support is checked properly once it's installed"}
+                else:
+                    todo.append(n)  # no colour yet: the tile shows "Rating…" until it's looked up
+            elif info.get("workshop"):
+                out[n] = {"rating": "green", "why": "Has Steam Workshop mods"}
+            else:
+                out[n] = {"rating": "yellow", "why": "Mod support is checked properly once it's installed"}
+        if todo and not getattr(self, "_store_busy", False):
+            self._store_busy = True
+
+            def run():
+                try:
+                    for n in todo[:60]:
+                        self._store_info(n, self._appid_for_name(n))
+                        self._store_tried.add(n)
+                finally:
+                    self._store_busy = False
+            threading.Thread(target=run, daemon=True).start()
+        return {"scores": out, "pending": bool(todo)}
+
     def _fun_file(self):
         return os.path.join(paths.sub("library"), "fun-scores.json")
 
