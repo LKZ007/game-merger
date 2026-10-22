@@ -978,10 +978,11 @@ class Api:
                 mods = nexus.search(r.nexus_domain, slot.search, count=3)
             except nexus.NexusError:
                 return
-            for m in mods:
-                if m["picture"]:
-                    out["pictures"].append({"slot": slot.name, "name": m["name"], "url": m["picture"]})
-                    break
+            got = [m for m in mods if m["picture"]]
+            if got:
+                # screenshots from mods for the main game: the two games really merged, not side by side
+                out["pictures"].append({"slot": slot.name, "name": got[0]["name"], "url": got[0]["picture"],
+                                        "more": [m["picture"] for m in got[:3]]})
 
         def pitch():
             if not self._settings.get("claude_api_key"):
@@ -1040,6 +1041,7 @@ class Api:
         or character) that pop up over the moving picture. "at" spreads the slides across the main game's
         trailer so each one shows a different moment."""
         pics = {p["slot"]: p["url"] for p in pictures}
+        more = {p["slot"]: p.get("more") or [p["url"]] for p in pictures}
         pool = [x for pair in zip(shots["base"], shots["source"]) for x in pair] + shots["base"][len(shots["source"]):] + \
             shots["source"][len(shots["base"]):]
         src = t.from_game.split(" /")[0]
@@ -1067,6 +1069,8 @@ class Api:
             elif sl.hero and arsenal:
                 items = ["%s → %s" % (gun, like) for gun, like, _q in arsenal]
             add(caption, pics.get(sl.name), "★ Hero" if sl.hero else "", items, pics.get(sl.name) or (shots["source"] or [None])[0])
+            if pics.get(sl.name):
+                slides[-1].update(real=True, gallery=more[sl.name])
         kit = KITS.get(t.id)
         if kit and r and r.id == "schedule1":
             shop = [x.split("=")[-1].replace("@", "  $") for x in kit.get("shop", []) if "magazine" not in x.lower()]
@@ -1081,6 +1085,9 @@ class Api:
         slides = slides[:10]
         for i, sl in enumerate(slides):
             sl["at"] = round(0.12 + 0.76 * i / max(1, len(slides) - 1), 3)
+            # for a blended frame: the main game's scene, with the other game melted into it
+            sl["host_shot"] = shots["base"][(i + 1) % len(shots["base"])] if shots["base"] else None
+            sl["source_shot"] = shots["source"][i % len(shots["source"])] if shots["source"] else None
         return slides
 
     def owned_cover(self, key):

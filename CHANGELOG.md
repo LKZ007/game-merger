@@ -3,6 +3,9 @@
 Every release, newest first. Downloads are on the [releases page](https://github.com/LKZ007/game-merger/releases).
 The app was called Game Merger before 3.8.0.
 
+## v3.23.0 (2026-10-22)
+- **Every preview slide is now one picture of the merged game.** There's no more split screen and no box in the corner (that box was also showing up black). When a mod for the main game has screenshots, the slide shows those: the two games really merged, like a Forza-style car in Night City. They play as a slow moving gallery, marked "Mod screenshot". When no mod has pictures, Frankenstein blends both trailers into one frame. The main game is the scene, the other game is melted into its middle with soft edges, and one colour grade and light sweep cover both. The guns, items and characters it brings over still pop up by name. It is still labelled as a preview, not footage of your merge.
+
 ## v3.22.0 (2026-10-22)
 - **Covers that move.** The picture inside each game's box now plays a short muted loop from the game's Steam trailer, like a GIF, while the box keeps floating in 3D. Merged games show both games moving side by side. Only the boxes on screen play, and the one under your mouse always does. Games without a trailer get a slow pan across their art. With Windows' reduce animations setting, everything stays still. Clips stream from Steam and aren't saved.
 - **Preview slides move too.** Each slide plays a different moment of the main game's trailer, with the other game's trailer (or the mod's own picture) in the corner. The things it brings over pop up one by one, for example each Hood Warfare gun and what it is in Schedule I ("Choppa (AK) → AK47"), the gun shop prices, the starter kit and the rival boss, weapons dealer and crooked cop. These are trailers and labels, not footage of your merged game.

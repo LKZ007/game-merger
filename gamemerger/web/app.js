@@ -1503,19 +1503,26 @@ async function previewMerge(key, themeId) {
     const left = p.base_art || state.covers[key] || genCover(g.name);
     const right = p.source_art || (other && state.covers[other.key]) || genCover(t.from_game);
     // slide 0: both games fused into one picture; then one slide per thing you can do in the merge
-    const slides = [{ fused: true, caption: `${g.name} × ${t.from_game.split(" /")[0]}` }, ...(p.slides || [])];
-    const slideHtml = (sl, i) => sl.fused
-      ? `<div class="pv-slide pv-fused ${i ? "" : "on"}"><div class="pv-half l" style="background-image:url('${esc(left)}')"></div>
-          <div class="pv-half r" style="background-image:url('${esc(right)}')"></div><div class="pv-seam"></div>
-          <div class="pv-cap big"><span>${esc(g.name)}</span><b>×</b><span>${esc(t.from_game.split(" /")[0])}</span></div></div>`
-      : `<div class="pv-slide ${i ? "" : "on"}"><div class="pv-img" style="background-image:url('${esc(sl.image || genCover(sl.caption))}')"></div>
-          ${(sl.items || []).length ? `<div class="pv-items">${sl.items.map((x, k) => `<span style="--d:${(0.5 + k * 0.45).toFixed(2)}s">${esc(x)}</span>`).join("")}</div>` : ""}
-          <div class="pv-cap">${sl.tag ? `<span class="tag live">${esc(sl.tag)}</span> ` : ""}${esc(sl.caption)}</div></div>`;
+    // Every slide is ONE picture of the merged game, never two side by side:
+    // - a screenshot from a mod for the main game (the two games really merged), shown as a moving gallery, or
+    // - a single blended frame: the main game's trailer as the world, the other game's trailer melted into its
+    //   middle with soft edges, both under one colour grade and light sweep.
+    const src = t.from_game.split(" /")[0];
+    const hero = (p.slides || []).find((x) => x.real && x.tag === "★ Hero") || (p.slides || []).find((x) => x.real);
+    const slides = [{ fused: true, caption: `${g.name} × ${src}`, real: !!hero, gallery: hero ? hero.gallery : [], at: 0.35 }, ...(p.slides || [])];
+    const items = (sl) => (sl.items || []).length ? `<div class="pv-items">${sl.items.map((x, k) => `<span style="--d:${(0.5 + k * 0.45).toFixed(2)}s">${esc(x)}</span>`).join("")}</div>` : "";
+    const art = (sl) => sl.real
+      ? (sl.gallery && sl.gallery.length ? sl.gallery : [sl.image]).map((u, k, all) => `<div class="pv-img pv-g ${all.length > 1 ? "" : "solo"}" style="background-image:url('${esc(u)}');--n:${all.length};--k:${k}"></div>`).join("")
+      : `<div class="pv-img pv-host" style="background-image:url('${esc(sl.host_shot || left)}')"></div>
+         <div class="pv-img pv-mixin" style="background-image:url('${esc(sl.source_shot || right)}')"></div><div class="pv-grade"></div>`;
+    const tag = (sl) => sl.real ? `<span class="tag live" title="A picture from a mod for ${esc(g.name)}: the two games really merged">${esc(sl.fused ? "Real mod screenshot" : (sl.tag ? sl.tag + " · " : "") + "Mod screenshot")}</span> ` : sl.tag ? `<span class="tag live">${esc(sl.tag)}</span> ` : "";
+    const slideHtml = (sl, i) => `<div class="pv-slide ${sl.real ? "pv-real" : "pv-comp"} ${sl.fused ? "pv-fused" : ""} ${i ? "" : "on"}">${art(sl)}${sl.fused ? "" : items(sl)}
+        ${sl.fused ? `<div class="pv-cap big">${tag(sl)}<span>${esc(g.name)}</span><b>×</b><span>${esc(src)}</span></div>`
+          : `<div class="pv-cap">${tag(sl)}${esc(sl.caption)}</div>`}</div>`;
     $("#modalBody").innerHTML = `
       <div class="pv-label">Preview · trailers and mod pictures, not your merged game</div>
       <div class="pv-pitch"><p>${esc(p.summary)}</p></div>
-      <div class="pv-show" id="pvShow"><div class="pv-bg" id="pvBg"></div>${slides.map(slideHtml).join("")}
-        <div class="pv-inset" id="pvInset" hidden><div class="pv-inset-art" id="pvInsetArt"></div><span id="pvInsetL"></span></div>
+      <div class="pv-show" id="pvShow"><div class="pv-bg" id="pvBg"></div><div class="pv-mix" id="pvMix"></div>${slides.map(slideHtml).join("")}
         <button class="pv-nav prev" aria-label="Previous">‹</button><button class="pv-nav next" aria-label="Next">›</button>
         <div class="pv-dots">${slides.map((_, i) => `<button class="${i ? "" : "on"}" data-i="${i}" aria-label="Slide ${i + 1}"></button>`).join("")}</div></div>
       ${p.clips.length ? `<h3 class="pv-h">Trailers</h3><div class="pv-clips">${p.clips.map(clip).join("")}</div>` : ""}
@@ -1523,12 +1530,12 @@ async function previewMerge(key, themeId) {
       <p class="muted small">Clips stream straight from Steam and pictures from Nexus Mods at low quality, so nothing is saved to your PC. Your merge will be ${esc(g.name)} with these mods layered on. <a href="#" id="pvVideos">Watch mod showcase videos</a></p>`;
     $("#pvVideos").onclick = (e) => { e.preventDefault(); call("open_url", p.videos_url); };
     let cur = 0;
-    // GIF-style: the main game's trailer moves behind every slide (a different moment each), the other game's
-    // trailer (or the mod's own picture) sits in the corner, and the named guns, items or characters pop up
+    // the blended frames move: both trailers play under the slide, each at a different moment per slide
     const mv = p.moving || {};
     const bg = !calm.matches && mv.base ? clipVideo(mv.base, "") : null;
-    const ins = !calm.matches && mv.source ? clipVideo(mv.source, "") : null;
+    const mix = !calm.matches && mv.source ? clipVideo(mv.source, "") : null;
     if (bg) { $("#pvBg").appendChild(bg); bg.addEventListener("playing", () => $("#pvShow")?.classList.add("live")); }
+    if (mix) { $("#pvMix").appendChild(mix); mix.addEventListener("playing", () => $("#pvShow")?.classList.add("live-mix")); }
     const seek = (v, at) => {
       if (!v) return;
       const go = () => { v.dataset.start = (v.duration * at).toFixed(1); v.currentTime = +v.dataset.start; v.play().catch(() => {}); };
@@ -1538,18 +1545,12 @@ async function previewMerge(key, themeId) {
       cur = (i + slides.length) % slides.length;
       $("#pvShow").querySelectorAll(".pv-slide").forEach((el, j) => el.classList.toggle("on", j === cur));
       $("#pvShow").querySelectorAll(".pv-dots button").forEach((el, j) => el.classList.toggle("on", j === cur));
-      const sl = slides[cur], inset = $("#pvInset"), art = $("#pvInsetArt");
-      if (sl.fused) { bg && bg.pause(); ins && ins.pause(); inset.hidden = true; return; }
+      const sl = slides[cur];
+      if (sl.real) { bg && bg.pause(); mix && mix.pause(); return; }  // a real merged screenshot needs nothing behind it
       seek(bg, sl.at || 0.3);
-      inset.hidden = false;
-      $("#pvInsetL").textContent = "From " + (sl.from || t.from_game);
-      if (ins && !(sl.inset && /nexus|mods/i.test(sl.inset))) {
-        if (ins.parentNode !== art) { art.innerHTML = ""; art.appendChild(ins); }
-        seek(ins, 1 - (sl.at || 0.3) * 0.8);
-      } else if (sl.inset) { ins && ins.pause(); art.innerHTML = `<img src="${esc(sl.inset)}" alt="">`; }
-      else inset.hidden = true;
-      inset.classList.remove("pop"); void inset.offsetWidth; inset.classList.add("pop");
+      seek(mix, 1 - (sl.at || 0.3) * 0.8);
     };
+    show(0);
     let timer = null;
     const tick = () => { clearInterval(timer); timer = setInterval(() => { if (!$("#pvShow")) return clearInterval(timer); show(cur + 1); }, 4200); };
     tick();

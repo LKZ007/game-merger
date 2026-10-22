@@ -57,7 +57,8 @@ WEB = {
     "moving pictures inside the covers": ["clipVideo", "face-clip", "watchClips", "cover-pan"],
     "roomy merge card: big Play, the rest under More": ["play-big", "data-more", "more-menu", "closeMore"],
     "what's inside the game itself": ["In the game:"],
-    "animated preview slides with named guns, items, characters": ["pv-items", "pvInset", "pv-bg"],
+    "animated preview slides with named guns, items, characters": ["pv-items", "pv-bg"],
+    "each preview slide is one merged picture (mod screenshot or blended frame)": ["pv-real", "pv-mixin", "pv-grade", "Mod screenshot"],
     "Play as, with how close it gets": ["How close"],
 }
 
@@ -77,6 +78,7 @@ class FeatureChecklist(unittest.TestCase):
 
     def test_page(self):
         web = "".join(read(PKG, "web", f) for f in ("index.html", "app.js", "app.css"))
+        self.assertNotIn("pv-half", read(PKG, "web", "app.js"), "preview slides are never two pictures side by side")
         gone = ["%s: %s" % (f, n) for f, names in WEB.items() for n in names if n not in web]
         self.assertEqual(gone, [], "features missing from the page")
 

@@ -470,24 +470,35 @@ body.pad .tile:focus .face { border: 2px solid var(--accent); box-shadow: 0 0 30
 @keyframes cover-pan { 0% { background-position: 0% 30%; } 100% { background-position: 100% 70%; } }
 @media (prefers-reduced-motion: reduce) { .case .face.pan { animation: none; background-size: cover; } .case .face video.face-clip { display: none; } }
 
-/* ---------- preview slides that move: trailer behind, the other game in the corner, named things popping up ---------- */
-.pv-bg { position: absolute; inset: 0; }
-.pv-bg video.face-clip { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity .6s; }
+/* ---------- preview slides: one merged picture each, moving ---------- */
+.pv-bg, .pv-mix { position: absolute; inset: 0; }
+.pv-bg video.face-clip, .pv-mix video.face-clip { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity .6s; }
 .pv-bg video.face-clip.on { opacity: 1; }
-.pv-show.live .pv-slide:not(.pv-fused) .pv-img { opacity: .18; mix-blend-mode: screen; }
-.pv-show.live .pv-slide:not(.pv-fused) { background: none; }
+/* the other game melts into the middle of the main game's scene: soft edges, no frame, no split */
+.pv-mix video.face-clip, .pv-mixin { -webkit-mask-image: radial-gradient(ellipse 34% 42% at 50% 58%, #000 45%, transparent 100%);
+  mask-image: radial-gradient(ellipse 34% 42% at 50% 58%, #000 45%, transparent 100%); filter: saturate(1.15) contrast(1.05); }
+.pv-mix video.face-clip.on { opacity: .92; }
+.pv-mixin { inset: 0; opacity: .92; }
+.pv-show.live .pv-comp .pv-host { opacity: 0; }
+.pv-show.live-mix .pv-comp .pv-mixin { opacity: 0; }
+/* one colour grade and light over both, so they read as one world */
+.pv-grade { position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(ellipse at 50% 55%, transparent 45%, rgba(8,3,20,.65) 100%),
+              linear-gradient(160deg, rgba(139,92,246,.28), rgba(20,184,166,.12) 55%, rgba(236,72,153,.22)); mix-blend-mode: soft-light; }
+.pv-slide::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(105deg, transparent 35%, rgba(255,255,255,.16) 50%, transparent 65%);
+  transform: translateX(-100%); }
+.pv-slide.on::after { animation: pv-sweep 4.2s ease-in-out .4s; }
+@keyframes pv-sweep { to { transform: translateX(100%); } }
+/* a real merged screenshot (from a mod for the main game): a slow moving gallery */
+.pv-real .pv-g { opacity: 0; }
+.pv-real .pv-g:first-child, .pv-real .pv-g.solo { opacity: 1; }
+.pv-slide.on.pv-real .pv-g { animation: pv-zoom 5s ease-out both, pv-gal calc(var(--n) * 1.6s) linear calc(var(--k) * 1.6s) infinite; }
+.pv-slide.on.pv-real .pv-g.solo { animation: pv-zoom 5s ease-out both; opacity: 1; }
+@keyframes pv-gal { 0% { opacity: 0; } 8%, 33% { opacity: 1; } 41%, 100% { opacity: 0; } }
 .pv-items { position: absolute; left: 18px; top: 16px; display: flex; flex-direction: column; gap: 7px; max-width: 46%; z-index: 1; }
 .pv-items span { align-self: flex-start; font-size: 14px; font-weight: 700; color: #fff; padding: 6px 12px 6px 26px; border-radius: 8px; position: relative;
   background: rgba(20,10,40,.82); border: 1px solid #8b5cf6; box-shadow: 0 0 16px rgba(139,92,246,.45); opacity: 0; transform: translateX(-14px); }
 .pv-items span::before { content: ""; position: absolute; left: 10px; top: 50%; width: 8px; height: 8px; margin-top: -4px; border-radius: 50%; background: #c4a5ff; box-shadow: 0 0 8px #a855f7; }
 .pv-slide.on .pv-items span { animation: pv-pop .45s ease-out var(--d) forwards; }
 @keyframes pv-pop { to { opacity: 1; transform: none; } }
-.pv-inset { position: absolute; right: 16px; top: 34px; width: 31%; aspect-ratio: 16 / 9; border-radius: 10px; overflow: hidden; z-index: 1;
-  border: 2px solid #c4a5ff; box-shadow: 0 0 24px rgba(168,85,247,.6), 0 10px 30px rgba(0,0,0,.6); background: #0d0818; }
-.pv-inset[hidden] { display: none; }
-.pv-inset.pop { animation: pv-inset .6s ease-out; }
-@keyframes pv-inset { from { opacity: 0; transform: scale(.85) translateY(-8px); } to { opacity: 1; transform: none; } }
-.pv-inset-art, .pv-inset-art img, .pv-inset-art video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
-.pv-inset-art video.face-clip { opacity: 1; }
-.pv-inset span { position: absolute; left: 0; right: 0; bottom: 0; padding: 14px 8px 5px; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #fff; background: linear-gradient(transparent, rgba(0,0,0,.8)); }
-@media (prefers-reduced-motion: reduce) { .pv-items span { opacity: 1; transform: none; animation: none !important; } .pv-inset.pop { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .pv-items span { opacity: 1; transform: none; animation: none !important; } .pv-slide.on::after, .pv-slide.on.pv-real .pv-g { animation: none; } }
