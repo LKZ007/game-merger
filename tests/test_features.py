@@ -179,5 +179,43 @@ class FeatureChecklist(unittest.TestCase):
         self.assertIn(VERSION, read(ROOT, "installer", "release-notes.md"))
 
 
+    def test_schedule1_mod_reaches_the_game(self):
+        # 3.27: the mod is added on every Play, saves never clash, and the card says when it didn't load
+        api = read(PKG, "api.py")
+        self.assertIn("_mod_check", api)
+        self.assertIn("builtin_error", api)
+        self.assertIn("write_safely", read(PKG, "installer.py"))
+        self.assertNotIn('"manifest.json.tmp"', read(PKG, "installer.py"))
+        js = read(PKG, "web", "app.js")
+        self.assertIn("mod_check", js)
+
+    def test_schedule1_menu_loading_screen_and_replica_guns(self):
+        src = os.path.join(ROOT, "mods", "schedule1")
+        for f in ("Rt.cs", "Loading.cs", "Guns.cs"):
+            self.assertTrue(os.path.isfile(os.path.join(src, f)), f)
+        menu = read(ROOT, "mods", "schedule1", "MainMenu.cs")
+        self.assertIn("Inject", menu)
+        self.assertIn("new game", menu)
+        self.assertNotIn("FindObjectsOfType<", read(ROOT, "mods", "schedule1", "World.cs"))  # both builds of the game
+        dll = open(os.path.join(PKG, "mods", "schedule1", "Frankenstein.dll"), "rb").read()
+        for word in ("HOOD TIP", "Equippable_RangedWeapon", "Creative"):
+            self.assertIn(word.encode("utf-16-le"), dll, word)
+
+    def test_schedule1_gangs(self):
+        # 3.27: gangs with their own districts, initiation and ranks, your own gang, turf wars, robbing and trading
+        from gamemerger.api import GANGS
+        gangs = GANGS["hoodwarfare"]
+        names = " ".join(g["name"] for g in gangs)
+        for want in ("Crips", "Bloods", "Mafia", "Yakuza", "London"):
+            self.assertIn(want, names)
+        self.assertEqual(len({g["region"] for g in gangs}), len(gangs))
+        ids = {g["id"] for g in gangs}
+        for g in gangs:
+            self.assertIn(g["rival"], ids)
+            self.assertEqual(len(g["ranks"]), 6)
+        dll = open(os.path.join(PKG, "mods", "schedule1", "Frankenstein.dll"), "rb").read()
+        for word in ("GANGS", "Initiation", "Turf war", "Recruit", "Sell a brick", "Drugs and guns"):
+            self.assertIn(word.encode("utf-16-le"), dll, word)
+
 if __name__ == "__main__":
     unittest.main()

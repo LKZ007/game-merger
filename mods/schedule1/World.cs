@@ -49,6 +49,7 @@ namespace Frankenstein
             _inTown = name != null && name.Length > 0 && name.IndexOf("Menu", StringComparison.OrdinalIgnoreCase) < 0;
             if (_inTown) _hintUntil = Time.unscaledTime + 25f;
             Carry.Scene(_inTown);
+            Gangs.Scene(_inTown);
             if (!_inTown || Style.Length == 0) return;
             _cardUntil = Time.unscaledTime + 6f;  // the merged title card
             _made.Clear();
@@ -63,11 +64,11 @@ namespace Frankenstein
         }
 
         // ---------- the zone, from the town's own props ----------
-        static List<GameObject> Kinds()
+        internal static List<GameObject> Kinds()
         {
             var seen = new HashSet<string>();
             var out_ = new List<GameObject>();
-            foreach (var r in UnityEngine.Object.FindObjectsOfType<MeshRenderer>())
+            foreach (var r in Rt.All<MeshRenderer>())
             {
                 if (r == null || out_.Count >= 14) continue;
                 var go = r.gameObject;

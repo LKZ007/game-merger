@@ -55,8 +55,8 @@ BUILTIN = {
                   "settings": "UserData/Frankenstein/settings.json", "bridge": "UserData/Frankenstein/commands.json",
                   "catalog": "UserData/Frankenstein/world.json",
                   "what": "Item menu: press F6 (or Back + Y) in game for every item, mods' items included.",
-                  "ingame": "On the main menu, under Continue and New game: Frankenstein's panel with Creative (own saves) "
-                            "and the rundown. While you play: F6 (or Back + Y) for every item."},
+                  "ingame": "On the main menu: Creative under New Game (its own saves). While you play: F6 (or Back + Y) for "
+                            "every item, F8 for Frankenstein's menu, F9 for the gangs (Hood Warfare merges)."},
     "cyberpunk2077": {"label": "Frankenstein sandbox menu", "dest": "bin/x64/plugins/cyber_engine_tweaks/mods",
                       "settings": "bin/x64/plugins/cyber_engine_tweaks/mods/frankenstein_items/settings.json",
                       "bridge": "bin/x64/plugins/cyber_engine_tweaks/mods/frankenstein_items/commands.json",
@@ -125,6 +125,63 @@ KITS = {
                     "items": ["AK47=Choppa*1", "AK47 Magazine*3", "SMG=Uzi*1", "SMG Magazine*3", "M1911=Glock*1",
                               "M1911 Magazine*4", "Pump Shotgun=Pump Shotty*1", "Shotgun Shell*14", "Sniper=.308 Sniper*1",
                               "Sniper Magazine*2", "Revolver*1", "Revolver Cylinder*3", "Machete=Blade*1"]},
+}
+
+# The Extension game's guns rebuilt on the Host's (Frankenstein's Schedule I mod does it when you hold one).
+# match: words in the held gun's name. damage/rate/reload: times the gun's own; mag: rounds. length/size: shape.
+# parts: blocks added in the gun's own material. Hood Warfare's real numbers aren't published: these are estimates
+# from how its guns play (the Choppa hits hard and fast, the Uzi sprays, the .308 one-shots).
+REPLICAS = {
+    "hoodwarfare": [
+        {"match": "ak47", "name": "Choppa", "damage": 1.35, "rate": 1.15, "mag": 30, "auto": "true", "length": 1.1, "parts": "curved_mag"},
+        {"match": "smg", "name": "Uzi", "damage": 0.8, "rate": 1.45, "mag": 32, "auto": "true", "length": 0.8, "size": 0.9,
+         "parts": "ext_mag"},
+        {"match": "m1911", "name": "Glock", "damage": 0.9, "rate": 1.3, "mag": 17, "length": 0.9, "parts": "ext_mag"},
+        {"match": "pumpshotgun", "name": "Pump Shotty", "damage": 1.25, "reload": 0.85, "mag": 6, "length": 1.05},
+        {"match": "sniper", "name": ".308 Sniper", "damage": 1.5, "rate": 0.8, "mag": 5, "length": 1.15, "parts": "scope"},
+        {"match": "revolver", "name": "Revolver", "damage": 1.3, "rate": 0.9, "mag": 6},
+        {"match": "minigun", "name": "Minigun", "damage": 1.0, "mag": 200, "auto": "true", "parts": "drum"},
+        {"match": "rpg", "name": "RPG", "damage": 1.2, "mag": 1},
+    ],
+}
+# MoreGuns.cfg (the More Guns mod's own settings): its guns' names and numbers set to the replicas'.
+MOREGUNS = {"hoodwarfare": {"ak47": {"Display Name": '"Choppa"', "Damage": 63.0, "Magazine Size": 30},
+                            "smg": {"Display Name": '"Uzi"', "Damage": 22.0, "Magazine Size": 32},
+                            "sniper": {"Display Name": '".308 Sniper"', "Damage": 210.0, "Magazine Size": 5},
+                            "minigun": {"Magazine Size": 200}}}
+# The Extension game's gangs, each running one of Schedule I's districts (Frankenstein's Schedule I mod, F9).
+# weapon: what their fighters carry (the game's own); guns: what they sell ("item name@price"); rival: who they
+# send you to rob for your initiation. Prices: how much they pay and charge, so trading across districts pays.
+GANGS = {
+    "hoodwarfare": [
+        {"id": "crips", "name": "Crips", "region": "Northtown", "color": "#2563EB", "weapon": "Avatar/Equippables/M1911",
+         "rival": "bloods", "product": "OG Kush", "drug_price": 0.9, "gun_price": 1.0,
+         "ranks": ["Lil Homie", "Homie", "Soldier", "OG", "Big Homie", "Shot Caller"], "guns": ["M1911@900", "SMG@2200"]},
+        {"id": "bloods", "name": "Bloods", "region": "Westville", "color": "#DC2626", "weapon": "Avatar/Equippables/M1911",
+         "rival": "crips", "product": "Sour Diesel", "drug_price": 1.0, "gun_price": 0.95,
+         "ranks": ["Lil Homie", "Damu", "Soldier", "OG", "Big Homie", "Shot Caller"], "guns": ["M1911@850", "Revolver@1200"]},
+        {"id": "london", "name": "South London Mandem", "region": "Downtown", "color": "#9CA3AF", "weapon": "Avatar/Equippables/Knife",
+         "rival": "eastlondon", "product": "Green Crack", "drug_price": 1.15, "gun_price": 1.25,
+         "ranks": ["Younger", "Runner", "Shotter", "Elder", "Top Boy", "Main Man"], "guns": ["Machete@300", "Pump Shotgun@1900"]},
+        {"id": "yakuza", "name": "Yakuza", "region": "Docks", "color": "#F5F5F5", "weapon": "Avatar/Equippables/Knife",
+         "rival": "mafia", "product": "Meth", "drug_price": 1.3, "gun_price": 1.1,
+         "ranks": ["Kobun", "Wakashu", "Kyodai", "Wakagashira", "Saiko-komon", "Oyabun"], "guns": ["Machete@280", "Sniper@4600"]},
+        {"id": "mafia", "name": "Mafia", "region": "Uptown", "color": "#111827", "weapon": "Avatar/Equippables/Revolver",
+         "rival": "yakuza", "product": "Cocaine", "drug_price": 1.45, "gun_price": 1.35,
+         "ranks": ["Associate", "Soldato", "Capo", "Consigliere", "Underboss", "Don"], "guns": ["Revolver@1300", "AK47@3800"]},
+        {"id": "eastlondon", "name": "East London Firm", "region": "Suburbia", "color": "#16A34A", "weapon": "Avatar/Equippables/BrokenBottle",
+         "rival": "london", "product": "Granddaddy Purple", "drug_price": 1.2, "gun_price": 1.15,
+         "ranks": ["Tiny", "Youngen", "Shotter", "Elder", "Top Boy", "Guv'nor"], "guns": ["Pump Shotgun@1800", "SMG@2300"]},
+    ],
+}
+LOADING_TIPS = {
+    "hoodwarfare": ["Handy Hank's sells the Choppa, Uzi, .308 and more for game money.",
+                    "Hold the block (F8 on your turf) for 3 minutes to earn $1,500.",
+                    "The Choppa hits hard: stay behind cover while you reload.",
+                    "Police shoot back here. Lose them before you go home.",
+                    "F9: the gangs. Join one and climb the ranks, or start your own and take their districts.",
+                    "Rival dealers work their gang's corners. Knock one out and press G to rob them.",
+                    "Creative: press F6 for every item, every gun included."],
 }
 
 # The merged game's guns and what stands in for each in the Host game. "close": the same kind of gun, works
@@ -547,6 +604,9 @@ class Api:
                 if touched:
                     installer.harden(m.target_path)
                 m.data["originals"] = {"time": time.time(), "saves_restored": orig, "game_files": touched[:20]}
+                check = self._mod_check(m)
+                if check:
+                    m.data["mod_check"] = check
                 m.save()
             except (OSError, ValueError):
                 pass
@@ -558,6 +618,31 @@ class Api:
                 pass  # cloud folder offline: next session tries again
         if mid:
             self._switch_from_game(mid)
+
+    @staticmethod
+    def _mod_check(m):
+        """After playing: did Frankenstein's own mod load? Read from the mod loader's log (MelonLoader's), so the
+        card can say so in plain words instead of leaving you to wonder why a menu didn't show."""
+        if (m.data.get("recipe_id") or "") != "schedule1" or not m.target_path:
+            return None
+        log = os.path.join(m.target_path, "MelonLoader", "Latest.log")
+        try:
+            with open(log, encoding="utf-8", errors="replace") as f:
+                text = f.read()[-400000:]
+        except OSError:
+            return {"time": time.time(), "loaded": False,
+                    "why": "MelonLoader (the mod loader) didn't run, so no mods loaded. Press ⋯ More, Fix crash."}
+        lines = text.splitlines()
+        bad = [x for x in lines if "frankenstein" in x.lower() and re.search(r"(?i)error|exception|failed|missing", x)]
+        loaded = any(re.search(r"(?i)^\W*(\[[^\]]*\]\s*)*Frankenstein v\d", x.strip()) or "[Frankenstein]" in x for x in lines)
+        deps = [x for x in lines if re.search(r"(?i)missing dependenc|incompatib", x)]
+        why = ""
+        if not loaded:
+            why = "Frankenstein's mod didn't load. " + (bad[0].strip()[-200:] if bad else deps[0].strip()[-200:] if deps else
+                                                       "MelonLoader ran but didn't list it.")
+        elif bad:
+            why = "Frankenstein's mod loaded with a problem: " + bad[0].strip()[-200:]
+        return {"time": time.time(), "loaded": loaded and not bad, "why": why}
 
     def _switch_from_game(self, merge_id):
         """Creative from inside the game: Frankenstein's own mod leaves switch.json next to its settings and the
@@ -1865,7 +1950,10 @@ class Api:
         src = os.path.join(os.path.dirname(os.path.abspath(__file__)), "mods", r.id)
         stamp = self._builtin_stamp(src)
         if any(i["label"] == b["label"] for i in m.data.get("installs", [])):
-            if os.path.isdir(src) and m.data.get("builtin_stamp") != stamp:
+            missing = os.path.isdir(src) and m.target_path and any(
+                not os.path.isfile(os.path.join(m.target_path, *(b["dest"] + "/" + f).split("/")))
+                for f in os.listdir(src) if os.path.isfile(os.path.join(src, f)))
+            if os.path.isdir(src) and (m.data.get("builtin_stamp") != stamp or missing):
                 # a newer Frankenstein: bring its own mod in this merge up to date
                 for root, _d, files in os.walk(src):
                     for f in files:
@@ -1895,9 +1983,11 @@ class Api:
         try:
             m.install(z, b["label"], r.layout, log=log)
             m.data["builtin_stamp"] = stamp
+            m.data.pop("builtin_error", None)
             m.save()
             log("Added %s." % b["label"])
         except Exception as e:
+            m.data["builtin_error"] = str(e)[:300]
             log("✖ %s failed: %s" % (b["label"], e))
 
     @staticmethod
@@ -1981,19 +2071,18 @@ class Api:
                 cmds = []
             cmds.append(req)
             text = json.dumps(cmds)
-        tmp = p + ".tmp"
-        with open(tmp, "w", encoding="utf-8") as f:
-            f.write(text)
-        os.replace(tmp, p)
+        installer.write_safely(p, text)
         return {"sent": True, "live": self._playing == merge_id}
 
     @staticmethod
     def _ingame(m):
         """What Frankenstein's own mod puts inside this merge's game (menus, keys), or "" if it has none there."""
         b = BUILTIN.get(m.data.get("recipe_id") or "")
-        if b and b.get("ingame") and any(i["label"] == b["label"] for i in m.data.get("installs", [])):
+        if not (b and b.get("ingame")):
+            return ""
+        if any(i["label"] == b["label"] for i in m.data.get("installs", [])):
             return b["ingame"]
-        return ""
+        return "Frankenstein's own mod goes into this merge the next time you press Play, then: " + b["ingame"]
 
     def _ingame_rundown(self, m, creative):
         """The rundown, short enough for a menu inside the game."""
@@ -2022,6 +2111,8 @@ class Api:
                      "world": mergeplan.settings(r.id, m.data.get("theme_id", ""), source.split(" /")[0]),
                      "host": m.data.get("game_name", ""),
                      "carry": carryover.settings(r.id, m.data.get("carry"))}
+        if r.id == "schedule1":
+            extra_all.update(self._schedule1_extras(m, r, source))
         kit = KITS.get(m.data.get("theme_id"))
         if m.data.get("story_kit"):
             kit = {"name": "%s starter kit" % (m.data.get("source_name") or m.name), "items": m.data["story_kit"]}
@@ -2034,6 +2125,51 @@ class Api:
                 if shop.get("shop"):
                     extra.update(shop=shop["shop"], shop_name=shop.get("shop_name", "hardware"))
                 json.dump(dict({"item_menu": on}, **dict(extra_all, **extra)), f)
+        except OSError:
+            pass
+
+    def _schedule1_extras(self, m, r, source):
+        """The merge's own loading screen and replica guns for Frankenstein's Schedule I mod."""
+        theme = m.data.get("theme_id", "")
+        ext = (source or "").split(" /")[0].replace(" style", "")
+        out = {"guns": REPLICAS.get(theme, []), "gangs": GANGS.get(theme, []),
+               "loading": {"title": m.name, "host": m.data.get("game_name") or "Schedule I", "extension": ext,
+                           "sub": m.data.get("tagline", ""), "accent": "#E11D48" if theme == "hoodwarfare" else "#8B5CF6",
+                           "tips": LOADING_TIPS.get(theme) or [x for x in self._ingame_rundown(m, False)][:6]}}
+        dest = os.path.join(m.target_path, "UserData", "Frankenstein", "loading.jpg")
+        if not os.path.isfile(dest):
+            def art():
+                try:
+                    src = m.data.get("source_appid") or (covers.search_appid(ext) if ext else "")
+                    got = covers.loading_art(m.data.get("cover_appid") or "3164500", src, m.id,
+                                             (225, 29, 72) if theme == "hoodwarfare" else (139, 92, 246))
+                    if got:
+                        os.makedirs(os.path.dirname(dest), exist_ok=True)
+                        shutil.copy2(got, dest)
+                except Exception:
+                    pass  # no picture: the loading screen still shows the title and tips
+            threading.Thread(target=art, daemon=True).start()
+        self._moreguns_cfg(m, theme)
+        return out
+
+    @staticmethod
+    def _moreguns_cfg(m, theme):
+        """Give More Guns' own guns the replicas' names and numbers in its settings file (made on its first run)."""
+        want = MOREGUNS.get(theme)
+        p = os.path.join(m.target_path, "UserData", "MoreGuns.cfg")
+        if not want or not os.path.isfile(p):
+            return
+        try:
+            with open(p, encoding="utf-8") as f:
+                text = f.read()
+            new = text
+            for gid, values in want.items():
+                for key, val in values.items():
+                    v = ("%.1f" % val) if isinstance(val, float) else str(val)
+                    new = re.sub(r'(?m)^(\s*"%s %s"\s*=\s*).*$' % (re.escape(gid), re.escape(key)),
+                                 lambda mm: mm.group(1) + v, new)
+            if new != text:
+                installer.write_safely(p, new)
         except OSError:
             pass
 
@@ -2407,6 +2543,7 @@ class Api:
                         "offline_lock": bool(self._recipe(m.data.get("recipe_id")) and
                                              self._recipe(m.data.get("recipe_id")).launch_args and m.mode != MODE_INPLACE),
                         "ingame": self._ingame(m),
+                        "mod_check": m.data.get("mod_check"), "builtin_error": m.data.get("builtin_error", ""),
                         "playing": self._playing == m.id, "needs_upgrade": m.data.get("upgraded", 1) < self.UPGRADE, "originals": self._originals_note(m), "save_fix": m.data.get("save_fix"),
                         "sources": self._sources_for(self._recipe(m.data.get("recipe_id"))),
                         "mc_loader": m.data.get("mc_loader"), "mc_version": m.data.get("mc_version"),
@@ -2463,11 +2600,11 @@ class Api:
         if not exe:
             raise MergeError("Couldn't find the game's .exe in %s." % m.target_path)
         self._switch_creative(m, r, creative)
-        if any(i["label"] == BUILTIN.get(r.id if r else "", {}).get("label") for i in m.data.get("installs", [])):
+        if BUILTIN.get(r.id if r else ""):
             try:
-                self._install_builtin(m, r, lambda *_: None)  # Frankenstein's own mod, kept up to date
-            except Exception:
-                pass
+                self._install_builtin(m, r, lambda *_: None)  # Frankenstein's own mod: added if missing, kept up to date
+            except Exception as e:
+                m.data["builtin_error"] = str(e)[:300]
         self._builtin_settings(m, r, creative)
         m.data["plays"] = m.data.get("plays", 0) + 1
         m.save()

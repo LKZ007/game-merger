@@ -90,15 +90,23 @@ SHOWCASE = {
     ("schedule1", "hoodwarfare"): {
         "zone": "The Block: a Hood Warfare street corner built from Schedule I's own props (dumpsters, fences, cars, crates) "
                 "where you stand",
-        "areas": ["Your block becomes a Hood Warfare turf", "Handy Hank's hardware store becomes the gun shop",
-                  "The rival boss's corner becomes enemy turf in the story"],
+        "areas": ["Six gangs each run a district: Crips (Northtown), Bloods (Westville), South London Mandem (Downtown), "
+                  "Yakuza (Docks), Mafia (Uptown), East London Firm (Suburbia)",
+                  "Each gang's HQ is built in its district from the town's own props, with its flag",
+                  "Your block becomes a Hood Warfare turf", "Handy Hank's hardware store becomes the gun shop"],
         "lighting": "Hood night: cooler light, purple haze and fog",
-        "terrain": "Schedule I's town stays as it is; the Block is added on top",
-        "modes": ["Hold the block: stay on your block for three minutes to win cash",
+        "terrain": "Schedule I's land can't be made bigger; gang HQs and the Block are new places built on top of it",
+        "modes": ["Gangs (F9): join one through its initiation and climb its ranks, or start your own gang on drugs, "
+                  "guns or both, recruit a crew and take districts in three-wave turf wars",
+                  "Rob rival dealers: knock them out and press G for their cash and product",
+                  "Trade product and guns with the gangs: each pays and charges differently",
+                  "Hold the block: stay on your block for three minutes to win cash",
                   "Gun run: buy the Hood Warfare arsenal at Handy Hank's"],
         "hud": "Hood Warfare HUD: cash, turf status and mode timer in Hood Warfare colours",
-        "loading": "Merged title card (Schedule I × Hood Warfare) when the town loads, plus Frankenstein's panel on the main menu",
-        "items": "Hood Warfare's guns as close Schedule I stand-ins, a starter kit and the gun shop at Handy Hank's",
+        "loading": "A Schedule I × Hood Warfare loading screen (both games' scenes merged, Hood tips), the merged title card, "
+                   "and Creative in the game's own main menu under New Game",
+        "items": "Hood Warfare's guns rebuilt on Schedule I's and More Guns': their fire rate, damage, magazine, reload, "
+                 "length, size and parts (curved mag, extended mag, scope, drum); a starter kit and the gun shop at Handy Hank's",
     },
 }
 

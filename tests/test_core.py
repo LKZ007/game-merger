@@ -693,6 +693,65 @@ class ModSourceAndControllerTests(unittest.TestCase):
         self.assertEqual(storymode.depth(None)["level"], "light")
 
 
+
+class ScheduleOneFixTests(unittest.TestCase):
+    def test_manifest_write_survives_a_locked_or_read_only_file(self):
+        import stat
+        d = tempfile.mkdtemp()
+        p = os.path.join(d, "manifest.json")
+        installer.write_safely(p, "{}")
+        os.chmod(p, stat.S_IREAD)  # read-only, as a copy or restore can leave it
+        installer.write_safely(p, '{"a": 1}')
+        with open(p) as f:
+            self.assertEqual(json.load(f), {"a": 1})
+        self.assertEqual([x for x in os.listdir(d) if x.endswith(".tmp")], [])
+        # many threads saving at once never clash on one temporary file
+        import threading
+        ts = [threading.Thread(target=installer.write_safely, args=(p, json.dumps({"n": i}))) for i in range(12)]
+        [t.start() for t in ts]
+        [t.join() for t in ts]
+        with open(p) as f:
+            self.assertIn("n", json.load(f))
+
+    def test_mod_check_reads_melonloader_log(self):
+        from gamemerger import api
+        d = tempfile.mkdtemp()
+        m = types.SimpleNamespace(data={"recipe_id": "schedule1"}, target_path=d)
+        self.assertFalse(api.Api._mod_check(m)["loaded"])  # no log: MelonLoader didn't run
+        os.makedirs(os.path.join(d, "MelonLoader"))
+        log = os.path.join(d, "MelonLoader", "Latest.log")
+        with open(log, "w") as f:
+            f.write("[12:00:01] Loading Mods...\n[12:00:02] [Frankenstein] Frankenstein loaded for X.\n")
+        self.assertTrue(api.Api._mod_check(m)["loaded"])
+        with open(log, "w") as f:
+            f.write("[12:00:01] Failed to load Melon Assembly from Frankenstein.dll: missing dependency S1API\n")
+        c = api.Api._mod_check(m)
+        self.assertFalse(c["loaded"])
+        self.assertIn("S1API", c["why"])
+
+    def test_menu_text_never_says_no_menu_for_schedule1(self):
+        from gamemerger import api
+        m = types.SimpleNamespace(data={"recipe_id": "schedule1", "installs": []})
+        self.assertIn("next time you press Play", api.Api._ingame(m))
+
+    def test_replica_guns_and_loading_screen(self):
+        from gamemerger.api import REPLICAS, LOADING_TIPS, MOREGUNS, Api
+        names = {g["name"] for g in REPLICAS["hoodwarfare"]}
+        self.assertTrue({"Choppa", "Uzi", "Glock", ".308 Sniper"} <= names)
+        for g in REPLICAS["hoodwarfare"]:
+            self.assertTrue(g["match"] and 0.3 < g.get("damage", 1) < 3)
+        self.assertTrue(LOADING_TIPS["hoodwarfare"])
+        d = tempfile.mkdtemp()
+        os.makedirs(os.path.join(d, "UserData"))
+        cfg = os.path.join(d, "UserData", "MoreGuns.cfg")
+        with open(cfg, "w") as f:
+            f.write('["MoreGuns-ak47 Settings"]\n"ak47 Damage" = 70.0\n"ak47 Display Name" = "AK47"\n"ak47 Magazine Size" = 30\n')
+        Api._moreguns_cfg(types.SimpleNamespace(target_path=d), "hoodwarfare")
+        text = open(cfg).read()
+        self.assertIn('"ak47 Display Name" = "Choppa"', text)
+        self.assertIn('"ak47 Damage" = %.1f' % MOREGUNS["hoodwarfare"]["ak47"]["Damage"], text)
+
+
 if __name__ == "__main__":
     unittest.main()
 

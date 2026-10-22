@@ -152,6 +152,7 @@ a:hover { color: #ddd6fe; }
 .more-menu hr { border: 0; border-top: 1px solid var(--line); margin: 6px 4px; width: auto; }
 .ingame { line-height: 1.45; padding: 8px 10px; border-radius: 10px; background: rgba(139,92,246,.10); border: 1px solid rgba(139,92,246,.25); }
 .ingame.muted { background: none; border-color: var(--line); }
+.ingame.warn { background: rgba(245,158,11,.10); border-color: rgba(245,158,11,.4); margin-top: 6px; }
 @media (max-width: 900px) { .merge { flex-wrap: wrap; } .merge-actions { width: 100%; } }
 .tag { display: inline-block; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: var(--card-2); color: var(--text-2); }
 

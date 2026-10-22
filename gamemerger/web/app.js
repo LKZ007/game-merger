@@ -877,6 +877,8 @@ async function loadMerges() {
             </div></div>
         </div>
         ${m.ingame ? `<div class="ingame small" title="Frankenstein's own mod adds these to the game itself">🎮 <strong>In the game:</strong> ${esc(m.ingame)}</div>` : `<div class="ingame small muted">This game has no menu Frankenstein can add to, so Creative stays here.</div>`}
+        ${m.mod_check && !m.mod_check.loaded ? `<div class="ingame small warn" role="status">⚠ <strong>Last time you played:</strong> ${esc(m.mod_check.why)}</div>` : ""}
+        ${m.builtin_error ? `<div class="ingame small warn" role="status">⚠ Frankenstein's own mod couldn't be added: ${esc(m.builtin_error)} It's tried again when you press Play.</div>` : ""}
       </div>
     </div>`).join("");
   const now = state.merges.find((m) => m.playing);

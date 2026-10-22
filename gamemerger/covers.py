@@ -371,3 +371,49 @@ def as_data_uri(path):
     mime = "image/png" if path.lower().endswith(".png") else "image/jpeg"
     with open(path, "rb") as f:
         return "data:%s;base64,%s" % (mime, base64.b64encode(f.read()).decode("ascii"))
+
+
+def steam_full_shots(appid, count=4):
+    """Full-size screenshot links (1920x1080) from a game's Steam page."""
+    if not appid:
+        return []
+    data = json.loads(_get("https://store.steampowered.com/api/appdetails?appids=%s&filters=screenshots" % appid))
+    shots = (((data or {}).get(str(appid)) or {}).get("data") or {}).get("screenshots") or []
+    return [x.get("path_full", "").replace("http://", "https://") for x in shots[:count] if x.get("path_full")]
+
+
+def loading_art(host_appid, source_appid, key, accent=(225, 29, 72)):
+    """A 1920x1080 picture for the merge's in-game loading screen: the Host game's own scene with the Extension
+    game's cut in on a slant, both graded toward the Extension game's colour. None without Pillow or pictures."""
+    try:
+        from PIL import Image, ImageDraw, ImageEnhance, ImageOps
+    except ImportError:
+        return None
+    out = os.path.join(paths.sub("covers"), "loading-%s.jpg" % key)
+    if os.path.isfile(out):
+        return out
+    size = (1920, 1080)
+
+    def shot(appid, pick):
+        try:
+            urls = steam_full_shots(appid)
+            if not urls:
+                return None
+            return ImageOps.fit(Image.open(io.BytesIO(_get(urls[min(pick, len(urls) - 1)]))).convert("RGB"), size)
+        except (OSError, ValueError):
+            return None
+    base = shot(host_appid, 1)
+    if base is None:
+        return None
+    src = shot(source_appid, 0) if source_appid else None
+    if src is not None:
+        mask = Image.new("L", size, 0)
+        ImageDraw.Draw(mask).polygon([(1150, 0), (1920, 0), (1920, 1080), (760, 1080)], fill=255)
+        base.paste(src, (0, 0), mask)
+        d = ImageDraw.Draw(base)
+        d.line([(1150, 0), (760, 1080)], fill=accent, width=10)
+    base = ImageEnhance.Contrast(ImageEnhance.Color(base).enhance(0.85)).enhance(1.12)
+    tint = Image.new("RGB", size, accent)
+    base = Image.blend(base, tint, 0.12)
+    base.save(out, quality=88)
+    return out

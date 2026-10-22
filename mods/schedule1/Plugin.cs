@@ -23,6 +23,7 @@ namespace Frankenstein
         public override void OnInitializeMelon()
         {
             ReadSettings();
+            Melon<Plugin>.Logger.Msg("Frankenstein loaded for " + (MainMenu.Merge.Length > 0 ? MainMenu.Merge : "Schedule I") + (MainMenu.Creative ? " (Creative)" : "") + ".");
             World.Load();
             Story.Load();
             ItemMenu.Load();
@@ -54,6 +55,9 @@ namespace Frankenstein
                     foreach (var k in J.L(w, "modes")) World.Modes.Add(k.ToString());
                 }
                 World.Host = J.S(s, "host", "Schedule I");
+                Loading.Read(J.O(s, "loading"));
+                Guns.Read(J.O(s, "guns"));
+                Gangs.Read(J.O(s, "gangs"));
                 Carry.Read(s is System.Collections.Generic.Dictionary<string, object> d3 && d3.TryGetValue("carry", out var cv) ? cv : null);
                 if (pa != null && J.S(pa, "style").Length > 0)
                 {
@@ -68,12 +72,14 @@ namespace Frankenstein
             }
         }
 
-        public override void OnSceneWasInitialized(int buildIndex, string sceneName) { MainMenu.Scene(sceneName); World.Scene(sceneName); }
+        public override void OnSceneWasInitialized(int buildIndex, string sceneName) { MainMenu.Scene(sceneName); World.Scene(sceneName); Loading.Scene(sceneName); }
 
         public override void OnUpdate()
         {
             ItemMenu.Update();
             MainMenu.Update();
+            try { Gangs.Update(); } catch (Exception e) { Melon<Plugin>.Logger.Warning("Gangs: " + e.Message); }
+            try { Guns.Update(); } catch (Exception e) { Melon<Plugin>.Logger.Warning("Guns: " + e.Message); }
             try { Carry.Update(); } catch (Exception e) { Melon<Plugin>.Logger.Warning("Carry: " + e.Message); }
             try { World.Update(); } catch (Exception e) { Melon<Plugin>.Logger.Warning("World: " + e.Message); }
             if (Time.unscaledTime < _next) return;
@@ -91,6 +97,8 @@ namespace Frankenstein
             ItemMenu.Draw();
             MainMenu.Draw();
             World.Draw();
+            try { Gangs.Draw(); } catch (Exception e) { Melon<Plugin>.Logger.Warning("Gangs: " + e.Message); }
+            try { Loading.Draw(); } catch (Exception e) { Melon<Plugin>.Logger.Warning("Loading screen: " + e.Message); Loading.Tips.Clear(); Loading.Extension = ""; }
         }
     }
 }

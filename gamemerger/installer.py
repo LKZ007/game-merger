@@ -9,8 +9,11 @@ import json
 import os
 import re
 import shutil
+import stat
 import subprocess
 import tempfile
+import threading
+import time
 import uuid
 import zipfile
 
@@ -102,6 +105,37 @@ WRITABLE_EXT = (".ini", ".cfg", ".json", ".xml", ".txt", ".log", ".toml", ".yaml
 WRITABLE_DIRS = ("cache", "config", "configs", "settings", "plugins", "mods", "scripts", "r6", "red4ext", "bepinex",
                  "melonloader", "userdata", "engine", "bin")
 KEEP_SHARED_OVER = 256 * 1024 * 1024  # only big read-only data files (game archives) stay shared
+
+
+_SAVE_LOCK = threading.RLock()
+
+
+def write_safely(path, text):
+    """Write a small file so it's never left half written, even on Windows where a virus scanner, the search
+    indexer or another of Frankenstein's own threads can hold the file for a moment ("Access is denied").
+    Each write has its own temporary file, a read-only flag is cleared, and the swap is retried; if it still
+    can't swap, the file is written in place."""
+    tmp = "%s.%s.tmp" % (path, uuid.uuid4().hex[:8])
+    with open(tmp, "w", encoding="utf-8") as f:
+        f.write(text)
+    try:
+        for wait in (0, 0.05, 0.1, 0.2, 0.4, 0.8, 1.2):
+            time.sleep(wait)
+            try:
+                if os.path.exists(path) and not os.access(path, os.W_OK):
+                    os.chmod(path, stat.S_IWRITE | stat.S_IREAD)
+                os.replace(tmp, path)
+                return
+            except PermissionError:
+                continue
+        with open(path, "w", encoding="utf-8") as f:  # last resort: the swap stays blocked, so write in place
+            f.write(text)
+    finally:
+        if os.path.exists(tmp):
+            try:
+                os.remove(tmp)
+            except OSError:
+                pass
 
 
 def _unshare(path):
@@ -286,10 +320,8 @@ class Merge:
     def save(self):
         d = self.record_dir(self.id)
         os.makedirs(d, exist_ok=True)
-        tmp = os.path.join(d, "manifest.json.tmp")
-        with open(tmp, "w", encoding="utf-8") as f:
-            json.dump(self.data, f, indent=2)
-        os.replace(tmp, os.path.join(d, "manifest.json"))
+        with _SAVE_LOCK:
+            write_safely(os.path.join(d, "manifest.json"), json.dumps(self.data, indent=2))
 
     @classmethod
     def load(cls, merge_id):
