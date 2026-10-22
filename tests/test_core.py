@@ -953,3 +953,53 @@ class StartupTests(unittest.TestCase):
         from gamemerger.version import VERSION
         here = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "gamemerger")
         self.assertEqual(Api._stale_web(here), [], "index.html PAGE_BUILD and app.js APP_BUILD must equal VERSION " + VERSION)
+
+
+class PackTests(unittest.TestCase):
+    def test_pack_keeps_only_changes_and_unpack_rebuilds(self):
+        from gamemerger import saves
+        root = tempfile.mkdtemp()
+        base = os.path.join(root, "Game")
+        os.makedirs(os.path.join(base, "Data"))
+        for rel, text in (("Game.exe", "exe"), ("Data/big.pak", "x" * 5000), ("Data/old.cfg", "a=1"), ("gone.txt", "bye")):
+            with open(os.path.join(base, rel), "w") as f:
+                f.write(text)
+        before = {r: open(os.path.join(base, r)).read() for r in ("Game.exe", "Data/big.pak", "Data/old.cfg", "gone.txt")}
+        r = types.SimpleNamespace(id="t", name="Test", launch_exe=lambda t: None)
+        t = types.SimpleNamespace(id="th", name="Theme")
+        m = installer.Merge.create(r, t, base, os.path.join(root, "out"), installer.MODE_COPY, "Packed")
+        with open(os.path.join(m.target_path, "Data", "old.cfg"), "w") as f:
+            f.write("a=2")  # a mod's setting
+        os.makedirs(os.path.join(m.target_path, "Mods"))
+        with open(os.path.join(m.target_path, "Mods", "mod.dll"), "w") as f:
+            f.write("mod")
+        os.remove(os.path.join(m.target_path, "gone.txt"))
+        slot = saves.slot_root(m.id)
+        os.makedirs(slot)
+        with open(os.path.join(slot, "save1.json"), "w") as f:
+            f.write("{}")
+        info = m.pack()
+        saves.zip_slots(m.id)
+        self.assertFalse(os.path.exists(m.target_path))
+        self.assertTrue(m.packed)
+        self.assertLess(info["zip_bytes"], info["copy_bytes"])
+        self.assertFalse(os.path.isdir(slot))
+        with self.assertRaises(installer.MergeError):
+            m.put_file(os.path.join(base, "Game.exe"), "x.exe")  # packed: nothing can change it until unpacked
+        m = installer.Merge.load(m.id)
+        m.unpack()
+        saves.unzip_slots(m.id)
+        read = lambda rel: open(os.path.join(m.target_path, rel)).read()
+        self.assertEqual(read("Data/old.cfg"), "a=2")
+        self.assertEqual(read("Mods/mod.dll"), "mod")
+        self.assertEqual(read("Data/big.pak"), "x" * 5000)
+        self.assertFalse(os.path.exists(os.path.join(m.target_path, "gone.txt")))
+        self.assertTrue(os.path.isfile(os.path.join(slot, "save1.json")))
+        self.assertFalse(m.packed)
+        # the original game was only read
+        self.assertEqual(before, {r: open(os.path.join(base, r)).read() for r in before})
+        self.assertFalse(os.path.exists(os.path.join(base, "Mods")))
+
+    def test_inplace_merges_are_never_packed(self):
+        m = installer.Merge({"id": "x", "name": "X", "mode": installer.MODE_INPLACE, "base_path": "/", "target_path": "/"})
+        self.assertIn("original", m.can_pack())

@@ -3,6 +3,17 @@
 Every release, newest first. Downloads are on the [releases page](https://github.com/LKZ007/game-merger/releases).
 The app was called Game Merger before 3.8.0.
 
+## v3.30.0 (2026-10-22)
+- **Merges take up far less space.** After you close a merged game, Frankenstein packs it away:
+  - It keeps only the files the merge changed or added (mods, their settings, anything the game wrote into its folder) in one zip.
+  - It zips the merge's saves (normal and Creative).
+  - Then it deletes the copy.
+  - Your original game is only ever read, and nothing is deleted until the zip has been checked.
+- **Play rebuilds it first.** Frankenstein makes a fresh full copy of your own installed game, puts the merge's files and saves back, then starts it. That takes about as long as copying the game: seconds for small games like Schedule I, several minutes for big ones like Cyberpunk. The card says how long, and after the first time it's the measured time.
+- **On each merge card:** a 📦 Packed tag with the space saved, plus **Pack away to save space** and **Unpack now** under More. Adding mods, fixing crashes and the other buttons unpack first.
+- **Settings > Save space** turns automatic packing off.
+- If a Steam update changes the game, the rebuilt copy uses the updated game, with the merge's own files on top. If you uninstall the original game, a packed merge can't be rebuilt until you reinstall it.
+
 ## v3.29.0 (2026-10-22)
 - **Schedule I guns sit in your hand properly.** The pistol was stretched and tilted out of the hand, and a gold block floated beside it. Frankenstein no longer stretches the held gun or sticks blocks onto it, and it cleans up any it added before. Replica guns keep their own numbers (damage, fire rate, magazine, reload, full auto); only the model is sized, a little and evenly, so the grip stays in the hand.
 - **Every gun type in Creative's F6 menu, under a new Weapons tab:**

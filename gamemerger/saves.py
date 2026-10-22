@@ -12,6 +12,7 @@ import subprocess
 import sys
 import threading
 import time
+import zipfile
 
 from . import paths
 
@@ -280,6 +281,60 @@ def swap_out():
 
 def delete_slot(merge_id):
     shutil.rmtree(slot_root(merge_id), ignore_errors=True)
+    for f in (zip_path(merge_id),):
+        if os.path.isfile(f):
+            os.remove(f)
+
+
+# ---------- zipped while the merge is packed away ----------
+
+def zip_path(merge_id):
+    return os.path.join(paths.sub("saves"), merge_id + ".zip")
+
+
+def zip_slots(merge_id):
+    """The merge's saves (normal and Creative) into one zip, then the folders go. Returns the zip's size."""
+    unzip_slots(merge_id)  # anything zipped before goes back in first, so one zip holds it all
+    roots = [r for r in (slot_root(merge_id), slot_root(merge_id + "~creative")) if os.path.isdir(r)]
+    if not roots:
+        return 0
+    out = zip_path(merge_id)
+    tmp = out + ".tmp"
+    with zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED, allowZip64=True) as z:
+        for root in roots:
+            top = os.path.basename(root)
+            for dirpath, _dirs, files in os.walk(root):
+                for f in files:
+                    full = os.path.join(dirpath, f)
+                    z.write(full, (top + "/" + os.path.relpath(full, root)).replace(os.sep, "/"))
+    with zipfile.ZipFile(tmp) as z:
+        if z.testzip():
+            os.remove(tmp)
+            return 0  # kept as folders if the zip doesn't check out
+    os.replace(tmp, out)
+    for root in roots:
+        shutil.rmtree(root, ignore_errors=True)
+    return os.path.getsize(out)
+
+
+def unzip_slots(merge_id):
+    out = zip_path(merge_id)
+    if not os.path.isfile(out):
+        return False
+    base = paths.sub("saves")
+    with zipfile.ZipFile(out) as z:
+        for name in z.namelist():
+            top = name.split("/", 1)[0]
+            if top not in (merge_id, merge_id + "~creative") or ".." in name.split("/"):
+                continue
+            dest = os.path.join(base, *name.split("/"))
+            if os.path.exists(dest):
+                continue  # a newer save already back in the folder wins
+            os.makedirs(os.path.dirname(dest), exist_ok=True)
+            with z.open(name) as src, open(dest, "wb") as f:
+                shutil.copyfileobj(src, f)
+    os.remove(out)
+    return True
 
 
 def running(exe_names):

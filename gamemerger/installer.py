@@ -5,6 +5,7 @@ be rolled back: files it added are deleted and files it replaced are restored.
 """
 
 import datetime
+import filecmp
 import json
 import os
 import re
@@ -390,6 +391,7 @@ class Merge:
         return m
 
     def put_file(self, src, rel):
+        self.must_be_unpacked()
         rel = safe_rel(rel)
         dest = os.path.join(self.target_path, rel)
         files = self.data["files"]
@@ -471,6 +473,7 @@ class Merge:
 
     def undo(self, log=_noop):
         """Remove everything Frankenstein added and put replaced files back."""
+        self.must_be_unpacked()
         for rel, entry in sorted(self.data["files"].items(), key=lambda kv: -kv[0].count(os.sep)):
             dest = os.path.join(self.target_path, rel)
             if os.path.lexists(dest):
@@ -505,6 +508,7 @@ class Merge:
         return sorted(on + off, key=lambda x: x.get("seq", 0))
 
     def rebuild(self, layout, enabled, log=_noop):
+        self.must_be_unpacked()
         """Switch mods on and off: undo everything, then reinstall the enabled ones (by label) in their
         original order from the files the merge kept. Used by mod profiles and crash repair."""
         wanted = set(enabled)
@@ -523,6 +527,128 @@ class Merge:
                 self.data["parked"].append({k: v for k, v in m.items() if k != "on"})
         self.data["status"] = "ready"
         self.save()
+
+    # ---------- packed away: only what the merge changed is kept, the rest comes back from your own game ----------
+
+    PACK = "packed.zip"
+    PACK_INDEX = "_frankenstein_pack.json"
+
+    @property
+    def packed(self):
+        return bool(self.data.get("packed")) and os.path.isfile(os.path.join(self.record_dir(self.id), self.PACK))
+
+    def must_be_unpacked(self):
+        if self.packed:
+            raise MergeError("%s is packed away to save space. Press Play or Unpack first." % self.name)
+
+    def can_pack(self):
+        """Why this merge can't be packed, or None if it can."""
+        if self.mode == MODE_INPLACE:
+            return "it mods the original game folder, so there's no copy to pack"
+        if self.packed:
+            return "it's already packed"
+        if not os.path.isfile(os.path.join(self.target_path, COPY_MARKER)):
+            return "its folder isn't a Frankenstein copy"
+        if not os.path.isdir(self.base_path):
+            return "the original game isn't installed at %s any more, and packing needs it to unpack again" % self.base_path
+        return None
+
+    def pack(self, log=_noop, progress=_noop):
+        """Keep only the files this merge changed or added (mods, their settings, anything the game wrote into its
+        folder) in one zip, then delete the copy. Unpack rebuilds it as a full copy of your own installed game with
+        those files on top. The original game is only ever read."""
+        why = self.can_pack()
+        if why:
+            raise MergeError("Can't pack %s: %s." % (self.name, why))
+        base, target = self.base_path, self.target_path
+        orig = {}
+        for dirpath, _dirs, files in os.walk(base):
+            for f in files:
+                p = os.path.join(dirpath, f)
+                try:
+                    st = os.stat(p)
+                except OSError:
+                    continue
+                orig[os.path.relpath(p, base)] = (st.st_size, st.st_mtime)
+        changed, seen, total = [], set(), 0
+        for dirpath, _dirs, files in os.walk(target):
+            for f in files:
+                p = os.path.join(dirpath, f)
+                rel = os.path.relpath(p, target)
+                seen.add(rel)
+                try:
+                    st = os.stat(p)
+                except OSError:
+                    continue
+                total += st.st_size
+                o = orig.get(rel)
+                if o is None or o[0] != st.st_size or abs(o[1] - st.st_mtime) > 2:
+                    changed.append(rel)
+                elif st.st_size < 4 << 20 and not filecmp.cmp(p, os.path.join(base, rel), shallow=False):
+                    changed.append(rel)  # small files (settings) are compared byte by byte, whatever their dates say
+        removed = sorted(r for r in orig if r not in seen)
+        d = self.record_dir(self.id)
+        zpath = os.path.join(d, self.PACK)
+        tmp = zpath + ".tmp"
+        log("Keeping the %d file(s) this merge changed ..." % len(changed))
+        with zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED, allowZip64=True) as z:
+            for i, rel in enumerate(changed):
+                z.write(os.path.join(target, rel), rel.replace(os.sep, "/"))
+                if i % 50 == 0:
+                    progress(i, len(changed))
+            z.writestr(self.PACK_INDEX, json.dumps({"removed": removed, "files": len(changed)}))
+        with zipfile.ZipFile(tmp) as z:  # nothing is deleted until the zip reads back whole
+            bad = z.testzip()
+            if bad:
+                os.remove(tmp)
+                raise MergeError("The packed copy didn't check out (%s), so nothing was deleted." % bad)
+        os.replace(tmp, zpath)
+        log("Deleting the copy at %s (the original game isn't touched) ..." % target)
+        shutil.rmtree(target)
+        self.data["packed"] = {"time": time.time(), "copy_bytes": total, "zip_bytes": os.path.getsize(zpath),
+                               "files": len(changed)}
+        self.save()
+        return self.data["packed"]
+
+    def unpack(self, log=_noop, progress=_noop):
+        """Make the working copy again: a full copy of your installed game, then the merge's own files on top."""
+        if not self.packed:
+            return 0
+        if not os.path.isdir(self.base_path):
+            raise MergeError("The original game isn't at %s any more. Install it there again, then press Play." % self.base_path)
+        start = time.time()
+        zpath = os.path.join(self.record_dir(self.id), self.PACK)
+        if os.path.isdir(self.target_path):
+            if not os.path.isfile(os.path.join(self.target_path, COPY_MARKER)) and os.listdir(self.target_path):
+                raise MergeError("%s is in the way and isn't a Frankenstein copy, so it was left alone." % self.target_path)
+            shutil.rmtree(self.target_path)  # a copy cut off half way: start again
+        log("Copying %s ..." % self.base_path)
+        clone_tree(self.base_path, self.target_path, hardlink=False, log=log, progress=progress)
+        log("Putting the merge's own files back ...")
+        with zipfile.ZipFile(zpath) as z:
+            index = json.loads(z.read(self.PACK_INDEX).decode("utf-8")) if self.PACK_INDEX in z.namelist() else {}
+            for name in z.namelist():
+                if name == self.PACK_INDEX:
+                    continue
+                rel = safe_rel(name.replace("/", os.sep))
+                dest = os.path.join(self.target_path, rel)
+                os.makedirs(os.path.dirname(dest), exist_ok=True)
+                if os.path.lexists(dest):
+                    os.remove(dest)
+                with z.open(name) as src, open(dest, "wb") as out:
+                    shutil.copyfileobj(src, out, 1 << 20)
+        for rel in index.get("removed", []):
+            p = os.path.join(self.target_path, safe_rel(rel))
+            if os.path.lexists(p):
+                os.remove(p)
+        if self.mode == MODE_HARDLINK:
+            self.data["mode"] = MODE_COPY  # unpacked copies are always full copies
+        secs = time.time() - start
+        self.data["unpack_secs"] = round(secs, 1)
+        self.data.pop("packed", None)
+        self.save()
+        os.remove(zpath)
+        return secs
 
     def _prune(self, d):
         root = os.path.normcase(os.path.abspath(self.target_path))

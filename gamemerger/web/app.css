@@ -571,3 +571,4 @@ body.pad .tile:focus .face { border: 2px solid var(--accent); box-shadow: 0 0 30
 .splash-burst { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 60; }
 @media (prefers-reduced-motion: reduce) { .sp-card { transform: none !important; } }
 .splash-skip { position: absolute; right: 28px; bottom: 24px; }
+.tag.good { background: rgba(34,197,94,.18); color: #bbf7d0; }

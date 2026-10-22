@@ -205,6 +205,9 @@ ARSENALS = {
 }
 
 
+_PACK_LOCK = threading.Lock()  # one pack or unpack at a time
+
+
 class Api:
     def __init__(self):
         self._window = None  # set by app.py when running inside pywebview
@@ -645,6 +648,72 @@ class Api:
                 pass  # cloud folder offline: next session tries again
         if mid:
             self._switch_from_game(mid)
+            if self._settings.get("pack_after_play", True):
+                threading.Thread(target=self._auto_pack, args=(mid,), daemon=True).start()
+
+    # ---------- packed away: saving space between sessions ----------
+
+    def _pack_info(self, m):
+        """What packing does for this merge, in numbers the card can show."""
+        p = m.data.get("packed")
+        if p:
+            saved = max(0, p["copy_bytes"] - p["zip_bytes"])
+            secs = m.data.get("unpack_secs") or p["copy_bytes"] / 150e6  # a typical drive copies about 150 MB a second
+            return {"on": True, "saved": saved, "kept": p["zip_bytes"], "unpack_secs": round(secs),
+                    "measured": bool(m.data.get("unpack_secs"))}
+        why = m.can_pack()
+        return {"on": False, "why": why, "unpack_secs": m.data.get("unpack_secs")}
+
+    def _auto_pack(self, merge_id):
+        time.sleep(8)  # let the game's last writes and the save swap finish
+        if self._playing == merge_id:
+            return
+        try:
+            m = Merge.load(merge_id)
+            if m.can_pack() is None:
+                self._pack(m)
+        except Exception as e:
+            try:
+                m.data["pack_error"] = str(e)[:300]
+                m.save()
+            except Exception:
+                pass
+
+    def _pack(self, m, log=lambda *_: None, progress=lambda *_: None):
+        with _PACK_LOCK:
+            if self._playing == m.id:
+                raise MergeError("%s is running. Close it first." % m.name)
+            info = m.pack(log=log, progress=progress)
+        saves.zip_slots(m.id)
+        m.data.pop("pack_error", None)
+        m.save()
+        return info
+
+    def pack_merge(self, merge_id):
+        """Pack now: keep only what the merge changed, delete the copy. Play brings it back."""
+        def work(job):
+            m = Merge.load(merge_id)
+            job.write("Packing %s ..." % m.name)
+            info = self._pack(m, log=job.write, progress=lambda d, n: setattr(job, "progress", [d, n]))
+            job.write("Done. %.1f GB freed." % ((info["copy_bytes"] - info["zip_bytes"]) / 1e9))
+            return self._pack_info(Merge.load(merge_id))
+        return self._run(work)
+
+    def unpack_merge(self, merge_id):
+        """Rebuild the working copy from your own installed game plus the merge's kept files (and its saves)."""
+        def work(job):
+            m = Merge.load(merge_id)
+            if not m.packed:
+                saves.unzip_slots(merge_id)
+                return {"secs": 0}
+            job.write("Rebuilding %s from your installed game ..." % m.name)
+            with _PACK_LOCK:
+                m = Merge.load(merge_id)
+                secs = m.unpack(log=job.write, progress=lambda d, n: setattr(job, "progress", [d, n]))
+            saves.unzip_slots(merge_id)
+            job.write("Ready in %d seconds." % secs)
+            return {"secs": round(secs)}
+        return self._run(work)
 
     @staticmethod
     def _mod_check(m):
@@ -2566,7 +2635,8 @@ class Api:
                         "mods": [i["label"] for i in m.data.get("installs", [])],
                         "replaced": sum(1 for e in m.data.get("files", {}).values() if e.get("replaced")),
                         "cover_appid": m.data.get("cover_appid", ""),
-                        "has_saves": os.path.isdir(saves.slot_root(m.id)),
+                        "has_saves": os.path.isdir(saves.slot_root(m.id)) or os.path.isfile(saves.zip_path(m.id)),
+                        "packed": self._pack_info(m),
                         "offline_lock": bool(self._recipe(m.data.get("recipe_id")) and
                                              self._recipe(m.data.get("recipe_id")).launch_args and m.mode != MODE_INPLACE),
                         "ingame": self._ingame(m),
@@ -2623,6 +2693,9 @@ class Api:
             if creative:
                 note += " Pick Creative when you make a world."
             return {"note": note}
+        if m.packed:
+            raise MergeError("%s is packed away. Unpack it first (Play does this for you)." % m.name)
+        saves.unzip_slots(merge_id)
         exe = r.launch_exe(m.target_path) if r else None
         if not exe:
             raise MergeError("Couldn't find the game's .exe in %s." % m.target_path)
@@ -3146,6 +3219,7 @@ class Api:
                 "version": VERSION,
                 "fun_style": self._settings.get("fun_style", "dot"),
                 "item_menu_normal": bool(self._settings.get("item_menu_normal")),
+                "pack_after_play": self._settings.get("pack_after_play", True),
                 "has_curseforge": bool(self._settings.get("curseforge_key")),
                 "cloud_folder": self._settings.get("cloud_folder", ""),
                 "cloud_options": saves.cloud_folders()}
@@ -3154,7 +3228,7 @@ class Api:
         shared = {"mode", "destination", "claude_api_key"}
         if shared & {k for k, v in values.items() if v is not None} and not self._me().get("admin"):
             raise MergeError("Only the admin account can change keys and where copies go.")
-        for k in ("mode", "destination", "cloud_folder", "fun_style", "item_menu_normal"):
+        for k in ("mode", "destination", "cloud_folder", "fun_style", "item_menu_normal", "pack_after_play"):
             if k in values:
                 self._settings[k] = values[k]
         if values.get("claude_api_key") is not None:

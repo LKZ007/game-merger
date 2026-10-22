@@ -1,5 +1,5 @@
 "use strict";
-window.APP_BUILD = "3.29.0";  // must match index.html: a mixed-up install is caught at start
+window.APP_BUILD = "3.30.0";  // must match index.html: a mixed-up install is caught at start
 
 // ---------- talking to the Python side ----------
 const TOKEN = document.querySelector('meta[name="gm-token"]')?.content;
@@ -850,7 +850,7 @@ async function loadMerges() {
       <div class="merge-info">
         <div class="merge-name">${esc(m.name)}</div>
         <div class="muted">${m.tagline ? `<em>${esc(m.tagline)}</em> · ` : ""}${esc(m.game)} × ${esc(m.theme)}</div>
-        <div class="row small"><span class="tag">${esc(m.mode_label)}</span><span class="tag">${m.mods.length} installed</span><span class="tag" title="How deep this merge's story goes in this game">${esc(m.story || "")}</span>${m.has_saves ? `<span class="tag">Own saves</span>` : ""}${m.offline_lock ? `<span class="tag" title="Starts in offline mode so mods can't reach online play">Online locked</span>` : ""}<button class="tag tag-btn" data-act="pad" title="${m.pad === "native" ? "This game supports controllers itself" : "Frankenstein's key mapper runs while you play. Click to change the buttons."}">🎮 ${m.pad === "native" ? "Controller" : "Controller (mapped)"}</button>${m.playing ? `<span class="tag live">Playing now</span>` : ""}${m.status === "restored" ? `<span class="tag">Mods removed</span>` : ""}${m.originals ? `<span class="tag ${/Verify|put your originals back/.test(m.originals) ? "bad" : ""}" title="${esc(m.originals)}">${/Verify|put your originals back/.test(m.originals) ? "⚠ Originals" : "✓ Originals untouched"}</span>` : ""}${m.save_fix ? `<span class="tag" title="A damaged save was swapped for its last good copy after you played">Save repaired</span>` : ""}</div>
+        <div class="row small"><span class="tag">${esc(m.mode_label)}</span><span class="tag">${m.mods.length} installed</span><span class="tag" title="How deep this merge's story goes in this game">${esc(m.story || "")}</span>${m.has_saves ? `<span class="tag">Own saves</span>` : ""}${m.packed?.on ? `<span class="tag good" title="Only the files this merge changed and its saves are kept (${fmtGB(m.packed.kept)}). Play rebuilds the copy from your installed game first: about ${fmtSecs(m.packed.unpack_secs)}${m.packed.measured ? "" : " (estimate)"}.">📦 Packed · ${fmtGB(m.packed.saved)} saved</span>` : ""}${m.offline_lock ? `<span class="tag" title="Starts in offline mode so mods can't reach online play">Online locked</span>` : ""}<button class="tag tag-btn" data-act="pad" title="${m.pad === "native" ? "This game supports controllers itself" : "Frankenstein's key mapper runs while you play. Click to change the buttons."}">🎮 ${m.pad === "native" ? "Controller" : "Controller (mapped)"}</button>${m.playing ? `<span class="tag live">Playing now</span>` : ""}${m.status === "restored" ? `<span class="tag">Mods removed</span>` : ""}${m.originals ? `<span class="tag ${/Verify|put your originals back/.test(m.originals) ? "bad" : ""}" title="${esc(m.originals)}">${/Verify|put your originals back/.test(m.originals) ? "⚠ Originals" : "✓ Originals untouched"}</span>` : ""}${m.save_fix ? `<span class="tag" title="A damaged save was swapped for its last good copy after you played">Save repaired</span>` : ""}</div>
         <div class="muted small" title="${esc(m.folder)}">${esc(m.folder)}</div>
       </div>
       <div class="merge-actions">
@@ -873,6 +873,7 @@ async function loadMerges() {
               ${m.needs_upgrade ? `<button data-act="upgrade" title="Give this merge everything new merges get. Mods and saves stay as they are.">Upgrade</button>` : ""}
               <button data-act="folder">Open folder</button>
               <hr>
+              ${m.packed?.on ? `<button data-act="unpack">Unpack now</button>` : m.mode !== "inplace" && !m.playing ? `<button data-act="pack" title="Keep only what this merge changed and delete the copy. Play rebuilds it from your installed game.">Pack away to save space</button>` : ""}
               <button data-act="undo">Undo all mods</button>
               <button data-act="delete" class="danger">Delete</button>
             </div></div>
@@ -1265,10 +1266,29 @@ function watchPlaying() {
   }, 5000);
 }
 
+// A packed merge is rebuilt from your own installed game before anything that needs its files
+const NEEDS_FILES = ["play", "creative", "add", "undo", "autofill", "fix", "upgrade", "spawner"];
+const fmtGB = (b) => (b < 1e9 ? Math.max(1, Math.round(b / 1e6)) + " MB" : (b / 1e9 >= 10 ? (b / 1e9).toFixed(0) : (b / 1e9).toFixed(1)) + " GB");
+const fmtSecs = (s) => (s < 90 ? Math.max(5, Math.round(s)) + " seconds" : Math.round(s / 60) + " minutes");
+async function ensureUnpacked(m) {
+  if (!m.packed?.on) return true;
+  const j = await followJob(await call("unpack_merge", m.id),
+    `Rebuilding ${m.name} from your installed game (about ${fmtSecs(m.packed.unpack_secs)})`);
+  if (j) m.packed = { on: false };
+  return !!j;
+}
+
 async function mergeAction(id, act) {
   const m = state.merges.find((x) => x.id === id);
   try {
+    if (NEEDS_FILES.includes(act) && !(await ensureUnpacked(m))) return;
     if (act === "spawner") return openSpawner(m);
+    if (act === "pack") {
+      const j = await followJob(await call("pack_merge", id), "Packing " + m.name);
+      if (j?.result?.on) toast(`Packed. ${fmtGB(j.result.saved)} freed. Play brings it back in about ${fmtSecs(j.result.unpack_secs)}.`, 6000);
+      return loadMerges();
+    }
+    if (act === "unpack") { if (await ensureUnpacked(m)) toast(`${m.name} is unpacked and ready.`); return loadMerges(); }
     if (act === "play" || act === "creative") {
       const creative = act === "creative";
       if (creative && !(await creativeSetup(m))) return;
@@ -1773,6 +1793,10 @@ async function loadSettings() {
       <p class="muted">Every item in a merge, mods' items included, from a menu in the game (Schedule I: F6 or Back + Y; Cyberpunk: the ~ overlay). It's always on in Creative.</p>
       <label class="row"><input type="checkbox" id="itemMenuNormal" ${s.item_menu_normal ? "checked" : ""}> Also in normal play</label>
     </div>
+    <div class="card"><h2>Save space</h2>
+      <p class="muted">After you close a merged game, Frankenstein packs it away. It keeps only the files the merge changed (mods, their settings) and zips its saves, then deletes the copy. When you press Play it rebuilds the copy from your own installed game first. That takes about as long as copying the game: seconds for small games, several minutes for big ones like Cyberpunk. Your original game is only ever read.</p>
+      <label class="row"><input type="checkbox" id="packAfterPlay" ${s.pack_after_play !== false ? "checked" : ""}> Pack merges away after playing</label>
+    </div>
     <div class="card" id="accountsCard"></div>
     <div class="card" id="discordCard"></div>
     <div class="card"><h2>Cloud backup of saves</h2>
@@ -1819,6 +1843,7 @@ async function loadSettings() {
   $("#cloudPick").onchange = async () => { state.settings = await call("save_settings", { cloud_folder: $("#cloudPick").value }); toast($("#cloudPick").value ? "Cloud backup is on." : "Cloud backup is off."); };
   $("#checkUpdate").onclick = async () => offerUpdate(await call("check_update").catch(() => null), true);
   $("#selfCheck").onclick = async () => { toast("Checking everything…"); try { showSelfCheck(await call("self_check_result", true)); } catch (e) { toast(errText(e)); } };
+  $("#packAfterPlay").onchange = async () => { state.settings = await call("save_settings", { pack_after_play: $("#packAfterPlay").checked }); };
   $("#itemMenuNormal").onchange = async () => { state.settings = await call("save_settings", { item_menu_normal: $("#itemMenuNormal").checked }); };
   $("#funStyle").onchange = async () => { state.settings = await call("save_settings", { fun_style: $("#funStyle").value }); applyFun(); };
   $("#defBrowse").onclick = async () => { const p = await call("pick_folder"); if (p) $("#defDest").value = p; };
