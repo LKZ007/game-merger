@@ -766,13 +766,16 @@ async function followJob(id, title) {
 
 // what a merge brings over from the other game, and what it couldn't
 function addsHtml(a) {
-  const ok = a.adds.filter((x) => x.ok), miss = a.adds.filter((x) => !x.ok);
+  const real = a.adds.filter((x) => x.ok && !x.standin), own = a.adds.filter((x) => x.ok && x.standin), miss = a.adds.filter((x) => !x.ok);
+  const picks = (x) => (x.picks || []).length ? `<div class="small muted">Want the real mod? On Nexus Mods (only Premium lets apps download): ${x.picks.map((k) => `<a href="#" data-ext="${esc(k.url)}">${esc(k.name)}</a>`).join(" · ")}. Press <strong>Mod Manager Download</strong> there and Frankenstein adds it.</div>` : "";
   const line = (x) => `<li><strong>${esc(x.slot)}</strong>: ${esc(x.mod)} <span class="muted small">from ${esc(x.source)}${x.extra ? `, plus ${x.extra} mod${x.extra > 1 ? "s" : ""} it needs` : ""}${x.creative ? " · creative only" : ""}</span></li>`;
+  const ownLine = (x) => `<li><strong>${esc(x.slot)}</strong>: ${esc(x.mod)} <span class="tag">${x.standin === "story" ? "story stand-in" : "built into Frankenstein"}</span>${x.creative ? ` <span class="muted small">creative only</span>` : ""}${picks(x)}</li>`;
   return `<div class="adds">
-    ${ok.length || a.builtin.length ? `<p class="muted">Brought over${a.source ? " from " + esc(a.source) : ""}:</p><ul>${ok.map(line).join("")}${a.builtin.map((b) => `<li><strong>Frankenstein</strong>: ${esc(b)}</li>`).join("")}</ul>` : `<p class="muted">Nothing added automatically yet. Press Auto-fill on the merge.</p>`}
+    ${real.length || a.builtin.length ? `<p class="muted">Mods brought over${a.source ? " from " + esc(a.source) : ""}:</p><ul>${real.map(line).join("")}${a.builtin.map((b) => `<li><strong>Frankenstein</strong>: ${esc(b)}</li>`).join("")}</ul>` : ""}
+    ${own.length ? `<p class="muted">Made by Frankenstein itself (no mod for these could be downloaded, so Frankenstein's own mod or the merge's story covers them):</p><ul>${own.map(ownLine).join("")}</ul>` : ""}
     ${(a.arsenal || []).length ? `<p class="muted">${esc(a.source)}'s guns, in this game:</p><table class="small" style="width:100%">${a.arsenal.map((g) => `<tr><td><strong>${esc(g.gun)}</strong></td><td>${esc(g.as)}</td><td><span class="tag">${g.match === "close" ? "close match" : "rough stand-in"}</span></td></tr>`).join("")}</table><p class="muted small">They're in your starter kit (renamed to ${esc(a.source)}'s names), in the item menu, and for sale at Handy Hank's hardware store. Not checked in game yet.</p>` : ""}
-    ${miss.length ? `<p class="muted">Couldn't bring over by itself:</p><ul>${miss.map((x) => `<li><strong>${esc(x.slot)}</strong>: ${esc(x.why)}.
-      ${(x.picks || []).length ? `<div class="small">Hand-picked on Nexus Mods: ${x.picks.map((k) => `<a href="#" data-ext="${esc(k.url)}">${esc(k.name)}</a>`).join(" · ")}. On the mod's page press <strong>Mod Manager Download</strong> (free account) and Frankenstein adds it to this merge.</div>` : `<span class="muted small">Try Add mods and search “${esc(x.search || "")}”.</span>`}</li>`).join("")}</ul>` : ""}
+    ${miss.length ? `<p class="muted">Still to fill:</p><ul>${miss.map((x) => `<li><strong>${esc(x.slot)}</strong>: ${esc(x.why)}.${picks(x)}</li>`).join("")}</ul>` : ""}
+    ${!a.adds.length && !a.builtin.length ? `<p class="muted">Nothing added yet. Press Auto-fill on the merge.</p>` : ""}
     <p class="muted small">Only mods made for the main game are installed. Nothing is copied out of the other game.</p></div>`;
 }
 
@@ -800,6 +803,7 @@ async function loadMerges() {
         <button class="btn primary" data-act="play">▶ Play</button>
         <button class="btn creative" data-act="creative" title="Sandbox: every item, spawners, free camera. Own saves, offline.">✦ Creative</button>
         <button class="btn ghost" data-act="rundown" title="What's in this merge and what to do">Rundown</button>
+        <button class="btn" data-act="spawner" title="Send items and cars into the game while you play (works from a second screen)">Spawner</button>
         <button class="btn" data-act="adds" title="What this merge brings over from the other game">What it adds${m.adds ? ` (${m.adds})` : ""}</button>
         <button class="btn" data-act="autofill" title="Frankenstein finds and installs the mods that bring the other game's features over">Auto-fill</button>
         <button class="btn" data-act="mods">Mods &amp; profiles</button>
@@ -826,6 +830,41 @@ async function loadMerges() {
   $("#importBtn").onclick = async () => { const p = await call("pick_share_file"); if (p) importMerge(p); };
 }
 
+// ---------- Spawner: items and cars straight into the running game ----------
+const CAT_HUE = (c) => [...(c || "x")].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) % 360, 7);
+async function openSpawner(m) {
+  const c = await call("spawner_catalog", m.id);
+  if (!c.available) return modal("Spawner", `<p>${esc(c.note)}</p>`, [{ label: "OK", value: true, primary: true }]);
+  const cats = ["All", ...new Set(c.items.map((x) => x.cat))];
+  let cat = "All", q = "";
+  const body = `<p class="muted small">${c.live ? "Playing now: click a tile and it appears in the game within a second." : "Start the game, then click a tile: it appears in the game within a second. You can keep this open on a second screen."}
+      Click: 1 · Right-click: 10. ${esc(c.note)}</p>
+    <input class="input" id="spQ" placeholder="Search ${c.items.length} items and cars" autocomplete="off">
+    <div class="sp-cats" id="spCats"></div><div class="sp-grid" id="spGrid"></div>`;
+  const done = modal("Spawner · " + m.name, body, [{ label: "Close", value: true }]);
+  const draw = () => {
+    $("#spCats").innerHTML = cats.map((k) => `<button class="tag tag-btn ${k === cat ? "live" : ""}" data-cat="${esc(k)}">${esc(k)}</button>`).join("");
+    $("#spCats").querySelectorAll("[data-cat]").forEach((b) => (b.onclick = () => { cat = b.dataset.cat; draw(); }));
+    const words = q.toLowerCase().split(/\s+/).filter(Boolean);
+    const shown = c.items.filter((x) => (cat === "All" || x.cat === cat) && words.every((w) => (x.name + " " + x.id + " " + x.cat).toLowerCase().includes(w))).slice(0, 300);
+    $("#spGrid").innerHTML = shown.map((x, i) => `<button class="sp-tile" data-i="${i}" style="--h:${CAT_HUE(x.cat)}" title="${esc(x.id)}">
+      <span class="sp-ico">${x.kind === "car" ? "🚗" : x.kind === "weapon" ? "🔫" : esc((x.name || "?")[0].toUpperCase())}</span>
+      <span class="sp-name">${esc(x.name)}</span><span class="sp-cat">${esc(x.cat)}</span></button>`).join("") || `<p class="muted">Nothing matches.</p>`;
+    $("#spGrid").querySelectorAll(".sp-tile").forEach((b) => {
+      const x = shown[+b.dataset.i];
+      const send = async (qty) => {
+        try { await call("spawner_send", m.id, x.kind, x.id, qty, x.name); toast(`Sent ${qty} × ${x.name}`); } catch (e) { toast(errText(e)); }
+      };
+      b.onclick = () => send(1);
+      b.oncontextmenu = (e) => { e.preventDefault(); send(x.kind === "car" ? 1 : 10); };
+    });
+  };
+  $("#spQ").oninput = (e) => { q = e.target.value; draw(); };
+  draw();
+  setTimeout(() => $("#spQ")?.focus(), 30);
+  await done;
+}
+
 // ---------- updates ----------
 async function offerUpdate(u, asked = false) {
   if (!u) { if (asked) toast("You're on the newest version."); return; }
@@ -835,6 +874,19 @@ async function offerUpdate(u, asked = false) {
     [{ label: "Later", value: false }, { label: "Update now", value: true, primary: true }]);
   if (go) followJob(await call("install_update"), "Updating Frankenstein");
 }
+
+// The sidebar button, for when the automatic check hasn't caught a new release yet.
+async function checkUpdateNow() {
+  const b = $("#navUpdate"), label = b.querySelector("span");
+  label.textContent = "Checking…"; b.disabled = true;
+  const r = await call("check_update_now").catch((e) => ({ error: errText(e) }));
+  b.disabled = false;
+  label.textContent = "Check for updates";
+  if (r.error) return toast(r.error, 5000);
+  if (r.update) return offerUpdate(r.update, true);
+  toast(`You're on the newest version (${r.current}).`);
+}
+if ($("#navUpdate")) $("#navUpdate").onclick = checkUpdateNow;
 
 // ---------- the rundown: what's new and what to do, while the game loads ----------
 async function showRundown(m, creative, onPlay) {
@@ -1008,6 +1060,7 @@ function watchPlaying() {
 async function mergeAction(id, act) {
   const m = state.merges.find((x) => x.id === id);
   try {
+    if (act === "spawner") return openSpawner(m);
     if (act === "play" || act === "creative") {
       const creative = act === "creative";
       if (creative && !(await creativeSetup(m))) return;

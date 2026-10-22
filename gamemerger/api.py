@@ -44,15 +44,64 @@ class Job:
 
 
 # Frankenstein's own mod per game: where it goes in the game folder, and where its settings file is.
+# "bridge": the file Frankenstein's Spawner (in the app) writes requests to while you play.
 BUILTIN = {
+    "gta5": {"label": "Frankenstein spawner script", "dest": "scripts", "needs": ["scripthookv", "shvdn"],
+             "settings": "scripts/Frankenstein/settings.json", "bridge": "scripts/Frankenstein/commands.txt",
+             "what": "Spawner: any car or weapon from Frankenstein's Spawner while you play; F7 in game gives every weapon."},
     "schedule1": {"label": "Frankenstein item menu and story mode", "dest": "Mods", "needs": ["s1api"],
-                  "settings": "UserData/Frankenstein/settings.json",
+                  "settings": "UserData/Frankenstein/settings.json", "bridge": "UserData/Frankenstein/commands.json",
+                  "catalog": "UserData/Frankenstein/world.json",
                   "what": "Item menu: press F6 (or Back + Y) in game for every item, mods' items included."},
     "cyberpunk2077": {"label": "Frankenstein sandbox menu", "dest": "bin/x64/plugins/cyber_engine_tweaks/mods",
                       "settings": "bin/x64/plugins/cyber_engine_tweaks/mods/frankenstein_items/settings.json",
+                      "bridge": "bin/x64/plugins/cyber_engine_tweaks/mods/frankenstein_items/commands.json",
+                      "catalog": "bin/x64/plugins/cyber_engine_tweaks/mods/frankenstein_items/catalog.json",
                       "what": "Sandbox menu, built in: press ~ in game for every item, every car into your garage, "
                               "god mode, eddies, heal, lose the police, time, weather and a fly tool. Mods' items and cars included."},
 }
+
+# The merge standard: no part of a merge is ever left empty. When no mod can be downloaded for a part,
+# Frankenstein's own mod for that game covers it (matched by words in the part's name), and failing that
+# the part becomes a quest in the merge's story. Mods only a person can download (Nexus without Premium)
+# are listed as one-click picks next to whatever stands in for them.
+STANDINS = {
+    "cyberpunk2077": [
+        (r"real|car|vehicle", "Forza garage: the real cars already in Cyberpunk (Porsche 911 Turbo and more) plus "
+                              "Forza-tuned supercars, one click into your garage (Garage tab, press ~)"),
+        (r"handling|driving", "Forza handling: more grip and power for every car (Tuning tab)"),
+        (r"race|racing", "Street races: timed sprints across Night City with cash prizes (Races tab)"),
+        (r"speedo|hud", "Speedometer and race timer on screen while you drive"),
+        (r"tuning|custom", "Tuning tab: power, grip and top speed for every car"),
+        (r"spawn|sandbox", "Frankenstein sandbox menu: every item and car (press ~)"),
+        (r"cheat|god|money", "Frankenstein sandbox menu, Cheats tab: god mode, eddies, heal, lose the police"),
+        (r"camera|photo|fly", "Fly tab plus the game's own Photo mode"),
+        (r"police|wanted", "Lose the police and god mode (Cheats tab)"),
+        (r"traffic|theft|steal", "Every car into your garage (Cars tab)"),
+    ],
+    "schedule1": [
+        (r"gun|weapon|arsenal", "Hood Warfare arsenal: starter kit, item menu (F6) and the gun shop at Handy Hank's"),
+        (r"cheat|sandbox|item", "Frankenstein item menu: every item, with icons (F6 or Back + Y)"),
+        (r"gang|npc|combat", "The merge's characters (rival boss, weapons dealer, crooked cop) in the in-game story"),
+    ],
+    "gta5": [
+        (r"spawn|menyoo|trainer|vehicle|weapon|cheat", "Frankenstein spawner script: any car or weapon (F7, or from "
+                                                        "Frankenstein's Spawner while you play)"),
+    ],
+}
+STORY_STANDIN = ("Stand-in: a quest in this merge's story covers it (no mod for this exists yet that Frankenstein "
+                 "can download or build)")
+
+
+def standin_for(recipe_id, slot_name, slot_builtin=""):
+    """What covers a part of the merge when nothing could be downloaded: (text, kind)."""
+    if slot_builtin:
+        return slot_builtin, "builtin"
+    for pattern, text in STANDINS.get(recipe_id, []):
+        if re.search(pattern, slot_name, re.I):
+            return text, "builtin"
+    return STORY_STANDIN, "story"
+
 
 # A starter kit the merge hands you in game, once per save: the merged game's signature gear, made from
 # items the host game really has. Names are matched loosely against the game's own item list.
@@ -230,7 +279,7 @@ class Api:
 
     # ---------- upgrading merges made by older versions ----------
 
-    UPGRADE = 4  # bump when a release adds something old merges should get
+    UPGRADE = 5  # bump when a release adds something old merges should get
 
     def _upgrade_all(self):
         """Once per release: give merges made by older versions everything new ones get."""
@@ -267,6 +316,7 @@ class Api:
             except Exception:
                 pass
         m.data.setdefault("owner", None)
+        self._fill_gaps(m, self._recipe(m.data.get("recipe_id")))  # the merge standard: no part left empty
         if m.mode == MODE_HARDLINK and os.path.isdir(m.target_path):
             # space-saver copies: split off every file the game or a mod could write, so the original stays untouched
             installer.harden(m.target_path)
@@ -1307,6 +1357,9 @@ class Api:
         elif mono:
             found.sort(key=lambda x: "mono" not in x["name"].lower())
         premium = bool(self._settings.get("nexus_key") and self._settings.get("nexus_premium"))
+        self._locked_picks = [] if premium else [
+            {"name": x["name"], "url": "https://www.nexusmods.com/%s/mods/%s" % (r.nexus_domain, x["id"])}
+            for x in found if x["source"] == "Nexus Mods" and getattr(r, "nexus_domain", "")][:4]
         for src in self.AUTO_ORDER:
             if src == "Nexus Mods" and not premium:
                 continue
@@ -1328,6 +1381,44 @@ class Api:
                     continue  # try the next one
         return [], None
 
+    def _standin_add(self, r, slot, prefix, locked):
+        """A part with no download: Frankenstein's own built-in or a story stand-in, plus one-click picks."""
+        text, kind = standin_for(r.id if r else "", slot.name, getattr(slot, "builtin", ""))
+        picks = list(getattr(slot, "picks", None) or [])
+        picks += [x for x in locked if x["url"] not in {p["url"] for p in picks}]
+        return {"slot": slot.name, "ok": True, "mod": text, "source": "Built in" if kind == "builtin" else "Stand-in",
+                "standin": kind, "page": "", "extra": 0, "creative": bool(prefix), "why": "", "search": slot.search,
+                "picks": picks[:8]}
+
+    @staticmethod
+    def _story_idea(m, idea):
+        """The player's idea, plus a quest for every part of the other game that only the story stands in for."""
+        parts = [a["slot"] for a in m.data.get("adds", []) if a.get("standin") == "story"]
+        extra = (" Give one quest to each of these parts of the other game, since no mod brings them over: %s."
+                 % ", ".join(parts)) if parts else ""
+        return ((idea or "").strip()[:300] + extra).strip()
+
+    def _fill_gaps(self, m, r):
+        """Older merges: every part that came up empty gets its built-in or stand-in (no downloads)."""
+        changed = False
+        for a in m.data.get("adds", []):
+            if not a.get("ok"):
+                slot = types.SimpleNamespace(name=a["slot"], search=a.get("search", ""), picks=a.get("picks") or [],
+                                             builtin="")
+                for t in (r.themes if r else []):
+                    for sl in t.slots:
+                        if sl.name == a["slot"]:
+                            slot.picks, slot.builtin = list(sl.picks or []), sl.builtin
+                for sl in ((r.sandbox if r else {}) or {}).get("slots", []):
+                    if sl["name"] == a["slot"]:
+                        slot.picks, slot.builtin = sl.get("picks", []), sl.get("builtin", "")
+                a.clear()
+                a.update(self._standin_add(r, slot, "[Creative] " if a.get("creative") else "", []))
+                changed = True
+        if changed:
+            m.save()
+        return changed
+
     def _auto_fill(self, m, r, slots, job, prefix="", skip_slots=()):
         """Install the best mod for each slot. Records what the merge adds (and what it couldn't) in m.data["adds"]."""
         adds = [a for a in m.data.get("adds", []) if a.get("slot") not in {s.name for s in slots}] if not prefix else m.data.get("adds", [])
@@ -1338,6 +1429,7 @@ class Api:
                 continue
             job.write("Looking for %s …" % slot.name.lower())
             gh = getattr(slot, "github", "")
+            self._locked_picks = []
             try:
                 if gh:  # a tool published on its own GitHub page
                     fw = Framework(id=gh, name=slot.name, github=gh, asset=getattr(slot, "asset", r"(?i)\.zip$"),
@@ -1350,19 +1442,9 @@ class Api:
             except Exception as e:
                 got, hit = [], None
                 job.write("✖ Search failed: %s" % e)
-            if not got and getattr(slot, "builtin", ""):  # Frankenstein's own mod already does this
-                adds.append({"slot": slot.name, "ok": True, "mod": slot.builtin, "source": "Built in", "page": "",
-                             "extra": 0, "creative": bool(prefix), "why": ""})
-                job.write("✔ %s: %s (built into Frankenstein)" % (slot.name, slot.builtin))
-                continue
             if not got:
-                why = ("no mod for it that Frankenstein can download by itself. The mods for this are on Nexus Mods, "
-                       "and Nexus only lets apps download for Premium members" if getattr(slot, "picks", None) else
-                       "no mod for it that Frankenstein can download by itself" +
-                       ("" if self._settings.get("curseforge_key") else " (a CurseForge key in Settings finds more)"))
-                adds.append({"slot": slot.name, "ok": False, "why": why, "search": slot.search, "creative": bool(prefix),
-                             "picks": list(getattr(slot, "picks", None) or [])})
-                job.write("– %s: %s" % (slot.name, why))
+                adds.append(self._standin_add(r, slot, prefix, getattr(self, "_locked_picks", []) if not gh else []))
+                job.write("✔ %s: %s" % (slot.name, adds[-1]["mod"]))
                 continue
             labels = []
             for name, path in got:
@@ -1431,7 +1513,20 @@ class Api:
     def _install_builtin(self, m, r, log):
         """Frankenstein's own mod for this game (the item menu, story mode), if it has one."""
         b = BUILTIN.get(r.id if r else "")
-        if not b or any(i["label"] == b["label"] for i in m.data.get("installs", [])):
+        if not b:
+            return
+        src = os.path.join(os.path.dirname(os.path.abspath(__file__)), "mods", r.id)
+        stamp = self._builtin_stamp(src)
+        if any(i["label"] == b["label"] for i in m.data.get("installs", [])):
+            if os.path.isdir(src) and m.data.get("builtin_stamp") != stamp:
+                # a newer Frankenstein: bring its own mod in this merge up to date
+                for root, _d, files in os.walk(src):
+                    for f in files:
+                        rel = os.path.relpath(os.path.join(root, f), src).replace(os.sep, "/")
+                        m.put_file(os.path.join(root, f), b["dest"] + "/" + rel)
+                m.data["builtin_stamp"] = stamp
+                m.save()
+                log("Updated %s." % b["label"])
             return
         for fid in b.get("needs", []):
             if fid in r.frameworks and not any(r.framework(fid).name == i["label"] for i in m.data.get("installs", [])):
@@ -1441,7 +1536,6 @@ class Api:
                               subdir=fw.subdir, log=log)
                 except Exception as e:
                     log("✖ %s failed: %s" % (fw.name, e))
-        src = os.path.join(os.path.dirname(os.path.abspath(__file__)), "mods", r.id)
         if not os.path.isdir(src):
             return log("(Frankenstein's own %s mod isn't in this build.)" % r.name)
         import zipfile
@@ -1453,9 +1547,98 @@ class Api:
                     out.write(os.path.join(root, f), b["dest"] + "/" + rel)
         try:
             m.install(z, b["label"], r.layout, log=log)
+            m.data["builtin_stamp"] = stamp
+            m.save()
             log("Added %s." % b["label"])
         except Exception as e:
             log("✖ %s failed: %s" % (b["label"], e))
+
+    @staticmethod
+    def _builtin_stamp(src):
+        import hashlib
+        h = hashlib.sha1()
+        for root, _d, files in sorted(os.walk(src)):
+            for f in sorted(files):
+                with open(os.path.join(root, f), "rb") as fh:
+                    h.update(f.encode() + fh.read())
+        return h.hexdigest()[:12]
+
+    # ---------- Frankenstein's Spawner: items and cars into the running game ----------
+
+    GTA_CATALOG = [("car", m, n, "Supercars") for m, n in [("adder", "Truffade Adder"), ("zentorno", "Pegassi Zentorno"),
+                   ("t20", "Progen T20"), ("krieger", "Benefactor Krieger"), ("emerus", "Progen Emerus"), ("deveste", "Principe Deveste Eight"),
+                   ("italirsx", "Grotti Itali RSX"), ("tyrant", "Overflod Tyrant")]] + \
+        [("car", m, n, "Sports") for m, n in [("elegy", "Annis Elegy RH8"), ("jester", "Dinka Jester"), ("sultanrs", "Karin Sultan RS"),
+         ("comet2", "Pfister Comet"), ("carbonizzare", "Grotti Carbonizzare"), ("kuruma", "Karin Kuruma"), ("banshee2", "Bravado Banshee 900R")]] + \
+        [("car", m, n, "Muscle and off-road") for m, n in [("dominator", "Vapid Dominator"), ("gauntlet", "Bravado Gauntlet"),
+         ("sandking", "Vapid Sandking"), ("bf400", "Nagasaki BF400"), ("bati", "Pegassi Bati 801")]] + \
+        [("car", m, n, "Air and military") for m, n in [("buzzard", "Buzzard"), ("hydra", "Hydra"), ("lazer", "P-996 Lazer"),
+         ("rhino", "Rhino tank"), ("insurgent", "Insurgent"), ("oppressor", "Oppressor")]] + \
+        [("weapon", m, n, "Weapons") for m, n in [("WEAPON_PISTOL", "Pistol"), ("WEAPON_COMBATPISTOL", "Combat Pistol"),
+         ("WEAPON_MICROSMG", "Micro SMG"), ("WEAPON_ASSAULTRIFLE", "Assault Rifle (AK)"), ("WEAPON_CARBINERIFLE", "Carbine Rifle"),
+         ("WEAPON_PUMPSHOTGUN", "Pump Shotgun"), ("WEAPON_SNIPERRIFLE", "Sniper Rifle"), ("WEAPON_RPG", "RPG"),
+         ("WEAPON_MINIGUN", "Minigun"), ("WEAPON_GRENADE", "Grenades"), ("WEAPON_MACHETE", "Machete")]]
+
+    def spawner_catalog(self, merge_id):
+        """What the Spawner can send to this merge's game: {available, items: [{id, name, cat, kind}], live, note}."""
+        m = Merge.load(merge_id)
+        r = self._recipe(m.data.get("recipe_id"))
+        b = BUILTIN.get(r.id if r else "", {})
+        if not b.get("bridge"):
+            return {"available": False, "items": [], "live": False,
+                    "note": "Frankenstein doesn't have its own mod for this game yet, so the Spawner can't reach it. "
+                            "Use the game's sandbox tools in Creative instead."}
+        items = []
+        if r.id == "gta5":
+            items = [{"kind": k, "id": i, "name": n, "cat": c} for k, i, n, c in self.GTA_CATALOG]
+        else:
+            try:
+                with open(os.path.join(m.target_path, *b["catalog"].split("/")), encoding="utf-8") as f:
+                    cat = json.load(f)
+            except (OSError, ValueError):
+                cat = {}
+            for it in cat.get("items", []):
+                items.append({"kind": "item", "id": it.get("id"), "name": it.get("name") or it.get("id"),
+                              "cat": it.get("category") or it.get("cat") or "Other"})
+            for c in cat.get("cars", []):
+                items.append({"kind": "car", "id": c.get("id"), "name": c.get("name") or c.get("id"), "cat": "Cars"})
+        live = self._playing == merge_id
+        note = "" if items else ("The list fills in after you play this merge once (Frankenstein's mod writes it "
+                                 "from inside the game, so it has every item, mods' items too).")
+        return {"available": True, "items": items, "live": live, "note": note}
+
+    def spawner_send(self, merge_id, kind, item_id, qty=1, name=""):
+        """Send one request to the running game (it picks it up within a second)."""
+        m = Merge.load(merge_id)
+        r = self._recipe(m.data.get("recipe_id"))
+        b = BUILTIN.get(r.id if r else "", {})
+        if not b.get("bridge"):
+            raise MergeError("The Spawner can't reach this game.")
+        p = os.path.join(m.target_path, *b["bridge"].split("/"))
+        os.makedirs(os.path.dirname(p), exist_ok=True)
+        n = int(time.time() * 1000)
+        req = {"n": n, "kind": kind, "id": item_id, "qty": max(1, int(qty or 1)), "name": name or item_id}
+        if p.endswith(".txt"):
+            try:
+                with open(p, encoding="utf-8") as f:
+                    lines = f.read().splitlines()[-40:]
+            except OSError:
+                lines = []
+            lines.append("|".join(str(req[k]).replace("|", " ") for k in ("n", "kind", "id", "qty", "name")))
+            text = "\n".join(lines) + "\n"
+        else:
+            try:
+                with open(p, encoding="utf-8") as f:
+                    cmds = json.load(f)[-40:]
+            except (OSError, ValueError, TypeError):
+                cmds = []
+            cmds.append(req)
+            text = json.dumps(cmds)
+        tmp = p + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            f.write(text)
+        os.replace(tmp, p)
+        return {"sent": True, "live": self._playing == merge_id}
 
     def _builtin_settings(self, m, r, creative):
         """Tell Frankenstein's own mod whether the item menu is on for this launch."""
@@ -1560,6 +1743,16 @@ class Api:
         except Exception:
             self._update = None  # offline or no releases yet: try again next start
         return self._update
+
+    def check_update_now(self):
+        """The sidebar button: ask GitHub right away. {current, latest, update, error}."""
+        try:
+            self._update = updater.latest()
+            err = ""
+        except Exception as e:
+            self._update, err = None, "Couldn't reach GitHub (%s). Check your internet and try again." % e
+        return {"current": VERSION, "latest": (self._update or {}).get("version") or (VERSION if not err else ""),
+                "update": self._update, "error": err}
 
     def install_update(self):
         info = getattr(self, "_update", None) or updater.latest()
@@ -1893,6 +2086,11 @@ class Api:
         if not exe:
             raise MergeError("Couldn't find the game's .exe in %s." % m.target_path)
         self._switch_creative(m, r, creative)
+        if any(i["label"] == BUILTIN.get(r.id if r else "", {}).get("label") for i in m.data.get("installs", [])):
+            try:
+                self._install_builtin(m, r, lambda *_: None)  # Frankenstein's own mod, kept up to date
+            except Exception:
+                pass
         self._builtin_settings(m, r, creative)
         m.data["plays"] = m.data.get("plays", 0) + 1
         m.save()
@@ -2125,7 +2323,7 @@ class Api:
             w = storymode.world(m.target_path, r)
             try:
                 raw = bot.story_pack(m.data.get("game_name", ""), m.data.get("source_name") or m.data.get("theme_name", ""),
-                                     m.name, [i["label"] for i in m.data.get("installs", [])], (idea or "").strip()[:300],
+                                     m.name, [i["label"] for i in m.data.get("installs", [])], self._story_idea(m, idea),
                                      [i.get("name", "") for i in w.get("items", [])], [n.get("name", "") for n in w.get("npcs", [])],
                                      how["level"] == "in-game")
                 pack = storymode.clean(raw, m.name)

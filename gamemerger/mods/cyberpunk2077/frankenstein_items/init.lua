@@ -5,7 +5,14 @@
 -- Frankenstein writes settings.json next to this file before each launch.
 
 local menu = { open = false, items = {}, shown = {}, cats = { "All" }, cat = "All", search = "", last = nil,
-               overlay = false, allowed = true, note = "", cars = {}, carSearch = "", god = false, saved = nil }
+               overlay = false, allowed = true, note = "", cars = {}, carSearch = "", god = false, saved = nil,
+               power = 1.0, brakes = 1.0, tuned = {}, race = nil, best = nil, hud = true, clock = 0, seq = 0 }
+
+-- the Forza garage: real cars already in Cyberpunk plus the fastest ones, matched loosely so game updates don't break it
+local GARAGE = { { "porsche", "Porsche 911 Turbo (a real car, in the base game)" }, { "caliburn", "Rayfield Caliburn" },
+                 { "aerondight", "Rayfield Aerondight" }, { "turbo_r", "Quadra Turbo-R" }, { "type66", "Quadra Type-66" },
+                 { "shion", "Mizutani Shion" }, { "outlaw", "Herrera Outlaw" }, { "hozuki", "Makigai Hozuki" },
+                 { "arch", "Arch Nazare (bike)" } }
 
 local function readSettings()
     local f = io.open("settings.json", "r")
@@ -85,6 +92,102 @@ local function teleport(dx, dy, dz)
     Game.GetTeleportationFacility():Teleport(p, Vector4.new(pos.x + dx, pos.y + dy, pos.z + dz, 1), p:GetWorldOrientation():ToEulerAngles())
 end
 
+-- ---------- Forza tuning: changes the game's car data (TweakDB); a car called after tuning drives with it ----------
+local function eachEngine(fn)
+    for _, c in ipairs(menu.cars) do
+        pcall(function()
+            local eng = TweakDB:GetFlat(c.id .. ".vehEngineData")
+            if eng then fn(c, TDBID.ToStringDEBUG(eng)) end
+        end)
+    end
+end
+
+local function tune()
+    local n = 0
+    eachEngine(function(c, eng)
+        local key = eng .. ".engineMaxTorque"
+        if menu.tuned[key] == nil then menu.tuned[key] = TweakDB:GetFlat(key) end
+        local base = menu.tuned[key]
+        if base and TweakDB:SetFlat(key, base * menu.power) then n = n + 1 end
+    end)
+    for _, c in ipairs(menu.cars) do
+        pcall(function()
+            local dm = TweakDB:GetFlat(c.id .. ".driveModelData")
+            if not dm then return end
+            local key = TDBID.ToStringDEBUG(dm) .. ".brakingFrictionFactor"
+            if menu.tuned[key] == nil then menu.tuned[key] = TweakDB:GetFlat(key) end
+            if menu.tuned[key] then TweakDB:SetFlat(key, menu.tuned[key] * menu.brakes) end
+        end)
+    end
+    if n == 0 then error("this game version names its car data differently") end
+    return n
+end
+
+-- ---------- street races: a timed sprint to a point across the city ----------
+local atan2 = math.atan2 or math.atan  -- CET's Lua has atan2; newer Lua spells it atan(y, x)
+menu.now = 0
+local function startRace(dist)
+    local p = Game.GetPlayer()
+    local pos = p:GetWorldPosition()
+    local a = math.random() * math.pi * 2
+    menu.race = { x = pos.x + math.cos(a) * dist, y = pos.y + math.sin(a) * dist, start = menu.now, dist = dist,
+                  prize = math.floor(dist * 12) }
+end
+
+local function raceTick()
+    local r = menu.race
+    if not r then return end
+    local p = Game.GetPlayer()
+    if not p then return end
+    local pos = p:GetWorldPosition()
+    local dx, dy = r.x - pos.x, r.y - pos.y
+    r.left = math.sqrt(dx * dx + dy * dy)
+    local f = p:GetWorldForward()
+    local ang = math.deg(atan2(dy, dx) - atan2(f.y, f.x)) % 360
+    local arrows = { "↑", "↖", "←", "↙", "↓", "↘", "→", "↗" }
+    r.arrow = arrows[math.floor((ang + 22.5) / 45) % 8 + 1]
+    r.time = menu.now - r.start
+    if r.left < 30 then
+        local par = r.dist / 40  -- seconds a quick drive takes
+        local prize = r.time <= par and r.prize * 2 or r.prize
+        pcall(function() Game.AddToInventory("Items.money", prize) end)
+        menu.note = string.format("Race won in %.1f s! +%d eddies%s", r.time, prize, r.time <= par and " (beat the par time: double)" or "")
+        if not menu.best or r.time < menu.best then menu.best = r.time end
+        menu.race = nil
+    end
+end
+
+-- ---------- Frankenstein's Spawner (the app) sends requests through a file next to this one ----------
+local function catalog()
+    local f = io.open("catalog.json", "w")
+    if not f then return end
+    local items, cars = {}, {}
+    for _, it in ipairs(menu.items) do table.insert(items, { id = it.id, name = it.name, cat = it.cat }) end
+    for _, c in ipairs(menu.cars) do table.insert(cars, { id = c.id, name = c.name }) end
+    f:write(json.encode({ items = items, cars = cars }))
+    f:close()
+end
+
+local function bridge()
+    local f = io.open("commands.json", "r")
+    if not f then return end
+    local ok, cmds = pcall(json.decode, f:read("*a"))
+    f:close()
+    if not ok or type(cmds) ~= "table" then return end
+    for _, c in ipairs(cmds) do
+        if (c.n or 0) > menu.seq then
+            menu.seq = c.n
+            if c.kind == "car" then
+                pcall(function() Game.GetVehicleSystem():EnablePlayerVehicle(c.id, true, false) end)
+                menu.note = "From Frankenstein: " .. (c.name or c.id) .. " is in your garage. Press V."
+            else
+                pcall(function() Game.AddToInventory(c.id, c.qty or 1) end)
+                menu.note = "From Frankenstein: " .. (c.qty or 1) .. " x " .. (c.name or c.id)
+            end
+        end
+    end
+end
+
 local function give(it, qty)
     local ok = pcall(function() Game.AddToInventory(it.id, qty) end)
     menu.note = ok and ("Got " .. qty .. " x " .. it.name) or ("Couldn't give " .. it.name)
@@ -94,6 +197,23 @@ registerForEvent("onInit", function()
     readSettings()
     load()
     loadCars()
+    pcall(catalog)
+    -- requests sent before this session started don't count
+    pcall(function()
+        local f = io.open("commands.json", "r")
+        if f then
+            local ok, cmds = pcall(json.decode, f:read("*a")); f:close()
+            if ok and type(cmds) == "table" then for _, c in ipairs(cmds) do menu.seq = math.max(menu.seq, c.n or 0) end end
+        end
+    end)
+end)
+registerForEvent("onUpdate", function(dt)
+    menu.now = menu.now + dt
+    menu.clock = menu.clock + dt
+    if menu.clock < 0.5 then return end
+    menu.clock = 0
+    pcall(raceTick)
+    pcall(bridge)
 end)
 registerForEvent("onOverlayOpen", function() menu.overlay = true end)
 registerForEvent("onOverlayClose", function() menu.overlay = false end)
@@ -101,7 +221,26 @@ registerHotkey("frankenstein_items", "Frankenstein sandbox menu", function()
     if menu.allowed then menu.open = not menu.open end
 end)
 
+local function drawHud()
+    local kmh = nil
+    pcall(function()
+        local v = Game.GetMountedVehicle(Game.GetPlayer())
+        if v then kmh = math.floor(math.abs(v:GetCurrentSpeed()) * 3.6 + 0.5) end
+    end)
+    if not kmh and not menu.race then return end
+    ImGui.SetNextWindowPos(30, 30, ImGuiCond.FirstUseEver)
+    ImGui.SetNextWindowBgAlpha(0.55)
+    if ImGui.Begin("Frankenstein HUD", ImGuiWindowFlags.NoTitleBar + ImGuiWindowFlags.AlwaysAutoResize + ImGuiWindowFlags.NoScrollbar) then
+        if kmh then ImGui.Text(string.format("%3d km/h   %3d mph", kmh, math.floor(kmh / 1.609 + 0.5))) end
+        if menu.race and menu.race.left then
+            ImGui.Text(string.format("RACE  %s %4d m   %5.1f s", menu.race.arrow or "", math.floor(menu.race.left), menu.race.time or 0))
+        end
+    end
+    ImGui.End()
+end
+
 registerForEvent("onDraw", function()
+    if menu.hud then pcall(drawHud) end
     if not (menu.overlay or menu.open) then return end
     if not menu.allowed then
         if menu.overlay then
@@ -204,6 +343,56 @@ registerForEvent("onDraw", function()
                     ImGui.SameLine()
                 end
                 ImGui.NewLine()
+                ImGui.EndTabItem()
+            end
+            if ImGui.BeginTabItem("Garage") then
+                ImGui.TextWrapped("Forza garage: the real cars already in Cyberpunk and the quickest ones, one click into your garage. Real-world car mods you add show up in the Cars tab.")
+                for i, g in ipairs(GARAGE) do
+                    local hit = nil
+                    for _, c in ipairs(menu.cars) do if c.id:lower():find(g[1], 1, true) then hit = c; break end end
+                    if hit then
+                        if ImGui.Button("Add##g" .. i) then
+                            try(g[2] .. " is in your garage. Press V to call it.", function()
+                                Game.GetVehicleSystem():EnablePlayerVehicle(hit.id, true, false)
+                            end)
+                        end
+                        ImGui.SameLine()
+                        ImGui.Text(g[2])
+                    end
+                end
+                if ImGui.Button("Add the whole Forza garage") then
+                    try("The Forza garage is yours. Press V to call a car.", function()
+                        for _, g in ipairs(GARAGE) do
+                            for _, c in ipairs(menu.cars) do
+                                if c.id:lower():find(g[1], 1, true) then Game.GetVehicleSystem():EnablePlayerVehicle(c.id, true, false); break end
+                            end
+                        end
+                    end)
+                end
+                ImGui.EndTabItem()
+            end
+            if ImGui.BeginTabItem("Tuning") then
+                ImGui.TextWrapped("Forza-style tuning for every car. Call your car again (V) after changing it.")
+                menu.power = ImGui.SliderFloat("Power", menu.power, 0.8, 2.5, "%.2fx")
+                menu.brakes = ImGui.SliderFloat("Brakes", menu.brakes, 0.8, 2.0, "%.2fx")
+                if ImGui.Button("Apply to every car") then try("Tuned. Call your car again to feel it.", function() tune() end) end
+                ImGui.SameLine()
+                if ImGui.Button("Back to normal") then
+                    menu.power, menu.brakes = 1.0, 1.0
+                    try("Cars are back to normal", function() tune() end)
+                end
+                menu.hud = ImGui.Checkbox("Speedometer while driving", menu.hud)
+                ImGui.EndTabItem()
+            end
+            if ImGui.BeginTabItem("Races") then
+                ImGui.TextWrapped("Street races: get in a car and race to a point across Night City. The arrow on the speedometer points the way. Beat the par time for double the prize.")
+                for _, r in ipairs({ { "Sprint (800 m)", 800 }, { "Cross-town (1.6 km)", 1600 }, { "Marathon (3 km)", 3000 } }) do
+                    if ImGui.Button(r[1]) then try("Race on! Follow the arrow.", function() startRace(r[2]) end) end
+                    ImGui.SameLine()
+                end
+                ImGui.NewLine()
+                if menu.race and ImGui.Button("Give up this race") then menu.race = nil; menu.note = "Race cancelled" end
+                if menu.best then ImGui.Text(string.format("Best time this session: %.1f s", menu.best)) end
                 ImGui.EndTabItem()
             end
             if ImGui.BeginTabItem("Fly") then

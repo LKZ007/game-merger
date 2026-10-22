@@ -747,3 +747,12 @@ class SafetyTests(unittest.TestCase):
             f.write("modded")
         with open(os.path.join(base, "r6", "cache", "final.redscripts")) as f:
             self.assertEqual(f.read(), "vanilla")
+
+
+class StandardTests(unittest.TestCase):
+    def test_every_part_has_something(self):
+        from gamemerger import api
+        self.assertEqual(api.standin_for("cyberpunk2077", "Speedometer and HUD")[1], "builtin")
+        self.assertEqual(api.standin_for("cyberpunk2077", "Radio stations")[1], "story")
+        self.assertEqual(api.standin_for("whatever", "Dragons")[0], api.STORY_STANDIN)
+        self.assertEqual(api.standin_for("x", "y", "Own thing"), ("Own thing", "builtin"))

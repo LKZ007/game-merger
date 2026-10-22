@@ -53,6 +53,8 @@ namespace Frankenstein
             _next = Time.unscaledTime + 1f;
             try { Story.Tick(); }
             catch (Exception e) { Melon<Plugin>.Logger.Warning("Story: " + e.Message); }
+            try { Bridge.Tick(); }
+            catch (Exception e) { Melon<Plugin>.Logger.Warning("Spawner: " + e.Message); }
             try { GunShop.Tick(); }
             catch (Exception e) { Melon<Plugin>.Logger.Warning("Gun shop: " + e.Message); }
         }

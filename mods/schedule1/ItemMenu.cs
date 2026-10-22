@@ -196,6 +196,8 @@ namespace Frankenstein
             Time.timeScale = _oldScale > 0f ? _oldScale : 1f;
         }
 
+        public static void Notify(string text) => Toast(text);
+
         static void Toast(string text)
         {
             _toast = text;
