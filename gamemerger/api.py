@@ -14,7 +14,7 @@ import urllib.parse
 import uuid
 import webbrowser
 
-from . import accounts, covers, detect, downloader, franklin, gallery, network, nexus, paths, permissions, saves, scan, sharing, specs, updater, voice
+from . import accounts, achievements, covers, discord, profiles, ptt, detect, downloader, franklin, gallery, network, nexus, paths, permissions, saves, scan, sharing, specs, updater, voice
 from .version import VERSION
 from .installer import MODE_COPY, MODE_HARDLINK, MODE_INPLACE, Merge, MergeError, find_clashes, preview
 from .recipes import load_recipes, resource_dir
@@ -43,7 +43,11 @@ class Job:
 class Api:
     def __init__(self):
         self._window = None  # set by app.py when running inside pywebview
-        self._settings = paths.load_settings()
+        data = profiles.ensure_admin(paths.load_settings(), self._default_admin_name())
+        last = profiles.find(data.get("last")) or data["profiles"][0]
+        self._settings = profiles.Settings(paths.load_settings(), last["id"])
+        # one account without a PIN opens straight in; otherwise the page shows who's playing first
+        self._locked = len(data["profiles"]) > 1 or bool(last.get("pin"))
         if not self._settings.get("voice_defaults_v2"):
             # Andrew is Franklin's voice now; the cloned XTTS voice is opt-in from Settings
             if self._settings.get("voice_style") == "own":
@@ -61,6 +65,84 @@ class Api:
         self._playing = None
         self._recover_saves()
         self._start_hotkey()
+        self._presence = discord.Presence()
+        self._heard = []
+        self._ptt = ptt.PushToTalk(self._heard.append)
+
+    # ---------- accounts ----------
+
+    @staticmethod
+    def _default_admin_name():
+        try:
+            return os.getlogin()
+        except OSError:
+            return os.environ.get("USERNAME") or "Player 1"
+
+    def _me(self):
+        return profiles.find(self._settings.pid) or {}
+
+    def _perm(self, key, what):
+        p = self._me()
+        if not p.get("admin") and not dict(profiles.DEFAULT_PERMS, **p.get("perms", {})).get(key, True):
+            raise MergeError("Your account isn't allowed to %s. Ask %s to change it in Settings > Accounts." % (
+                what, next((x["name"] for x in profiles.load()["profiles"] if x.get("admin")), "the admin")))
+
+    def _admin(self):
+        if not self._me().get("admin"):
+            raise MergeError("Only the admin account can change that.")
+
+    def profiles_state(self):
+        data = profiles.load()
+        return {"current": profiles.public(self._me()) if self._me() else None, "locked": self._locked,
+                "profiles": [profiles.public(p) for p in data["profiles"]], "permissions": profiles.PERMISSIONS}
+
+    def profile_switch(self, pid, pin=""):
+        p = profiles.find(pid)
+        if not p:
+            raise MergeError("That account doesn't exist any more.")
+        if not profiles.check_pin(p, pin):
+            raise MergeError("Wrong PIN.")
+        with self._lock:
+            self._settings = profiles.Settings(paths.load_settings(), pid)
+            self._chat_history = []
+        if not dict(profiles.DEFAULT_PERMS, **p.get("perms", {})).get("explicit", True) and not p.get("admin"):
+            self._settings["explicit"] = False
+        profiles.set_last(pid)
+        self._locked = False
+        return self.profiles_state()
+
+    def profile_lock(self):
+        """Back to "who's playing?" (switch account)."""
+        self._locked = True
+        return self.profiles_state()
+
+    def profile_add(self, name, pin="", perms=None):
+        self._admin()
+        try:
+            profiles.add(name, pin, perms)
+        except profiles.ProfileError as e:
+            raise MergeError(str(e))
+        return self.profiles_state()
+
+    def profile_update(self, pid, name=None, pin=None, perms=None):
+        me = self._me()
+        if pid != me.get("id"):
+            self._admin()
+        elif perms is not None and not me.get("admin"):
+            raise MergeError("Only the admin account can change what you're allowed to do.")
+        try:
+            profiles.update(pid, name, pin, perms)
+        except profiles.ProfileError as e:
+            raise MergeError(str(e))
+        return self.profiles_state()
+
+    def profile_remove(self, pid):
+        self._admin()
+        try:
+            profiles.remove(pid)
+        except profiles.ProfileError as e:
+            raise MergeError(str(e))
+        return self.profiles_state()
 
     # ---------- helpers ----------
 
@@ -282,6 +364,9 @@ class Api:
             else:
                 games = accounts.gog_owned()
             accounts._save_cache(source.lower() + ".json", games)
+            st = self.library_status()
+            if sum(1 for x in (st["steam"]["on"], st["epic"]["on"], st["gog"]["on"]) if x) >= 2:
+                self._award("collector")
         except accounts.AccountError as e:
             if source == "Steam":
                 self._settings["steam_error"] = str(e)
@@ -366,6 +451,7 @@ class Api:
         t = next((x for x in (r.themes if r else []) if x.id == theme_id), None)
         if not t:
             raise MergeError("Pick a style to merge in first.")
+        self._award("preview")
         out = {"base": g.name, "theme": t.name, "from_game": t.from_game, "clips": [], "pictures": [],
                "summary": t.description, "videos_url": "https://www.youtube.com/results?search_query=" +
                urllib.parse.quote("%s %s mod showcase" % (g.name, t.slots[0].search if t.slots else t.from_game))}
@@ -475,6 +561,7 @@ class Api:
                 "name": self._settings.get("nexus_name", "")}
 
     def nexus_set_key(self, key):
+        self._admin()
         key = (key or "").strip()
         if not key:
             for k in ("nexus_key", "nexus_premium", "nexus_name"):
@@ -501,6 +588,7 @@ class Api:
     def nexus_get(self, recipe_id, mod_id):
         """Premium: download the mod's main file now. Free: open its Files page, where "Mod Manager
         Download" sends it back to the app."""
+        self._perm("mods", "download mods")
         r = self._recipe(recipe_id)
         key = self._nexus_key()
         if not self._settings.get("nexus_premium"):
@@ -559,6 +647,7 @@ class Api:
     # ---------- merging ----------
 
     def start_merge(self, p):
+        self._perm("mods", "make merges")
         g = self._game(p["key"])
         r = g.recipe
         t = r.theme(p["theme_id"])
@@ -618,11 +707,16 @@ class Api:
         merge.data["source_appid"] = t.source_appid
         merge.data["source_name"] = t.from_game.split(" /")[0]
         merge.data["tagline"] = (tagline or "")[:90]
+        merge.data["owner"] = self._settings.pid
         merge.save()
         if r.saves:
             saves.create_slot(merge.id, r, log=job.write)
             job.write("This merge has its own save games, so your normal saves stay safe.")
         job.progress = None
+        n = self._bump("merges")
+        self._award("first_merge")
+        if n >= 5:
+            self._award("five_merges")
         return merge
 
     # ---------- gallery ----------
@@ -634,7 +728,11 @@ class Api:
             except (OSError, ValueError):
                 return "Other"
         self._shots = 0
-        gallery.listen(name, lambda p: setattr(self, "_shots", self._shots + 1))
+        def shot(_path):
+            self._shots += 1
+            if self._bump("shots") >= 10:
+                self._award("photographer")
+        gallery.listen(name, shot)
 
     def gallery(self):
         return {"hotkey": gallery.HOTKEY, "items": [dict(i, thumb=None) for i in gallery.items()]}
@@ -707,13 +805,17 @@ class Api:
         return self._run(work)
 
     def party_host(self):
+        self._perm("online", "host online parties")
         code = network.host()
+        self._award("party_host")
         self._settings["party"] = code
         paths.save_settings(self._settings)
         return network.status(code)
 
     def party_join(self, code):
+        self._perm("online", "join online parties")
         code = network.join(code)
+        self._award("party_join")
         self._settings["party"] = code
         paths.save_settings(self._settings)
         return network.status(code)
@@ -745,6 +847,7 @@ class Api:
 
     def share_merge(self, merge_id):
         """Pack a merge into a .gmerge file in Downloads and show it in Explorer."""
+        self._perm("online", "share merges")
         m = Merge.load(merge_id)
         r = self._recipe(m.data.get("recipe_id"))
 
@@ -752,6 +855,7 @@ class Api:
             out = sharing.export(m, r, saves.known_folder("Downloads"), log=job.write)
             job.write("Saved %s" % out)
             self._reveal(out)
+            self._award("shared")
             return {"path": out, "size": os.path.getsize(out)}
         return self._run(work)
 
@@ -761,6 +865,49 @@ class Api:
 
     def pick_share_file(self):
         return (self._dialog("files", title="Pick the merge your friend sent", types=SHARE_TYPES) or [None])[0]
+
+    # ---------- achievements ----------
+
+    def _award(self, key):
+        with self._lock:
+            new = achievements.award(self._settings, key)
+            if new:
+                paths.save_settings(self._settings)
+                self._new_awards = getattr(self, "_new_awards", []) + [key]
+        return new
+
+    def _bump(self, counter, n=1):
+        with self._lock:
+            v = achievements.count(self._settings, counter, n)
+            paths.save_settings(self._settings)
+        return v
+
+    def achievements(self):
+        return achievements.board(self._settings)
+
+    def achievements_new(self):
+        """Achievements unlocked since the page last asked (each shown once)."""
+        keys, self._new_awards = getattr(self, "_new_awards", []), []
+        return [{"id": k, "title": achievements.LIST[k][0], "how": achievements.LIST[k][1]} for k in keys]
+
+    # ---------- push-to-talk ----------
+
+    def ptt_start(self):
+        return self._ptt.start()
+
+    def ptt_stop(self):
+        self._ptt.stop()
+        return True
+
+    def ptt_poll(self):
+        """{"listening", "heard": [{"text"} or {"error"}]}; what was heard is handed over once."""
+        heard, self._heard[:] = list(self._heard), []
+        if any(h.get("text") for h in heard):
+            self._award("talker")
+        return {"listening": self._ptt.listening, "heard": heard, "key": ptt.KEY_NAME}
+
+    def controller_used(self):
+        self._award("controller")
 
     def handoffs(self):
         """.gmerge files and nxm:// links the app was opened with or handed since (taken once)."""
@@ -778,6 +925,7 @@ class Api:
                 "version_note": sharing.version_note(info, g.path, r.exe) if g and r else ""}
 
     def import_merge(self, path):
+        self._perm("mods", "add merges from friends")
         info = sharing.read(path)
         g = next((x for x in self._games if x.recipe and x.recipe.id == info.get("recipe_id")), None)
         if not g:
@@ -800,6 +948,7 @@ class Api:
                     raise MergeError("Frankenstein needs permission to change %s." % needs[0])
                 merge = self._new_merge(g, t, mode, dest, info["name"], job)
                 merge.data["shared_from"] = os.path.basename(path)
+                self._award("imported")
                 merge.save()
                 problems = []
                 for inst, archive in items:
@@ -825,7 +974,11 @@ class Api:
     def merges(self):
         kinds = {MODE_HARDLINK: "Fast copy", MODE_COPY: "Full copy", MODE_INPLACE: "Original (backed up)"}
         out = []
+        me = self._me()
         for m in Merge.all():
+            owner = m.data.get("owner")
+            if owner != me.get("id") and not (owner is None and me.get("admin")):
+                continue  # someone else's merge
             out.append({"id": m.id, "name": m.name, "tagline": m.data.get("tagline", ""), "game": m.data.get("game_name", ""),
                         "recipe_id": m.data.get("recipe_id"), "theme": m.data.get("theme_name", ""),
                         "mode": m.mode, "mode_label": kinds.get(m.mode, m.mode), "folder": m.target_path,
@@ -876,6 +1029,9 @@ class Api:
             raise MergeError("Couldn't find the game's .exe in %s." % m.target_path)
         m.data["plays"] = m.data.get("plays", 0) + 1
         m.save()
+        self._award("first_play")
+        if self._bump("plays") >= 10:
+            self._award("ten_plays")
         cloud = self._settings.get("cloud_folder")
         if cloud and r and r.saves and self._playing != merge_id:
             try:
@@ -889,7 +1045,87 @@ class Api:
         # modded copies start offline-only where the game supports it, so mods never reach online modes
         args = list(r.launch_args) if r and m.mode != MODE_INPLACE else []
         subprocess.Popen([exe] + args, cwd=os.path.dirname(exe))
+        self._discord_playing(m, r.processes or [os.path.basename(exe)])
         return True
+
+    # ---------- questlines ----------
+
+    def questlines(self, merge_id):
+        return Merge.load(merge_id).data.get("questlines", [])
+
+    def questline_new(self, merge_id, idea=""):
+        """Franklin writes a questline for this merge (runs as a job)."""
+        m = Merge.load(merge_id)
+        bot = franklin.Franklin(self._settings.get("claude_api_key", ""), self._settings.get("explicit", True))
+
+        def work(job):
+            job.write("Franklin is writing your questline …")
+            try:
+                q = bot.questline(m.data.get("game_name", ""), m.data.get("source_name") or m.data.get("theme_name", ""),
+                                  m.name, [i["label"] for i in m.data.get("installs", [])], (idea or "").strip()[:300])
+            except franklin.FranklinError as e:
+                raise MergeError(str(e))
+            q["id"] = uuid.uuid4().hex[:8]
+            q["done"] = [[False] * len(x["objectives"]) for x in q["quests"]]
+            q["created"] = time.time()
+            m.data.setdefault("questlines", []).insert(0, q)
+            m.save()
+            job.write("Done: %s" % q["title"])
+            return q
+        return self._run(work)
+
+    def questline_tick(self, merge_id, qid, quest, objective, done):
+        m = Merge.load(merge_id)
+        q = next((x for x in m.data.get("questlines", []) if x["id"] == qid), None)
+        if not q:
+            raise MergeError("That questline is gone.")
+        q["done"][quest][objective] = bool(done)
+        finished = all(all(row) for row in q["done"])
+        if finished and not q.get("finished"):
+            q["finished"] = time.time()
+            self._award("quest_done")
+        m.save()
+        return q
+
+    def questline_delete(self, merge_id, qid):
+        m = Merge.load(merge_id)
+        m.data["questlines"] = [x for x in m.data.get("questlines", []) if x["id"] != qid]
+        m.save()
+        return True
+
+    # ---------- Discord status ----------
+
+    def _discord_id(self):
+        return self._settings.get("discord_app_id") or discord.APP_ID
+
+    def _discord_playing(self, m, processes):
+        if not self._settings.get("discord_on", True) or not self._discord_id():
+            return
+
+        def run():
+            started = time.time()
+            shown = self._presence.show(self._discord_id(), m.name,
+                                        "%s × %s" % (m.data.get("game_name", ""), m.data.get("source_name") or m.data.get("theme_name", "")),
+                                        started)
+            if not shown:
+                return
+            time.sleep(20)  # give the game time to start before watching for it to close
+            while saves.running(processes):
+                time.sleep(5)
+            self._presence.clear(self._discord_id())
+        threading.Thread(target=run, daemon=True).start()
+
+    def discord_set(self, on=None, app_id=None):
+        if on is not None:
+            self._settings["discord_on"] = bool(on)
+        if app_id is not None:
+            self._admin()
+            app_id = re.sub(r"\D", "", app_id)
+            if app_id and len(app_id) < 15:
+                raise MergeError("That doesn't look like a Discord Application ID (a long number).")
+            self._settings["discord_app_id"] = app_id
+        paths.save_settings(self._settings)
+        return {"on": self._settings.get("discord_on", True), "has_id": bool(self._discord_id()), "built_in": bool(discord.APP_ID)}
 
     def playing(self):
         return self._playing
@@ -925,6 +1161,7 @@ class Api:
 
     def set_mods(self, merge_id, enabled, profile=""):
         """Switch mods on/off (optionally saving the set as a named profile, like "Chill" or "Chaos")."""
+        self._perm("mods", "switch mods")
         m = Merge.load(merge_id)
         r = self._recipe(m.data.get("recipe_id"))
         if self._playing == merge_id:
@@ -936,6 +1173,8 @@ class Api:
                 m.data.setdefault("profiles", {})[profile] = list(enabled)
             m.data["profile"] = profile
             m.save()
+            if "chaos" in profile.lower():
+                self._award("chaos")
             job.write("Done. %d mod(s) on." % len(enabled))
             return True
         return self._run(work)
@@ -979,6 +1218,7 @@ class Api:
             m.save()
             job.write("Starting the game again …")
             self.play(merge_id)
+            self._award("crash_fixed")
             return {"fixed": True, "culprit": verdict["culprit"], "why": verdict["why"]}
         return self._run(work)
 
@@ -1060,7 +1300,9 @@ class Api:
 
     def get_settings(self):
         key = self._settings.get("claude_api_key", "")
+        me = self._me()
         return {"has_key": bool(key), "key_hint": ("…" + key[-4:]) if key else "",
+                "admin": bool(me.get("admin")), "perms": dict(profiles.DEFAULT_PERMS, **me.get("perms", {})),
                 "mode": self._settings.get("mode", MODE_HARDLINK),
                 "destination": self._settings.get("destination", ""),
                 "data_folder": paths.data_dir(),
@@ -1077,6 +1319,11 @@ class Api:
                 + [[k, v[1]] for k, v in voice.NEURAL_VOICES.items()]}
 
     def save_settings(self, values):
+        shared = {"mode", "destination", "elevenlabs_key", "claude_api_key"}
+        if shared & {k for k, v in values.items() if v is not None} and not self._me().get("admin"):
+            raise MergeError("Only the admin account can change keys and where copies go.")
+        if values.get("explicit"):
+            self._perm("explicit", "switch on Franklin's 18+ mode")
         for k in ("mode", "destination", "voice_on", "voice_style", "explicit", "cloud_folder", "fun_style"):
             if k in values:
                 self._settings[k] = values[k]

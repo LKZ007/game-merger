@@ -441,5 +441,35 @@ class OwnedLibraryTests(unittest.TestCase):
         self.assertIsNone(accounts.secret_get("steam_key"))
 
 
+class AccountsTests(unittest.TestCase):
+    def setUp(self):
+        os.environ["GAMEMERGER_HOME"] = tempfile.mkdtemp()
+
+    def test_admin_keeps_settings_and_accounts_are_separate(self):
+        from gamemerger import paths, profiles
+        paths.save_settings({"claude_api_key": "k", "franklin_memory": ["likes cars"], "explicit": True})
+        data = profiles.ensure_admin(paths.load_settings(), "levy")
+        admin = data["profiles"][0]
+        self.assertTrue(admin["admin"])
+        mine = profiles.Settings(paths.load_settings(), admin["id"])
+        self.assertEqual((mine["claude_api_key"], mine["franklin_memory"]), ("k", ["likes cars"]))
+        kid = profiles.add("Sam", "1234", {"explicit": False})
+        theirs = profiles.Settings(paths.load_settings(), kid["id"])
+        self.assertEqual(theirs.get("claude_api_key"), "k")  # shared
+        self.assertIsNone(theirs.get("franklin_memory"))  # personal
+        theirs["franklin_memory"] = ["likes farming"]
+        theirs["mode"] = "copy"
+        paths.save_settings(theirs)
+        self.assertEqual(profiles.Settings(paths.load_settings(), admin["id"])["franklin_memory"], ["likes cars"])
+        self.assertEqual(paths.load_settings()["mode"], "copy")
+        self.assertTrue(profiles.check_pin(profiles.find(kid["id"]), "1234"))
+        self.assertFalse(profiles.check_pin(profiles.find(kid["id"]), "0000"))
+        self.assertFalse(profiles.public(profiles.find(kid["id"]))["perms"]["explicit"])
+        with self.assertRaises(profiles.ProfileError):
+            profiles.remove(admin["id"])
+        with self.assertRaises(profiles.ProfileError):
+            profiles.add("Bob", "12")
+
+
 if __name__ == "__main__":
     unittest.main()

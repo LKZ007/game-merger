@@ -28,11 +28,13 @@
     <button class="nav-item" data-view="merges"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3v6a4 4 0 0 0 8 0V3"/><path d="M12 13v8"/></svg>My merges</button>
     <button class="nav-item" data-view="party"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="8" cy="8" r="3"/><circle cx="17" cy="9" r="2.5"/><path d="M2 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><path d="M14.5 14.5c.8-.3 1.6-.5 2.5-.5 2.8 0 5 2.2 5 5"/></svg>Play together</button>
     <button class="nav-item" data-view="gallery"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 16-5-5-8 8"/></svg>Gallery</button>
-    <button class="nav-item" data-view="quests"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h12l4 4v12H4z"/><path d="M8 10h8M8 14h8M8 18h5"/></svg>Questlines <span class="pill">Soon</span></button>
+    <button class="nav-item" data-view="quests"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h12l4 4v12H4z"/><path d="M8 10h8M8 14h8M8 18h5"/></svg>Questlines</button>
+    <button class="nav-item" data-view="awards"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M17 5h3v2a3 3 0 0 1-3 3M7 5H4v2a3 3 0 0 0 3 3"/></svg>Achievements</button>
     <button class="nav-item" data-view="backups"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>Backups</button>
     <button class="nav-item" data-view="settings"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg>Settings</button>
     <div class="grow"></div>
     <button class="nav-item franklin-toggle" id="franklinToggle"><canvas class="nav-avatar brain" data-brain="tiny" aria-hidden="true"></canvas>Franklin</button>
+    <button class="me-chip" id="meChip"></button>
     <div class="nav-foot" id="navFoot">Looking for games…</div>
   </nav>
 
@@ -43,6 +45,7 @@
     <section class="view hidden" id="view-party"></section>
     <section class="view hidden" id="view-gallery"></section>
     <section class="view hidden" id="view-quests"></section>
+    <section class="view hidden" id="view-awards"></section>
     <section class="view hidden" id="view-backups"></section>
     <section class="view hidden" id="view-settings"></section>
   </main>
@@ -70,7 +73,8 @@
     </div>
     <form class="f-input" id="franklinForm">
       <label for="franklinText" class="sr-only">Ask Franklin</label>
-      <input id="franklinText" placeholder="Ask Franklin…" autocomplete="off">
+      <input id="franklinText" placeholder="Ask Franklin… or hold F8 to talk" autocomplete="off">
+      <button type="button" class="mic" id="franklinMic" aria-label="Hold to talk to Franklin" title="Hold to talk (or hold F8, even in a game)"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button>
       <button class="send" aria-label="Send"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
     </form>
   </aside>
@@ -87,5 +91,6 @@
 
 <script src="brain.js"></script>
 <script src="app.js"></script>
+<script src="gamepad.js"></script>
 </body>
 </html>

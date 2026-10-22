@@ -1,6 +1,9 @@
 # Frankenstein
 
-**Download: [FrankensteinSetup.exe](https://github.com/LKZ007/game-merger/releases/latest/download/FrankensteinSetup.exe)** (Windows 10/11, free)
+<p align="center">
+  <a href="https://github.com/LKZ007/game-merger/releases/latest/download/FrankensteinSetup.exe"><img alt="Download Frankenstein for Windows" src="https://img.shields.io/badge/Download-Frankenstein%20for%20Windows-8b5cf6?style=for-the-badge&logo=windows&logoColor=white" height="56"></a>
+</p>
+<p align="center">Windows 10/11 · free · always the newest version · updates itself after that</p>
 
 A Windows game launcher that "merges" games the realistic way. You pick a base game you
 actually play, pick the style of another game to bring in, and Frankenstein makes a safe
@@ -22,6 +25,8 @@ built-in AI assistant, explains the merge, finds mods, checks them for clashes a
 - **Every game you own**: connect Steam, Epic and GOG to see games that aren't installed here, and which ones are on your other PC.
 - **Fun rating**: green / yellow / red colour code on every game for how fun it'd be to merge into the one you picked.
 - **Preview before merging**: streamed trailers and mod pictures with Franklin's pitch, nothing downloaded.
+- **Accounts** with a "Who's playing?" screen, PINs, and an admin who decides what each account can do.
+- **Questlines** Franklin writes for each merge, **push-to-talk** (hold F8, even in-game), **controller support**, **achievements** and **Discord status**.
 - **Borderless full screen** launcher (F11 or Esc for a window), dark violet look, auto-updates.
 
 ## What it can merge right now

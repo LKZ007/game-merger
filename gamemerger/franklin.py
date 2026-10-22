@@ -123,6 +123,8 @@ def build_context(ctx):
         lines.append("Clash: %s" % clash)
     if ctx.get("merge"):
         lines.append("Selected merge: %s" % ctx["merge"])
+    if ctx.get("quest"):
+        lines.append("Questline they're on: %s" % ctx["quest"])
     for name, text in ctx.get("logs", []):
         lines.append("\n--- log file %s (last lines) ---\n%s" % (name, text))
     return "\n".join(lines)
@@ -156,6 +158,35 @@ class Franklin:
             out = {}
         culprit = out.get("culprit")
         return {"culprit": culprit if culprit in mods else None, "why": str(out.get("why") or text.strip())[:600]}
+
+    def questline(self, base, theme, merge_name, mods, idea=""):
+        """A questline the player can play in their merged game with what's already in it."""
+        import json
+        import re
+        ask = ("Write a questline for my merged game \"%s\": %s with %s style mods (%s). %s"
+               "It has to be playable in %s as it is, using places, activities and things that really exist in %s "
+               "plus what those mods add; don't invent features the game doesn't have. 4 to 6 quests that build to "
+               "a finale, each with 2 to 4 clear objectives the player can do and tick off themselves. Keep it fun "
+               "and in your voice. Answer with only JSON: {\"title\": \"...\", \"intro\": \"two sentences\", "
+               "\"quests\": [{\"title\": \"...\", \"briefing\": \"one or two sentences\", \"objectives\": "
+               "[\"...\"], \"reward\": \"what they get or bragging rights\"}]}" % (
+                   merge_name, base, theme, ", ".join(mods) or "none yet",
+                   ("The player wants: %s. " % idea) if idea else "", base, base))
+        text = "".join(self.stream_reply([{"role": "user", "content": ask}]))
+        m = re.search(r"\{.*\}", text, re.S)
+        try:
+            data = json.loads(m.group(0)) if m else {}
+        except ValueError:
+            data = {}
+        quests = []
+        for q in data.get("quests", [])[:8]:
+            objs = [str(o)[:160] for o in q.get("objectives", [])[:6] if str(o).strip()]
+            if q.get("title") and objs:
+                quests.append({"title": str(q["title"])[:80], "briefing": str(q.get("briefing", ""))[:400],
+                               "objectives": objs, "reward": str(q.get("reward", ""))[:160]})
+        if not quests:
+            raise FranklinError("Franklin's questline came out garbled. Try again.")
+        return {"title": str(data.get("title") or merge_name)[:80], "intro": str(data.get("intro", ""))[:500], "quests": quests}
 
     def game_identity(self, base, theme, slots, avoid=()):
         """A name and tagline for the merged game, as if it were a new game of its own."""

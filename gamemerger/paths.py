@@ -36,5 +36,7 @@ def load_settings():
 
 
 def save_settings(settings):
+    if hasattr(settings, "pid"):  # an account's settings (profiles.Settings) saves its own two halves
+        return settings.save()
     with open(settings_path(), "w", encoding="utf-8") as f:
         json.dump(settings, f, indent=2)

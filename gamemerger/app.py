@@ -96,6 +96,7 @@ def main():
     api = Api()
     api._handoffs = [arg] if arg else []
     api._register_nxm = register_nxm
+    api._ptt.watch_key()  # hold F8 to talk to Franklin, even mid-game
     # borderless like a game launcher: the page draws its own minimise / full screen / close buttons
     window = webview.create_window("Frankenstein", os.path.join(WEB, "index.html"), js_api=api,
                                    width=1360, height=860, min_size=(1100, 700), background_color="#0c0912",
