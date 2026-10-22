@@ -22,7 +22,7 @@ namespace Frankenstein
 
         public static void Scene(string name) => _inMenu = name != null && name.IndexOf("Menu", StringComparison.OrdinalIgnoreCase) >= 0;
 
-        static void Switch(string to)
+        public static void Switch(string to)
         {
             try
             {

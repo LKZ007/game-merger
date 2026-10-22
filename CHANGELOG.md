@@ -3,6 +3,10 @@
 Every release, newest first. Downloads are on the [releases page](https://github.com/LKZ007/game-merger/releases).
 The app was called Game Merger before 3.8.0.
 
+## v3.25.0 (2026-10-22)
+- **Switch to Creative while you play, in every game.** Schedule I: press **F8** anywhere in town for Frankenstein's menu, then **Switch to Creative** (or **Back to my normal game**), then confirm. Cyberpunk: press **~**, then the This merge tab, then **Switch to Creative**, then confirm. GTA V: **Shift+F10**, then Shift+F10 again to confirm. Save first. The game closes and Frankenstein starts it again in Creative with its own saves, and the same way back, so normal and Creative saves never mix. Each game shows a hint for the first few seconds saying how.
+- **Play together setup fixed.** Setup was meant to wait for ZeroTier to start, but in the hidden window the wait ended straight away, so it stopped with "Setup didn't finish". It now waits properly (up to 90 seconds), starts ZeroTier's service if it's stopped, and waits for its installer to finish. If it still fails, it says why in plain words (the Windows prompt was declined, another installer was running, the installer's error code, or the service didn't start) instead of showing a traceback. There's also a link to install ZeroTier yourself.
+
 ## v3.24.0 (2026-10-22)
 - **Host game and Extension game.** The two games in a merge are now called the Host game (the one you play, on its own engine) and the Extension game (the one coded onto it). This is the wording everywhere in the app.
 - **A Merge plan before you merge.** The merge step now shows what the Host game becomes once the Extension is coded onto it. It covers the world (which areas take on which look, the zone Frankenstein builds, lighting and weather, terrain and foliage), game modes, HUD, loading screens and menus, characters, and items and vehicles. Every line is marked **Built by Frankenstein**, **Mod**, **Stand-in** or **Not possible yet**, so you can see what each Host's engine really allows. With a Claude key, the AI writes a fuller plan for any pair. You can open any merge's plan again from ⋯ More.

@@ -17,6 +17,8 @@ namespace Frankenstein
         public static string Style = "", Zone = "", Lighting = "", Title = "", Host = "Schedule I";
         public static List<string> Modes = new List<string>();
         static bool _open, _light, _built, _inTown;
+        static string _confirm = "";
+        static float _hintUntil;
         static Vector3 _spot;
         static bool _hasSpot;
         static readonly List<GameObject> _made = new List<GameObject>();
@@ -45,6 +47,7 @@ namespace Frankenstein
         public static void Scene(string name)
         {
             _inTown = name != null && name.Length > 0 && name.IndexOf("Menu", StringComparison.OrdinalIgnoreCase) < 0;
+            if (_inTown) _hintUntil = Time.unscaledTime + 25f;
             if (!_inTown || Style.Length == 0) return;
             _cardUntil = Time.unscaledTime + 6f;  // the merged title card
             _made.Clear();
@@ -121,8 +124,8 @@ namespace Frankenstein
 
         public static void Update()
         {
+            if (Input.GetKeyDown(KeyCode.F8) && _inTown) { _open = !_open; _confirm = ""; }
             if (Style.Length == 0) return;
-            if (Input.GetKeyDown(KeyCode.F8) && _inTown) _open = !_open;
             if (_rebuildAt > 0 && Time.unscaledTime >= _rebuildAt) { _rebuildAt = -1; try { Build(); } catch (Exception e) { Warn(e); } }
             try { Light(); } catch (Exception e) { Warn(e); _light = false; }
             if (_holdStart < 0) return;
@@ -138,34 +141,25 @@ namespace Frankenstein
             }
         }
 
-        static void Warn(Exception e) => Melon<Plugin>.Logger.Warning("World: " + e.Message);
-
-        public static void Draw()
+        static void DrawPanel()
         {
-            if (Style.Length == 0 || !_inTown) return;
-            if (_big == null) _big = new GUIStyle(GUI.skin.box) { fontSize = 46 };  // the box style centres its text
-            if (Time.unscaledTime < _cardUntil)
-            {
-                var a = Mathf.Clamp01((_cardUntil - Time.unscaledTime) / 1.5f);
-                var old = GUI.color;
-                GUI.color = new Color(1, 1, 1, a);
-                GUI.Box(new Rect(0, Screen.height * 0.36f, Screen.width, 150), "");
-                GUI.Label(new Rect(0, Screen.height * 0.36f + 10, Screen.width, 70), Host.ToUpperInvariant() + "  ×  " + Title.ToUpperInvariant(), _big);
-                GUI.Label(new Rect(0, Screen.height * 0.36f + 90, Screen.width, 40), MainMenu.Merge + "   ·   F8: " + Title + " menu");
-                GUI.color = old;
-            }
-            // the Extension's HUD: turf, mode, cash
-            float w = 300, x = Screen.width - w - 16, y = 16;
-            GUI.Box(new Rect(x, y, w, 74), "");
-            GUI.Label(new Rect(x + 10, y + 4, w - 20, 22), Title.ToUpperInvariant() + "  ×  " + Host.ToUpperInvariant());
-            string turf = !_hasSpot ? "No turf yet (F8: build the block)" : OnBlock() ? "On your block" : "Off turf";
-            GUI.Label(new Rect(x + 10, y + 26, w - 20, 22), "Turf: " + turf);
-            string mode = _holdStart >= 0 ? string.Format("Hold the block: {0:0}s left", HoldSeconds - (Time.unscaledTime - _holdStart)) : _note;
-            GUI.Label(new Rect(x + 10, y + 48, w - 20, 22), mode);
             if (!_open) return;
-            float pw = 380, ph = 250, px = 40, py = Screen.height * 0.25f;
-            GUI.Box(new Rect(px, py, pw, ph), "");
-            GUI.Label(new Rect(px + 12, py + 8, pw - 24, 22), "FRANKENSTEIN  ·  " + Title + " in " + Host);
+            float pw = 380, px = 40, py = Screen.height * 0.25f;
+            // Creative, from inside the game: confirm, then the game restarts into Creative's own saves
+            string to = MainMenu.Creative ? "normal" : "creative";
+            float top = Style.Length > 0 ? 300 : 110;
+            GUI.Box(new Rect(px, py - top + 64, pw, top - 64 + (Style.Length > 0 ? 250 : 0)), "");
+            float cy = py - top + 72;
+            GUI.Label(new Rect(px + 12, cy, pw - 24, 22), "FRANKENSTEIN  ·  " + (MainMenu.Merge.Length > 0 ? MainMenu.Merge : "this merge") + (MainMenu.Creative ? "  ·  Creative" : ""));
+            if (_confirm == to)
+            {
+                GUI.Label(new Rect(px + 12, cy + 22, pw - 24, 36), "Save first (sleep, or the pause menu). Then the game restarts in " + (to == "creative" ? "Creative, with its own saves." : "your normal game."));
+                if (GUI.Button(new Rect(px + 12, cy + 58, (pw - 30) / 2, 28), "Yes, switch now")) { _confirm = ""; MainMenu.Switch(to); }
+                if (GUI.Button(new Rect(px + 18 + (pw - 30) / 2, cy + 58, (pw - 30) / 2, 28), "Cancel")) _confirm = "";
+            }
+            else if (GUI.Button(new Rect(px + 12, cy + 26, pw - 24, 30), MainMenu.Creative ? "Back to my normal game" : "Switch to Creative (every item, its own saves)")) _confirm = to;
+            if (Style.Length == 0) return;
+            GUI.Label(new Rect(px + 12, py + 8, pw - 24, 22), Title + " in " + Host);
             GUI.Label(new Rect(px + 12, py + 32, pw - 24, 40), Zone);
             if (GUI.Button(new Rect(px + 12, py + 76, pw - 24, 30), _hasSpot ? "Move the block here" : "Build the block here"))
             {
@@ -190,5 +184,36 @@ namespace Frankenstein
             }
             GUI.Label(new Rect(px + 12, py + 186, pw - 24, 56), _built ? "Untested in game: tell Frankenstein's maker how it looks." : "F8 closes this.");
         }
+
+        static void Warn(Exception e) => Melon<Plugin>.Logger.Warning("World: " + e.Message);
+
+        public static void Draw()
+        {
+            if (!_inTown) return;
+            if (Time.unscaledTime < _hintUntil)
+                GUI.Box(new Rect(16, Screen.height - 70, 420, 28), MainMenu.Creative ? "Creative · F8: back to your normal game" : "F8: Frankenstein menu · switch to Creative");
+            DrawPanel();
+            if (Style.Length == 0) return;
+            if (_big == null) _big = new GUIStyle(GUI.skin.box) { fontSize = 46 };  // the box style centres its text
+            if (Time.unscaledTime < _cardUntil)
+            {
+                var a = Mathf.Clamp01((_cardUntil - Time.unscaledTime) / 1.5f);
+                var old = GUI.color;
+                GUI.color = new Color(1, 1, 1, a);
+                GUI.Box(new Rect(0, Screen.height * 0.36f, Screen.width, 150), "");
+                GUI.Label(new Rect(0, Screen.height * 0.36f + 10, Screen.width, 70), Host.ToUpperInvariant() + "  ×  " + Title.ToUpperInvariant(), _big);
+                GUI.Label(new Rect(0, Screen.height * 0.36f + 90, Screen.width, 40), MainMenu.Merge + "   ·   F8: " + Title + " menu");
+                GUI.color = old;
+            }
+            // the Extension's HUD: turf, mode, cash
+            float w = 300, x = Screen.width - w - 16, y = 16;
+            GUI.Box(new Rect(x, y, w, 74), "");
+            GUI.Label(new Rect(x + 10, y + 4, w - 20, 22), Title.ToUpperInvariant() + "  ×  " + Host.ToUpperInvariant());
+            string turf = !_hasSpot ? "No turf yet (F8: build the block)" : OnBlock() ? "On your block" : "Off turf";
+            GUI.Label(new Rect(x + 10, y + 26, w - 20, 22), "Turf: " + turf);
+            string mode = _holdStart >= 0 ? string.Format("Hold the block: {0:0}s left", HoldSeconds - (Time.unscaledTime - _holdStart)) : _note;
+            GUI.Label(new Rect(x + 10, y + 48, w - 20, 22), mode);
+        }
+
     }
 }

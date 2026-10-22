@@ -820,3 +820,23 @@ class PlayAsAndInGameTests(unittest.TestCase):
             api.Merge.load, api.time.sleep = old_load, old_sleep
         self.assertEqual(played, [("m9", True)])
         self.assertFalse(os.path.exists(os.path.join(sub, "switch.json")))
+
+
+class NetworkSetupTests(unittest.TestCase):
+    def test_setup_failures_say_why(self):
+        from gamemerger import network
+        d = tempfile.mkdtemp()
+        log = os.path.join(d, "x.log")
+        self.assertIn("Yes/No prompt", network._why(False, log))
+        for text, want in (("started\nmsiexec 1618 \n", "Another installer"), ("started\nmsiexec 1603 \n", "zerotier.com"),
+                           ("started\nno-token\n", "service didn't start"), ("started\ncopy-failed\n", "copy")):
+            with open(log, "w") as f:
+                f.write(text)
+            self.assertIn(want, network._why(True, log))
+
+    def test_setup_waits_with_ping_not_timeout(self):
+        import inspect
+        from gamemerger import network
+        src = inspect.getsource(network.setup)
+        self.assertNotIn("timeout /t", src)  # timeout quits at once in a hidden window, so it never waited
+        self.assertIn("ping -n 2", src)

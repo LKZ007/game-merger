@@ -17,7 +17,8 @@ public class FrankensteinMenu : Script
 {
     string merge = "", style = "", who = "", moves = "";
     string world = "", zone = "", title = "";  // the Extension's look and its zone, built from GTA V's own props
-    bool lit;
+    bool lit, hinted;
+    int confirmUntil;
     string[] rundown = new string[0];
     bool creative, playAs, applied;
     int page = -1, pageAt, tries, nextCheck;
@@ -187,6 +188,11 @@ public class FrankensteinMenu : Script
     void OnTick(object sender, EventArgs e)
     {
         if (!lit && world.Length > 0 && Game.GameTime > 15000) { try { Light(); } catch (Exception) { } }
+        if (!hinted && Game.GameTime > 20000)
+        {
+            hinted = true;
+            GTA.UI.Notification.Show("Frankenstein · " + (creative ? "Creative. Shift+F10: back to your normal game" : "Shift+F10: switch to Creative") + " · F10: menu");
+        }
         if (playAs)
         {
             if (style == "superhero") Function.Call(Hash.SET_SUPER_JUMP_THIS_FRAME, Game.Player);
@@ -211,8 +217,15 @@ public class FrankensteinMenu : Script
         {
             try { BuildZone(); } catch (Exception ex) { GTA.UI.Notification.Show("Frankenstein couldn't build here: " + ex.Message); }
         }
+        else if (e.KeyCode == Keys.F10 && e.Shift && Game.GameTime > confirmUntil)
+        {
+            confirmUntil = Game.GameTime + 6000;
+            GTA.UI.Notification.Show("Frankenstein: switch to " + (creative ? "your normal game" : "Creative (every weapon and car, its own saves)") +
+                                     "? Press Shift+F10 again to confirm.");
+        }
         else if (e.KeyCode == Keys.F10 && e.Shift)
         {
+            confirmUntil = 0;
             try
             {
                 File.WriteAllText(Path.Combine(Dir, "switch.json"), "{\"to\": \"" + (creative ? "normal" : "creative") + "\"}");

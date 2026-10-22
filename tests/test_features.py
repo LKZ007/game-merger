@@ -71,7 +71,7 @@ BUNDLED = ["mods/schedule1/Frankenstein.dll", "mods/cyberpunk2077/frankenstein_i
            "mods/gta5/FrankensteinStory.3.cs", "mods/gta5/FrankensteinMenu.3.cs"]
 LUA = ["Garage", "Tuning", "Races", "drawHud", "bridge", "Cheats", "Fly", "Cars", "storyTick", "Story",
        "This merge", "drawMerge", "switchTo", "playAs", "drawWorld", "buildZoneHere", "startEvent", "Speed trap",
-       "Drift zone", "Circuit", "worldTick"]
+       "Drift zone", "Circuit", "worldTick", "Yes, switch to Creative now", "Press ~ > This merge to switch to Creative"]
 
 
 class FeatureChecklist(unittest.TestCase):
@@ -104,9 +104,9 @@ class FeatureChecklist(unittest.TestCase):
         self.assertIn("switch.json".encode("utf-16-le"), dll, "Schedule I main menu panel")
         self.assertTrue(os.path.isfile(os.path.join(ROOT, "mods", "schedule1", "MainMenu.cs")))
         gta = read(PKG, "mods", "gta5", "FrankensteinMenu.3.cs")
-        for x in ("Keys.F10", "Keys.F11", "switch.json", "ChangeModel", "BuildZone", "SET_WEATHER_TYPE_NOW_PERSIST"):
+        for x in ("Keys.F10", "Keys.F11", "switch.json", "ChangeModel", "BuildZone", "SET_WEATHER_TYPE_NOW_PERSIST", "Press Shift+F10 again to confirm"):
             self.assertIn(x, gta)
-        for x in ("Hold the block", "block.json", "Build the block here"):
+        for x in ("Hold the block", "block.json", "Build the block here", "Switch to Creative (every item, its own saves)", "Yes, switch now"):
             self.assertIn(x.encode("utf-16-le"), dll, "Schedule I World: " + x)
         self.assertTrue(os.path.isfile(os.path.join(ROOT, "mods", "schedule1", "World.cs")))
 

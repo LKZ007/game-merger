@@ -53,10 +53,15 @@ local function drawMerge()
     local s = menu.s or {}
     ImGui.TextWrapped((s.merge or "This merge") .. (s.creative and "  ·  Creative (its own saves)" or ""))
     ImGui.Separator()
-    if s.creative then
-        if ImGui.Button("Back to my normal game (restarts)") then switchTo("normal") end
-    else
-        if ImGui.Button("Creative: every item, own saves (restarts)") then switchTo("creative") end
+    local to = s.creative and "normal" or "creative"
+    if menu.confirm == to then
+        ImGui.TextWrapped("Save your game first (pause menu > Save). Then the game closes and starts again in " ..
+            (to == "creative" and "Creative, with its own saves." or "your normal game, with your normal saves."))
+        if ImGui.Button(to == "creative" and "Yes, switch to Creative now" or "Yes, back to my normal game now") then menu.confirm = nil; switchTo(to) end
+        ImGui.SameLine()
+        if ImGui.Button("Cancel") then menu.confirm = nil end
+    elseif ImGui.Button(s.creative and "Back to my normal game" or "Switch to Creative (every item, own saves)") then
+        menu.confirm = to
     end
     ImGui.TextWrapped("Creative keeps its own saves, so your normal game is never touched.")
     local pa = s.play_as
@@ -558,7 +563,9 @@ local function drawHud()
     local line = story.msg and menu.now < story.msgUntil and story.msg or nil
     local goal = q and story.s > 0 and q.steps[story.s] and (q.title .. ": " .. q.steps[story.s].text) or nil
     local ev = world.ev
-    if not kmh and not menu.race and not line and not goal and not ev then return end
+    local hint = menu.now < 25 and menu.s and (menu.s.creative and "Creative · press ~ > This merge to go back to your normal game"
+        or "Press ~ > This merge to switch to Creative") or nil
+    if not kmh and not menu.race and not line and not goal and not ev and not hint then return end
     ImGui.SetNextWindowPos(30, 30, ImGuiCond.FirstUseEver)
     ImGui.SetNextWindowBgAlpha(0.55)
     if ImGui.Begin("Frankenstein HUD", ImGuiWindowFlags.NoTitleBar + ImGuiWindowFlags.AlwaysAutoResize + ImGuiWindowFlags.NoScrollbar) then
@@ -576,6 +583,7 @@ local function drawHud()
             elseif ev.kind == "circuit" then ImGui.Text(string.format("%s  %s %4d m  lap %d/%d  %5.1f s", ev.name, ev.arrow or "", math.floor(ev.left or 0), ev.lap, ev.laps, ev.time or 0))
             else ImGui.Text(string.format("%s  %s %4d m", ev.name, ev.arrow or "", math.floor(ev.left or 0))) end
         end
+        if hint then ImGui.TextWrapped(hint) end
         if line then ImGui.TextWrapped(line) end
         if goal then ImGui.TextWrapped(goal) end
         if menu.race and menu.race.left then

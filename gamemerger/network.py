@@ -46,28 +46,79 @@ def ready():
     return installed() and os.path.isfile(_token_file())
 
 
+MANUAL_URL = "https://www.zerotier.com/download/"
+
+
+def _setup_log():
+    return os.path.join(paths.data_dir(), "network-setup.log")
+
+
 def setup(download, log=lambda *_: None):
-    """Install ZeroTier (if needed) and make its token readable by this account. One UAC prompt.
-    `download(url, dest)` fetches the installer."""
+    """Install ZeroTier (if needed), make sure its service runs, and make its token readable by this account.
+    One UAC prompt. `download(url, dest)` fetches the installer. Each step writes to network-setup.log, so a
+    failure says which step and why instead of a bare "didn't finish"."""
     if sys.platform != "win32":
         raise NetworkError("Play together works on Windows only.")
-    lines = []
+    src = os.path.join(_program_data(), "authtoken.secret")
+    dest = _token_file()
+    trace = _setup_log()
+    try:
+        os.remove(trace)
+    except OSError:
+        pass
+    lines = ['echo started> "%s"' % trace]
     if not installed():
         msi = os.path.join(paths.sub("downloads"), "ZeroTierOne.msi")
         log("Downloading ZeroTier (the free network that links your PCs) ...")
-        download(MSI_URL, msi)
-        lines.append('msiexec /i "%s" /qn /norestart' % msi)
-    src = os.path.join(_program_data(), "authtoken.secret")
-    dest = _token_file()
-    # the service writes its token a few seconds after it first starts
-    lines += ['for /l %%i in (1,1,30) do (if exist "%s" goto have) & timeout /t 1 >nul' % src,
-              ":have",
-              'copy /y "%s" "%s" >nul' % (src, dest),
-              'icacls "%s" /inheritance:r /grant:r "%s":R >nul' % (dest, permissions.current_user())]
-    lines += FIREWALL
-    log("Windows will ask once to set it up.")
-    if not permissions.run_elevated(lines, name="gamemerger-network") or not os.path.isfile(dest):
-        raise NetworkError("Setup didn't finish. Press Set it up again and click Yes when Windows asks.")
+        try:
+            download(MSI_URL, msi)
+        except Exception as e:
+            raise NetworkError("Couldn't download ZeroTier (%s). Check your internet and press Set it up again, or "
+                               "install ZeroTier yourself from %s and then press Set it up." % (e, MANUAL_URL))
+        lines += ['start "" /wait msiexec /i "%s" /qn /norestart' % msi,
+                  'echo msiexec %%errorlevel%% >> "%s"' % trace]
+    # the service may be installed but stopped (or set to manual): start it, then wait for its token. "timeout"
+    # can't wait in a hidden window (it quits at once), so ping is the clock: about a second per try, 90 tries.
+    lines += ['sc config ZeroTierOneService start= auto >nul 2>&1',
+              'net start ZeroTierOneService >nul 2>&1',
+              'for /l %%%%i in (1,1,90) do (if not exist "%s" ping -n 2 127.0.0.1 >nul)' % src,
+              'if exist "%s" goto have' % src,
+              'echo no-token>> "%s"' % trace,
+              'goto firewall',
+              ':have',
+              'copy /y "%s" "%s" >nul && (echo copied>> "%s") || (echo copy-failed>> "%s")' % (src, dest, trace, trace),
+              'icacls "%s" /inheritance:r /grant:r "%s":R >nul' % (dest, permissions.current_user()),
+              ':firewall'] + FIREWALL + ['echo done>> "%s"' % trace]
+    log("Windows will ask once to set it up. Click Yes.")
+    ran = permissions.run_elevated(lines, name="gamemerger-network")
+    if os.path.isfile(dest):
+        return
+    raise NetworkError(_why(ran, trace))
+
+
+def _why(ran, trace):
+    """The real reason setup didn't finish, in plain words, from the setup's own log."""
+    try:
+        with open(trace, encoding="utf-8", errors="replace") as f:
+            steps = f.read().split()
+    except OSError:
+        steps = []
+    again = " Then press Set it up again."
+    if not steps:
+        return ("Windows didn't run the setup: the Yes/No prompt was closed, answered No, or blocked (for example by "
+                "antivirus or an account without admin rights)." + again)
+    if "msiexec" in steps:
+        code = steps[steps.index("msiexec") + 1] if steps.index("msiexec") + 1 < len(steps) else "?"
+        if code == "1618":
+            return "Another installer was running, so ZeroTier couldn't install. Wait for it to finish." + again
+        if code not in ("0", "3010"):
+            return ("ZeroTier's installer stopped with error %s. Install ZeroTier yourself from %s (it's free)." % (code, MANUAL_URL)) + again
+    if "no-token" in steps:
+        return ("ZeroTier is installed but its service didn't start in time. Restart your PC (or open ZeroTier One from "
+                "the Start menu once)." + again)
+    if "copy-failed" in steps:
+        return "Frankenstein couldn't copy ZeroTier's key into your account's folder." + again
+    return "Setup didn't finish (%s)." % " ".join(steps[-3:]) + again
 
 
 # Windows puts the ZeroTier adapter on the "Public" profile, whose firewall blocks games from answering friends.

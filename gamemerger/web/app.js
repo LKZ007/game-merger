@@ -1332,7 +1332,8 @@ async function loadParty() {
     main = `<div class="card"><h2>Set up your private network</h2>
       <p class="muted">Like Hamachi: your PC and your friends' PCs act like they're on the same home network, so LAN games and private servers can see each other. It uses ZeroTier, which is free and needs no account.</p>
       <p class="muted">Windows will ask once. After that it's one click to host or join.</p>
-      <button class="btn primary" id="partySetup">Set it up</button></div>`;
+      <div class="row"><button class="btn primary" id="partySetup">Set it up</button>
+        <a href="#" class="small" data-ext="https://www.zerotier.com/download/">Setup keeps failing? Install ZeroTier yourself, then press Set it up</a></div></div>`;
   } else if (!p.party) {
     main = `<div class="card"><h2>Host a party</h2><p class="muted">You get a code to send your friends. Your PC runs the party, so keep Frankenstein open while you play.</p>
         <button class="btn primary" id="partyHost">Host a party</button></div>

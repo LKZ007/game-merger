@@ -473,8 +473,8 @@ class Api:
         def runner():
             try:
                 job.result = fn(job)
-            except MergeError as e:
-                job.error = str(e)
+            except (MergeError, network.NetworkError) as e:
+                job.error = str(e)  # a plain reason, no traceback
             except Exception as e:
                 job.write(traceback.format_exc())
                 job.error = "Something went wrong: %s" % e
