@@ -39,6 +39,7 @@ API = {
     "settings": ["get_settings", "save_settings"],
     "moving covers (trailer loops in the box)": ["cover_clip", "merge_cover_clip"],
     "Merge plan before Merge it": ["merge_plan", "merge_plan_of"],
+    "Carry over my save (character and abilities)": ["carry_read", "carry_save"],
 }
 
 # feature: something the page must still have (a function or element id in the web files)
@@ -64,6 +65,7 @@ WEB = {
     "Merge plan, honest per engine": ["planHtml", "loadPlan", "Merge plan", "Not possible yet", "Built by Frankenstein"],
     "merged loading screen while the Host starts": ["loadingScreen", "load-screen"],
     "Host game and Extension game naming": ["Host game", "Extension game"],
+    "Carry over my save dialog": ["carryDialog", "Carry over my save", "Bring them over"],
 }
 
 # Frankenstein's own mods for each game, bundled with the app
@@ -71,7 +73,7 @@ BUNDLED = ["mods/schedule1/Frankenstein.dll", "mods/cyberpunk2077/frankenstein_i
            "mods/gta5/FrankensteinStory.3.cs", "mods/gta5/FrankensteinMenu.3.cs"]
 LUA = ["Garage", "Tuning", "Races", "drawHud", "bridge", "Cheats", "Fly", "Cars", "storyTick", "Story",
        "This merge", "drawMerge", "switchTo", "playAs", "drawWorld", "buildZoneHere", "startEvent", "Speed trap",
-       "Drift zone", "Circuit", "worldTick", "Yes, switch to Creative now", "Press ~ > This merge to switch to Creative"]
+       "Drift zone", "Circuit", "worldTick", "Yes, switch to Creative now", "Press ~ > This merge to switch to Creative", "drawCarry", "carryTick"]
 
 
 class FeatureChecklist(unittest.TestCase):
@@ -104,9 +106,9 @@ class FeatureChecklist(unittest.TestCase):
         self.assertIn("switch.json".encode("utf-16-le"), dll, "Schedule I main menu panel")
         self.assertTrue(os.path.isfile(os.path.join(ROOT, "mods", "schedule1", "MainMenu.cs")))
         gta = read(PKG, "mods", "gta5", "FrankensteinMenu.3.cs")
-        for x in ("Keys.F10", "Keys.F11", "switch.json", "ChangeModel", "BuildZone", "SET_WEATHER_TYPE_NOW_PERSIST", "Press Shift+F10 again to confirm"):
+        for x in ("Keys.F10", "Keys.F11", "switch.json", "ChangeModel", "BuildZone", "SET_WEATHER_TYPE_NOW_PERSIST", "Press Shift+F10 again to confirm", "carry-done.txt", "Keys.F6"):
             self.assertIn(x, gta)
-        for x in ("Hold the block", "block.json", "Build the block here", "Switch to Creative (every item, its own saves)", "Yes, switch now"):
+        for x in ("Hold the block", "block.json", "Build the block here", "Switch to Creative (every item, its own saves)", "Yes, switch now", "carry-done.txt"):
             self.assertIn(x.encode("utf-16-le"), dll, "Schedule I World: " + x)
         self.assertTrue(os.path.isfile(os.path.join(ROOT, "mods", "schedule1", "World.cs")))
 

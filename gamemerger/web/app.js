@@ -861,6 +861,7 @@ async function loadMerges() {
           <div class="more"><button class="btn ghost" data-more aria-haspopup="true" aria-expanded="false">⋯ More</button>
             <div class="more-menu" role="menu" hidden>
               ${m.ingame ? `<button data-act="creative" title="Also in the game itself">✦ Creative (own saves)</button>` : ""}
+              <button data-act="carry">Carry over my save</button>
               <button data-act="plan">Merge plan</button>
               <button data-act="rundown">Rundown</button>
               <button data-act="spawner" title="Send items and cars into the game while you play (works from a second screen)">Spawner</button>
@@ -905,6 +906,31 @@ function closeMore() {
 }
 document.addEventListener("click", (e) => { if (!(e.target.closest && e.target.closest(".more"))) closeMore(); });
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeMore(); });
+
+// Carry over my save: the Extension's character (name, money, level, stats, abilities) rebuilt in the Host
+async function carryDialog(m) {
+  const d = await call("carry_read", m.id);
+  const c = d.card;
+  const lv = { built: "Built by Frankenstein", "stand-in": "Stand-in", "can't": "Not possible yet", mod: "Mod" };
+  const body = `<p class="muted">${esc(d.found.how)}${d.found.save ? ` <span class="small">(${esc(d.found.save)}, only read, never changed)</span>` : ""}</p>
+    <div class="two"><div class="field"><label for="cName">Name</label><input class="input" id="cName" value="${esc(c.name || "")}"></div>
+      <div class="field"><label for="cLevel">Level</label><input class="input" id="cLevel" type="number" min="0" value="${+c.level || 0}"></div></div>
+    <div class="field"><label for="cMoney">Money to bring (given once, in ${esc(d.host)}'s money)</label><input class="input" id="cMoney" type="number" min="0" value="${+c.money || 0}"></div>
+    ${Object.keys(c.stats || {}).length ? `<p class="small">From the save: ${Object.entries(c.stats).map(([k, v]) => `<span class="tag">${esc(k)} ${esc(String(v))}</span>`).join(" ")}</p>` : ""}
+    <h3 class="pv-h">Abilities, and what they become in ${esc(d.host)}</h3>
+    ${d.abilities.map((a) => `<label class="check carry-ab"><input type="checkbox" data-ab="${esc(a.id)}" ${a.on ? "checked" : ""}>
+      <span class="grow"><strong>${esc(a.name)}</strong><span class="muted small">${esc(a.how)}</span></span>
+      <span class="plan-lv ${a.level === "built" ? "built" : a.level === "can't" ? "cant" : "stand"}">${esc(lv[a.level] || a.level)}</span></label>`).join("")}
+    <p class="muted small">Your character arrives next time you press Play. Money and items come once; the powers stay on.</p>`;
+  const go = await modal("Carry over my save: " + (c.from || ""), body, [{ label: "Cancel", value: false }, { label: "Bring them over", value: true, primary: true }]);
+  if (!go) return;
+  const card = Object.assign({}, c, {
+    name: $("#cName").value.trim(), level: +$("#cLevel").value || 0, money: +$("#cMoney").value || 0,
+    abilities: [...document.querySelectorAll("[data-ab]")].filter((x) => x.checked).map((x) => x.dataset.ab),
+  });
+  try { await call("carry_save", m.id, card); toast(`${card.name || "Your character"} comes over next time you play ${m.name}.`, 6000); }
+  catch (e) { toast(errText(e)); }
+}
 
 // Frankenstein's merged loading screen: both games fused, while the Host game starts
 async function loadingScreen(m, creative) {
@@ -1263,6 +1289,7 @@ async function mergeAction(id, act) {
       showRundown(m, creative, true);
     }
     else if (act === "rundown") showRundown(m, false, false);
+    else if (act === "carry") await carryDialog(m);
     else if (act === "plan") {
       const done = modal("Merge plan: " + m.name, `<div id="planM" class="muted">Writing the plan…</div>`);
       loadPlan(() => call("merge_plan_of", id), $("#planM"));

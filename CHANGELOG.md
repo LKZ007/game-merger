@@ -3,6 +3,15 @@
 Every release, newest first. Downloads are on the [releases page](https://github.com/LKZ007/game-merger/releases).
 The app was called Game Merger before 3.8.0.
 
+## v3.26.0 (2026-10-22)
+- **Carry over my save.** On any merge, open ⋯ More, then **Carry over my save**. Frankenstein reads the Extension game's newest save and makes a character card with name, money, level, stats and abilities. It only reads the save, never changes it. Edit anything, tick abilities, then press **Bring them over**. Your character arrives the next time you press Play. Money comes once, and the powers stay on.
+  - **What can be read:** Schedule I saves are plain files, so cash, bank, rank and XP are read. For Cyberpunk, the save's summary gives level, street cred and attributes. Cyberware and money are packed inside the save, so tick those by hand. Other games (GTA V, Elden Ring and more) have locked saves, so you fill in the card by hand.
+  - **Abilities become powers in the Host game,** each marked Built, Stand-in or Not possible yet.
+    - GTA V gets the most: F6 slows time, Tough (double health and armour), Agile (super jump and fast sprint), Stealth (police ignore you on foot), Hacker (any car unlocks as you get in), Strength (explosive punches), Magic (fire punches and fire ammo) and your money as cash.
+    - Cyberpunk: Slow time, Tough and Lose the police buttons (press ~, This merge), plus your money as eddies.
+    - Schedule I: your money as cash and a bat for Strength. The rest shows on your character card (F8), marked as not possible there yet.
+- F8 in Schedule I is one menu: Creative is at the top, and the Hood Warfare Block and your character are below it.
+
 ## v3.25.0 (2026-10-22)
 - **Switch to Creative while you play, in every game.** Schedule I: press **F8** anywhere in town for Frankenstein's menu, then **Switch to Creative** (or **Back to my normal game**), then confirm. Cyberpunk: press **~**, then the This merge tab, then **Switch to Creative**, then confirm. GTA V: **Shift+F10**, then Shift+F10 again to confirm. Save first. The game closes and Frankenstein starts it again in Creative with its own saves, and the same way back, so normal and Creative saves never mix. Each game shows a hint for the first few seconds saying how.
 - **Play together setup fixed.** Setup was meant to wait for ZeroTier to start, but in the hidden window the wait ended straight away, so it stopped with "Setup didn't finish". It now waits properly (up to 90 seconds), starts ZeroTier's service if it's stopped, and waits for its installer to finish. If it still fails, it says why in plain words (the Windows prompt was declined, another installer was running, the installer's error code, or the service didn't start) instead of showing a traceback. There's also a link to install ZeroTier yourself.

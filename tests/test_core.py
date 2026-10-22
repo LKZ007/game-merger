@@ -840,3 +840,49 @@ class NetworkSetupTests(unittest.TestCase):
         src = inspect.getsource(network.setup)
         self.assertNotIn("timeout /t", src)  # timeout quits at once in a hidden window, so it never waited
         self.assertIn("ping -n 2", src)
+
+
+class CarryOverTests(unittest.TestCase):
+    def test_schedule1_save_is_read_and_never_changed(self):
+        from gamemerger import carryover
+        root = tempfile.mkdtemp()
+        save = os.path.join(root, "765", "SaveGame_1")
+        os.makedirs(os.path.join(save, "Players", "Player_0"))
+        with open(os.path.join(save, "Money.json"), "w") as f:
+            json.dump({"DataType": "MoneyData", "OnlineBalance": 5200.0, "Networth": 9000}, f)
+        with open(os.path.join(save, "Rank.json"), "w") as f:
+            json.dump({"Rank": 12, "Tier": 3, "XP": 450}, f)
+        with open(os.path.join(save, "Players", "Player_0", "Inventory.json"), "w") as f:
+            json.dump({"Items": json.dumps({"CashBalance": 300.0})}, f)  # JSON inside a string, like the game
+        before = {p: os.path.getmtime(os.path.join(dp, p)) for dp, _d, fs in os.walk(save) for p in fs}
+        card = carryover.read("Schedule I", roots=[os.path.join(root, "*", "SaveGame_*")])
+        self.assertEqual(card["money"], 5500)
+        self.assertEqual(card["level"], 12)
+        self.assertIn("rich", card["abilities"])
+        self.assertIn("tough", card["abilities"])
+        after = {p: os.path.getmtime(os.path.join(dp, p)) for dp, _d, fs in os.walk(save) for p in fs}
+        self.assertEqual(before, after)
+
+    def test_cyberpunk_summary_and_abilities(self):
+        from gamemerger import carryover
+        root = tempfile.mkdtemp()
+        save = os.path.join(root, "ManualSave-3")
+        os.makedirs(save)
+        with open(os.path.join(save, "metadata.9.json"), "w") as f:
+            json.dump({"Data": {"metadata": {"level": 37, "streetCred": 50, "strength": 4, "reflexes": 18,
+                                             "technicalAbility": 6, "intelligence": 3, "cool": 12, "lifePath": "StreetKid"}}}, f)
+        card = carryover.read("Cyberpunk 2077", roots=[os.path.join(root, "*")])
+        self.assertEqual(card["level"], 37)
+        self.assertEqual(card["abilities"][:2], ["agile", "stealth"])
+        gta = {p["id"]: p for p in carryover.powers_for("gta5", card["abilities"])}
+        self.assertEqual(gta["agile"]["level"], "built")
+        s1 = {p["id"]: p for p in carryover.powers_for("schedule1", card["abilities"])}
+        self.assertEqual(s1["agile"]["level"], "can't")  # honest: Schedule I can't do it yet
+
+    def test_locked_saves_are_filled_by_hand(self):
+        from gamemerger import carryover
+        card = carryover.read("ELDEN RING")
+        self.assertIn("by hand", card["how"])
+        st = carryover.settings("gta5", {"saved": 5, "name": "Tarnished", "money": 900, "abilities": ["magic", "rich"]})
+        self.assertEqual(st["id"], "5")
+        self.assertEqual(st["powers"], ["magic", "money"])

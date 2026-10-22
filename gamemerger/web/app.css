@@ -529,3 +529,5 @@ body.pad .tile:focus .face { border: 2px solid var(--accent); box-shadow: 0 0 30
 @keyframes ls-in { from { opacity: 0; } }
 @keyframes ls-fill { to { width: 100%; } }
 @media (prefers-reduced-motion: reduce) { .ls-art, .ls-bar div { animation: none; } .ls-bar div { width: 60%; } }
+.carry-ab { display: flex; gap: 10px; align-items: center; padding: 8px 0; border-top: 1px solid var(--line); }
+.carry-ab .grow { display: flex; flex-direction: column; }

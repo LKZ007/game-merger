@@ -19,7 +19,7 @@ import webbrowser
 from . import installer, storymode, accounts, achievements, ai, autorecipe, controller, covers, minecraft, modsources, storeinfo, discord, profiles, detect, downloader, gallery, network, nexus, paths, permissions, saves, scan, sharing, updater
 from .version import VERSION
 from .installer import MODE_COPY, MODE_HARDLINK, MODE_INPLACE, Merge, MergeError, find_clashes, preview
-from . import mergeplan, playas, recipes
+from . import carryover, mergeplan, playas, recipes
 from .recipes import load_recipes, resource_dir
 
 SHARE_TYPES = ("Shared merges (*.gmerge)", "All files (*.*)")
@@ -1118,6 +1118,31 @@ class Api:
         g = self._game(key)
         return covers.as_data_uri(covers.cover_path(g, steam_root=self._steam_root()))
 
+    def carry_read(self, merge_id):
+        """Carry over my save: the Extension game's character as a card (from its save where it can be read, the
+        card you saved before otherwise), every ability with what it becomes in this Host, and how it was read."""
+        m = Merge.load(merge_id)
+        r = self._recipe(m.data.get("recipe_id"))
+        source = (m.data.get("source_name") or m.data.get("theme_name", "")).split(" /")[0]
+        found = carryover.read(source)
+        card = dict(found, **(m.data.get("carry") or {})) if m.data.get("carry") else found
+        host = r.id if r else ""
+        return {"card": card, "found": found, "host": m.data.get("game_name", ""),
+                "abilities": [dict(p, on=p["id"] in card.get("abilities", []))
+                              for p in carryover.powers_for(host, list(carryover.POWERS))]}
+
+    def carry_save(self, merge_id, card):
+        """Keep the character card; the Host gets it next time you press Play (money and items once)."""
+        m = Merge.load(merge_id)
+        keep = {k: card.get(k) for k in ("name", "money", "level", "stats", "abilities", "from", "how")}
+        keep["money"] = max(0, min(int(keep.get("money") or 0), 10000000))
+        keep["level"] = max(0, min(int(keep.get("level") or 0), 999))
+        keep["abilities"] = [a for a in (keep.get("abilities") or []) if a in carryover.POWERS]
+        keep["saved"] = int(time.time())
+        m.data["carry"] = keep
+        m.save()
+        return True
+
     def merge_plan(self, key, theme_id):
         """The Merge plan for a Host game and an Extension style, shown before Merge it. The AI words it when a
         Claude key is set (once, then kept); the template is shown until then. {"plan", "ready"}"""
@@ -1995,7 +2020,8 @@ class Api:
                      "rundown_text": "\n".join(self._ingame_rundown(m, creative)),
                      "play_as": dict(playas.settings(r.id, source), on=bool(m.data.get("play_as_on", True))),
                      "world": mergeplan.settings(r.id, m.data.get("theme_id", ""), source.split(" /")[0]),
-                     "host": m.data.get("game_name", "")}
+                     "host": m.data.get("game_name", ""),
+                     "carry": carryover.settings(r.id, m.data.get("carry"))}
         kit = KITS.get(m.data.get("theme_id"))
         if m.data.get("story_kit"):
             kit = {"name": "%s starter kit" % (m.data.get("source_name") or m.name), "items": m.data["story_kit"]}

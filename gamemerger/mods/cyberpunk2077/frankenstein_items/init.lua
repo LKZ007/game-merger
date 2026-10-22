@@ -47,6 +47,69 @@ local function playAs(on)
     menu.note = on and ("Playing as " .. (pa.who or "the other game's hero") .. ": " .. (pa.moves or "")) or "Back to V"
 end
 
+-- ---------- Carry over my save: the Extension's character (powers stay on; money comes once per card) ----------
+local carry = { done = false, slow = false, tough = false }
+
+local function carryCard() return menu.s and menu.s.carry and menu.s.carry.id and menu.s.carry or nil end
+local function hasPower(p)
+    local c = carryCard()
+    if not c then return false end
+    for _, x in ipairs(c.powers or {}) do if x == p then return true end end
+    return false
+end
+
+local function carryTick()
+    local c = carryCard()
+    if not c or carry.done or not Game.GetPlayer() then return end
+    carry.done = true
+    local f = io.open("carry-done.json", "r")
+    local had = f and f:read("*a") or ""
+    if f then f:close() end
+    if had ~= c.id then
+        if hasPower("money") and (c.money or 0) > 0 then pcall(function() Game.AddToInventory("Items.money", c.money) end) end
+        local w = io.open("carry-done.json", "w")
+        if w then w:write(c.id); w:close() end
+        menu.note = (c.name ~= "" and c.name or "Your character") .. " from " .. (c.from or "") .. " is here" ..
+            ((hasPower("money") and (c.money or 0) > 0) and (" with " .. c.money .. " eddies") or "")
+    end
+    if hasPower("tough") then
+        carry.tough = true
+        pcall(function() Game.GetGodModeSystem():AddGodMode(Game.GetPlayer():GetEntityID(), gameGodModeType.Invulnerable, CName.new("FrankensteinCarry")) end)
+    end
+end
+
+local function drawCarry()
+    local c = carryCard()
+    if not c then return end
+    ImGui.Separator()
+    ImGui.Text("Your character: " .. (c.name ~= "" and c.name or "from " .. (c.from or "")) .. ((c.level or 0) > 0 and ("  ·  level " .. c.level) or ""))
+    for _, line in ipairs(c.card or {}) do ImGui.TextWrapped("· " .. line) end
+    if hasPower("slowmo") and ImGui.Button(carry.slow and "Stop slowing time" or "Slow time") then
+        carry.slow = not carry.slow
+        pcall(function()
+            if carry.slow then Game.GetTimeSystem():SetTimeDilation(CName.new("Frankenstein"), 0.3)
+            else Game.GetTimeSystem():UnsetTimeDilation(CName.new("Frankenstein"), "None") end
+        end)
+    end
+    if hasPower("tough") then
+        ImGui.SameLine()
+        if ImGui.Button(carry.tough and "Tough: on" or "Tough: off") then
+            carry.tough = not carry.tough
+            pcall(function()
+                local gm, id = Game.GetGodModeSystem(), Game.GetPlayer():GetEntityID()
+                if carry.tough then gm:AddGodMode(id, gameGodModeType.Invulnerable, CName.new("FrankensteinCarry"))
+                else gm:RemoveGodMode(id, gameGodModeType.Invulnerable, CName.new("FrankensteinCarry")) end
+            end)
+        end
+    end
+    if hasPower("ghost") then
+        ImGui.SameLine()
+        if ImGui.Button("Lose the police") then
+            pcall(function() Game.GetScriptableSystemsContainer():Get(CName.new("PreventionSystem")):ChangeHeatStage(EPreventionHeatStage.Heat_0, "Frankenstein") end)
+        end
+    end
+end
+
 local drawWorld  -- the World and events section, defined further down
 
 local function drawMerge()
@@ -71,6 +134,7 @@ local function drawMerge()
         ImGui.TextWrapped((pa.moves or "") .. ". How close: " .. (pa.close or ""))
         if ImGui.Button(menu.playing and "Back to V" or "Play as them") then playAs(not menu.playing) end
     end
+    pcall(drawCarry)
     pcall(drawWorld)
     ImGui.Separator()
     ImGui.Text("Rundown")
@@ -544,6 +608,7 @@ registerForEvent("onUpdate", function(dt)
     end
     pcall(raceTick)
     pcall(worldTick)
+    pcall(carryTick)
     pcall(bridge)
     pcall(storyTick)
 end)

@@ -54,6 +54,7 @@ namespace Frankenstein
                     foreach (var k in J.L(w, "modes")) World.Modes.Add(k.ToString());
                 }
                 World.Host = J.S(s, "host", "Schedule I");
+                Carry.Read(s is System.Collections.Generic.Dictionary<string, object> d3 && d3.TryGetValue("carry", out var cv) ? cv : null);
                 if (pa != null && J.S(pa, "style").Length > 0)
                 {
                     MainMenu.Who = J.S(pa, "who");
@@ -73,6 +74,7 @@ namespace Frankenstein
         {
             ItemMenu.Update();
             MainMenu.Update();
+            try { Carry.Update(); } catch (Exception e) { Melon<Plugin>.Logger.Warning("Carry: " + e.Message); }
             try { World.Update(); } catch (Exception e) { Melon<Plugin>.Logger.Warning("World: " + e.Message); }
             if (Time.unscaledTime < _next) return;
             _next = Time.unscaledTime + 1f;

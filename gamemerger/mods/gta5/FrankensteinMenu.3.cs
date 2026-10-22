@@ -18,6 +18,12 @@ public class FrankensteinMenu : Script
     string merge = "", style = "", who = "", moves = "";
     string world = "", zone = "", title = "";  // the Extension's look and its zone, built from GTA V's own props
     bool lit, hinted;
+    // Carry over my save: the Extension's character (powers stay on; money is given once per card)
+    string carryId = "", carryName = "";
+    long carryMoney;
+    System.Collections.Generic.List<string> powers = new System.Collections.Generic.List<string>();
+    bool slow;
+    int nextPower;
     int confirmUntil;
     string[] rundown = new string[0];
     bool creative, playAs, applied;
@@ -60,6 +66,17 @@ public class FrankensteinMenu : Script
                 who = Field(pa.Value, "who");
                 moves = Field(pa.Value, "moves");
                 playAs = Field(pa.Value, "on") != "false" && style.Length > 0;
+            }
+            var cy = Regex.Match(s, "\"carry\"\\s*:\\s*\\{[^}]*");
+            if (cy.Success)
+            {
+                carryId = Field(cy.Value, "id");
+                carryName = Field(cy.Value, "name");
+                var mo = Regex.Match(cy.Value, "\"money\"\\s*:\\s*(\\d+)");
+                if (mo.Success) long.TryParse(mo.Groups[1].Value, out carryMoney);
+                var pw = Regex.Match(cy.Value, "\"powers\"\\s*:\\s*\\[([^\\]]*)\\]");
+                if (pw.Success)
+                    foreach (Match x in Regex.Matches(pw.Groups[1].Value, "\"([a-z_]+)\"")) powers.Add(x.Groups[1].Value);
             }
             var wd = Regex.Match(s, "\"world\"\\s*:\\s*\\{[^}]*");
             if (wd.Success)
@@ -185,9 +202,49 @@ public class FrankensteinMenu : Script
         GTA.UI.Notification.Show("Frankenstein: built " + (zone.Length > 0 ? zone.Split(':')[0] : "the zone") + " here (" + made + " pieces of GTA V)");
     }
 
+    bool Has(string p) { return powers.Contains(p); }
+
+    void Powers()
+    {
+        var me = Game.Player.Character;
+        if (me == null || !me.Exists() || me.IsDead) return;
+        // every frame
+        if (Has("agile")) Function.Call(Hash.SET_SUPER_JUMP_THIS_FRAME, Game.Player);
+        if (Has("strength") || Has("magic")) Function.Call(Hash.SET_EXPLOSIVE_MELEE_THIS_FRAME, Game.Player);
+        if (Has("magic")) Function.Call(Hash.SET_FIRE_AMMO_THIS_FRAME, Game.Player);
+        if (Game.GameTime < nextPower) return;
+        nextPower = Game.GameTime + 1000;
+        // once per card: the money
+        if (carryId.Length > 0 && Game.GameTime > 20000)
+        {
+            var done = Path.Combine(Dir, "carry-done.txt");
+            string had = File.Exists(done) ? File.ReadAllText(done).Trim() : "";
+            if (had != carryId)
+            {
+                File.WriteAllText(done, carryId);
+                if (Has("money") && carryMoney > 0) Game.Player.Money += (int)Math.Min(carryMoney, int.MaxValue / 2);
+                GTA.UI.Notification.Show("Frankenstein: " + (carryName.Length > 0 ? carryName : "your character") + " is here" +
+                                         (Has("money") && carryMoney > 0 ? " with $" + carryMoney : "") + (Has("slowmo") ? ". F6 slows time." : "."));
+            }
+        }
+        if (Has("agile")) Function.Call(Hash.SET_RUN_SPRINT_MULTIPLIER_FOR_PLAYER, Game.Player, 1.49f);
+        if (Has("tough"))
+        {
+            if (me.MaxHealth < 400) { me.MaxHealth = 400; me.Health = 400; }
+            if (me.Armor < 100) me.Armor = Math.Min(100, me.Armor + 5);
+        }
+        if (Has("ghost")) Function.Call(Hash.SET_POLICE_IGNORE_PLAYER, Game.Player, !me.IsInVehicle() && Game.Player.WantedLevel == 0);
+        if (Has("hacker"))
+        {
+            var v = Function.Call<Vehicle>(Hash.GET_VEHICLE_PED_IS_TRYING_TO_ENTER, me);
+            if (v != null && v.Exists()) Function.Call(Hash.SET_VEHICLE_DOORS_LOCKED, v, 1);
+        }
+    }
+
     void OnTick(object sender, EventArgs e)
     {
         if (!lit && world.Length > 0 && Game.GameTime > 15000) { try { Light(); } catch (Exception) { } }
+        if (powers.Count > 0 || carryId.Length > 0) { try { Powers(); } catch (Exception) { } }
         if (!hinted && Game.GameTime > 20000)
         {
             hinted = true;
@@ -213,7 +270,13 @@ public class FrankensteinMenu : Script
 
     void OnKeyDown(object sender, KeyEventArgs e)
     {
-        if (e.KeyCode == Keys.F10 && e.Control)
+        if (e.KeyCode == Keys.F6 && Has("slowmo"))
+        {
+            slow = !slow;
+            Game.TimeScale = slow ? 0.35f : 1f;
+            GTA.UI.Notification.Show(slow ? "Frankenstein: time slowed (F6 again to stop)" : "Frankenstein: time back to normal");
+        }
+        else if (e.KeyCode == Keys.F10 && e.Control)
         {
             try { BuildZone(); } catch (Exception ex) { GTA.UI.Notification.Show("Frankenstein couldn't build here: " + ex.Message); }
         }

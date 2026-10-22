@@ -48,6 +48,7 @@ namespace Frankenstein
         {
             _inTown = name != null && name.Length > 0 && name.IndexOf("Menu", StringComparison.OrdinalIgnoreCase) < 0;
             if (_inTown) _hintUntil = Time.unscaledTime + 25f;
+            Carry.Scene(_inTown);
             if (!_inTown || Style.Length == 0) return;
             _cardUntil = Time.unscaledTime + 6f;  // the merged title card
             _made.Clear();
@@ -158,6 +159,7 @@ namespace Frankenstein
                 if (GUI.Button(new Rect(px + 18 + (pw - 30) / 2, cy + 58, (pw - 30) / 2, 28), "Cancel")) _confirm = "";
             }
             else if (GUI.Button(new Rect(px + 12, cy + 26, pw - 24, 30), MainMenu.Creative ? "Back to my normal game" : "Switch to Creative (every item, its own saves)")) _confirm = to;
+            Carry.Draw(px + pw + 12, py - top + 64, 420);
             if (Style.Length == 0) return;
             GUI.Label(new Rect(px + 12, py + 8, pw - 24, 22), Title + " in " + Host);
             GUI.Label(new Rect(px + 12, py + 32, pw - 24, 40), Zone);
