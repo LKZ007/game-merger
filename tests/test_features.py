@@ -37,6 +37,7 @@ API = {
     "updates and self-check": ["check_update", "check_update_now", "install_update", "self_check_result", "repair_install"],
     "merge upgrades": ["merge_upgrade"],
     "settings": ["get_settings", "save_settings"],
+    "moving covers (trailer loops in the box)": ["cover_clip", "merge_cover_clip"],
 }
 
 # feature: something the page must still have (a function or element id in the web files)
@@ -53,12 +54,18 @@ WEB = {
     "hero item first": ["★ Hero"],
     "preview slideshow with both games fused": ["pvShow", "pv-fused"],
     "no blank covers, 3D moving covers": ["genCover", "cover-float", "cover-sweep", "prefers-reduced-motion"],
+    "moving pictures inside the covers": ["clipVideo", "face-clip", "watchClips", "cover-pan"],
+    "roomy merge card: big Play, the rest under More": ["play-big", "data-more", "more-menu", "closeMore"],
+    "what's inside the game itself": ["In the game:"],
+    "animated preview slides with named guns, items, characters": ["pv-items", "pvInset", "pv-bg"],
+    "Play as, with how close it gets": ["How close"],
 }
 
 # Frankenstein's own mods for each game, bundled with the app
 BUNDLED = ["mods/schedule1/Frankenstein.dll", "mods/cyberpunk2077/frankenstein_items/init.lua", "mods/gta5/Frankenstein.3.cs",
-           "mods/gta5/FrankensteinStory.3.cs"]
-LUA = ["Garage", "Tuning", "Races", "drawHud", "bridge", "Cheats", "Fly", "Cars", "storyTick", "Story"]
+           "mods/gta5/FrankensteinStory.3.cs", "mods/gta5/FrankensteinMenu.3.cs"]
+LUA = ["Garage", "Tuning", "Races", "drawHud", "bridge", "Cheats", "Fly", "Cars", "storyTick", "Story",
+       "This merge", "drawMerge", "switchTo", "playAs"]
 
 
 class FeatureChecklist(unittest.TestCase):
@@ -80,6 +87,27 @@ class FeatureChecklist(unittest.TestCase):
         self.assertEqual(set(BUILTIN), {"schedule1", "cyberpunk2077", "gta5"})
         lua = read(PKG, *BUNDLED[1].split("/"))
         self.assertEqual([x for x in LUA if x not in lua], [])
+
+    def test_menus_inside_the_games(self):
+        from gamemerger.api import BUILTIN
+        for g, b in BUILTIN.items():
+            self.assertTrue(b.get("ingame"), g)
+        with open(os.path.join(PKG, "mods", "schedule1", "Frankenstein.dll"), "rb") as f:
+            dll = f.read()
+        self.assertIn("switch.json".encode("utf-16-le"), dll, "Schedule I main menu panel")
+        self.assertTrue(os.path.isfile(os.path.join(ROOT, "mods", "schedule1", "MainMenu.cs")))
+        gta = read(PKG, "mods", "gta5", "FrankensteinMenu.3.cs")
+        for x in ("Keys.F10", "Keys.F11", "switch.json", "ChangeModel"):
+            self.assertIn(x, gta)
+
+    def test_play_as_on_every_merge(self):
+        from gamemerger import playas
+        from gamemerger.recipes import load_recipes
+        for r in load_recipes():
+            playas.add_to(r)
+            for t in r.themes:
+                self.assertEqual(sum(playas.is_play_as(s.name) for s in t.slots), 1, "%s %s" % (r.id, t.id))
+                self.assertEqual(sum(bool(s.hero) for s in t.slots), 1)
 
     def test_mod_sources_stay_in_the_build(self):
         wf = read(ROOT, ".github", "workflows", "release.yml")

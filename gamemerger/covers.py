@@ -138,6 +138,47 @@ def steam_trailer(appid):
     return None
 
 
+def steam_clip(appid):
+    """A short muted loop for a cover: the sources of the game's first Steam trailer, streamed when shown
+    (never saved). Looked up once a week per game. {"sources": [{url, type}], "poster"} or None."""
+    if not appid:
+        return None
+    import time
+    p = os.path.join(paths.sub("covers"), "clips.json")
+    try:
+        with open(p, encoding="utf-8") as f:
+            cache = json.load(f)
+    except (OSError, ValueError):
+        cache = {}
+    hit = cache.get(str(appid))
+    if hit and time.time() - hit.get("t", 0) < 7 * 86400:
+        return hit.get("clip")
+    try:
+        data = json.loads(_get("https://store.steampowered.com/api/appdetails?appids=%s&filters=movies&cc=us" % appid))
+    except (OSError, ValueError):
+        return None  # offline: the still cover stays, try again next time
+    movies = (((data or {}).get(str(appid)) or {}).get("data") or {}).get("movies") or []
+    clip = None
+    for m in movies[:3]:
+        srcs = []
+        for key, kind in (("webm", "video/webm"), ("mp4", "video/mp4")):
+            url = (m.get(key) or {}).get("480") or (m.get(key) or {}).get("max")
+            if url:
+                srcs.append({"url": url.replace("http://", "https://"), "type": kind})
+        if m.get("hls_h264"):  # newer trailers: only played where the window supports HLS
+            srcs.append({"url": m["hls_h264"], "type": "application/vnd.apple.mpegurl"})
+        if srcs:
+            clip = {"sources": srcs, "poster": m.get("thumbnail", ""), "title": m.get("name", "")}
+            break
+    cache[str(appid)] = {"t": time.time(), "clip": clip}
+    try:
+        with open(p, "w", encoding="utf-8") as f:
+            json.dump(cache, f)
+    except OSError:
+        pass
+    return clip
+
+
 def steam_shots(appid, count=6):
     """Low-res screenshot links from a game's Steam page (streamed when shown, never saved)."""
     if not appid:

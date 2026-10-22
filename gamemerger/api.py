@@ -19,7 +19,7 @@ import webbrowser
 from . import installer, storymode, accounts, achievements, ai, autorecipe, controller, covers, minecraft, modsources, storeinfo, discord, profiles, detect, downloader, gallery, network, nexus, paths, permissions, saves, scan, sharing, updater
 from .version import VERSION
 from .installer import MODE_COPY, MODE_HARDLINK, MODE_INPLACE, Merge, MergeError, find_clashes, preview
-from . import recipes
+from . import playas, recipes
 from .recipes import load_recipes, resource_dir
 
 SHARE_TYPES = ("Shared merges (*.gmerge)", "All files (*.*)")
@@ -48,17 +48,23 @@ class Job:
 BUILTIN = {
     "gta5": {"label": "Frankenstein spawner script", "dest": "scripts", "needs": ["scripthookv", "shvdn"],
              "settings": "scripts/Frankenstein/settings.json", "bridge": "scripts/Frankenstein/commands.txt",
-             "what": "Spawner: any car or weapon from Frankenstein's Spawner while you play; F7 in game gives every weapon."},
+             "what": "Spawner: any car or weapon from Frankenstein's Spawner while you play; F7 in game gives every weapon.",
+             "ingame": "F10 opens Frankenstein's menu (rundown, Creative, Play as). Shift+F10 switches to Creative and back "
+                       "(quit from the pause menu and Frankenstein restarts the game). F11 Play as on/off, F7 every weapon."},
     "schedule1": {"label": "Frankenstein item menu and story mode", "dest": "Mods", "needs": ["s1api"],
                   "settings": "UserData/Frankenstein/settings.json", "bridge": "UserData/Frankenstein/commands.json",
                   "catalog": "UserData/Frankenstein/world.json",
-                  "what": "Item menu: press F6 (or Back + Y) in game for every item, mods' items included."},
+                  "what": "Item menu: press F6 (or Back + Y) in game for every item, mods' items included.",
+                  "ingame": "On the main menu, under Continue and New game: Frankenstein's panel with Creative (own saves) "
+                            "and the rundown. While you play: F6 (or Back + Y) for every item."},
     "cyberpunk2077": {"label": "Frankenstein sandbox menu", "dest": "bin/x64/plugins/cyber_engine_tweaks/mods",
                       "settings": "bin/x64/plugins/cyber_engine_tweaks/mods/frankenstein_items/settings.json",
                       "bridge": "bin/x64/plugins/cyber_engine_tweaks/mods/frankenstein_items/commands.json",
                       "catalog": "bin/x64/plugins/cyber_engine_tweaks/mods/frankenstein_items/catalog.json",
                       "what": "Sandbox menu, built in: press ~ in game for every item, every car into your garage, "
-                              "god mode, eddies, heal, lose the police, time, weather and a fly tool. Mods' items and cars included."},
+                              "god mode, eddies, heal, lose the police, time, weather and a fly tool. Mods' items and cars included.",
+                      "ingame": "Press ~ on the main menu or while you play: the This merge tab has Creative (own saves), "
+                                "the rundown and Play as; the other tabs are the spawner, garage, races and cheats."},
 }
 
 # The merge standard: no part of a merge is ever left empty. When no mod can be downloaded for a part,
@@ -97,6 +103,8 @@ def standin_for(recipe_id, slot_name, slot_builtin=""):
     """What covers a part of the merge when nothing could be downloaded: (text, kind)."""
     if slot_builtin:
         return slot_builtin, "builtin"
+    if playas.is_play_as(slot_name):
+        return STORY_STANDIN, "story"  # only Frankenstein's own mod for the game can stand in for a character
     for pattern, text in STANDINS.get(recipe_id, []):
         if re.search(pattern, slot_name, re.I):
             return text, "builtin"
@@ -151,6 +159,8 @@ class Api:
         self._locked = remember != last["id"] and (len(data["profiles"]) > 1 or bool(last.get("pin")))
         self._hand = load_recipes([resource_dir(), paths.user_recipes_dir()])
         self._recipes = self._hand + autorecipe.load_all()
+        for r in self._recipes:
+            playas.add_to(r)
         self._games = []
         self._owned = {}
         self._jobs = {}
@@ -286,7 +296,7 @@ class Api:
     # files every install of Frankenstein must have (the app's own pages and its mods for each game)
     REQUIRED = ["web/index.html", "web/app.js", "web/app.css", "recipes/cyberpunk2077.json", "recipes/schedule1.json",
                 "recipes/gta5.json", "mods/schedule1/Frankenstein.dll", "mods/cyberpunk2077/frankenstein_items/init.lua",
-                "mods/gta5/Frankenstein.3.cs"]
+                "mods/gta5/Frankenstein.3.cs", "mods/gta5/FrankensteinMenu.3.cs"]
 
     def _self_check(self):
         """Run at every start (in the background): check Frankenstein's own files and every merge, and repair what
@@ -333,6 +343,8 @@ class Api:
                 out.append("updated %s" % b["label"])
         if self._fill_gaps(m, r):
             out.append("filled empty parts of What it adds")
+        if self._add_new_parts(m, r):
+            out.append("added Play as (the other game's character)")
         heroes = {sl.name for t in (r.themes if r else []) for sl in t.slots if sl.hero}
         marked = False
         for a in m.data.get("adds", []):
@@ -541,6 +553,36 @@ class Api:
                 saves.push_cloud(mid, cloud, Merge.load(mid).name)
             except OSError:
                 pass  # cloud folder offline: next session tries again
+        if mid:
+            self._switch_from_game(mid)
+
+    def _switch_from_game(self, merge_id):
+        """Creative from inside the game: Frankenstein's own mod leaves switch.json next to its settings and the
+        game closes; the game starts again in the other mode, with that mode's own saves."""
+        try:
+            m = Merge.load(merge_id)
+        except (OSError, ValueError):
+            return
+        b = BUILTIN.get(m.data.get("recipe_id") or "")
+        if not b:
+            return
+        p = os.path.join(m.target_path, *b["settings"].split("/")[:-1], "switch.json")
+        try:
+            with open(p, encoding="utf-8") as f:
+                to = json.load(f).get("to")
+            os.remove(p)
+        except (OSError, ValueError, AttributeError):
+            return
+        if to not in ("creative", "normal"):
+            return
+
+        def again():
+            time.sleep(4)  # the game's own process lets go of its files first
+            try:
+                self.play(merge_id, to == "creative")
+            except Exception:
+                pass
+        threading.Thread(target=again, daemon=True).start()
 
     def _steam_root(self):
         if detect.winreg is not None:
@@ -578,6 +620,8 @@ class Api:
                     g.recipe = None
         built = {g.recipe.id: g.recipe for g in self._games if g.recipe and getattr(g.recipe, "auto", None)}
         self._recipes = self._hand + list(built.values()) + [r for r in autorecipe.load_all(styles) if r.id not in built]
+        for r in self._recipes:
+            playas.add_to(r)  # every merge can play as the other game's character
 
     def library(self):
         installed = {g.name.lower() for g in self._games}
@@ -959,6 +1003,14 @@ class Api:
             except Exception:
                 source_id = ""
         shots = {"base": [], "source": []}
+        # the moving pictures behind the slides: short muted loops of both games' trailers (streamed, never saved)
+        out["moving"] = {"base": None, "source": None}
+
+        def moving(which, appid):
+            try:
+                out["moving"][which] = covers.steam_clip(appid)
+            except Exception:
+                pass
 
         def screens(which, appid):
             try:
@@ -967,7 +1019,8 @@ class Api:
                 pass
         work = [threading.Thread(target=f, args=a, daemon=True) for f, a in
                 [(clip, (base_id, g.name)), (clip, (source_id, t.from_game)), (pitch, ()),
-                 (screens, ("base", base_id)), (screens, ("source", source_id))] +
+                 (screens, ("base", base_id)), (screens, ("source", source_id)),
+                 (moving, ("base", base_id)), (moving, ("source", source_id))] +
                 [(pictures, (s,)) for s in t.slots]]
         for w in work:
             w.start()
@@ -983,28 +1036,52 @@ class Api:
 
     def _preview_slides(self, g, r, t, shots, pictures):
         """The slideshow: one slide per thing you can do in the merge, each with a picture (the mod's own,
-        or a screenshot from either game) and a one-line caption."""
+        or a screenshot from either game), a one-line caption, and the named things it brings (each gun, item
+        or character) that pop up over the moving picture. "at" spreads the slides across the main game's
+        trailer so each one shows a different moment."""
         pics = {p["slot"]: p["url"] for p in pictures}
         pool = [x for pair in zip(shots["base"], shots["source"]) for x in pair] + shots["base"][len(shots["source"]):] + \
             shots["source"][len(shots["base"]):]
+        src = t.from_game.split(" /")[0]
         slides = []
 
-        def add(caption, image=None, tag=""):
-            slides.append({"caption": caption, "image": image or (pool[len(slides) % len(pool)] if pool else None), "tag": tag})
+        def add(caption, image=None, tag="", items=(), inset=None):
+            slides.append({"caption": caption, "image": image or (pool[len(slides) % len(pool)] if pool else None), "tag": tag,
+                           "items": [x for x in items if x][:6], "inset": inset or "", "from": src})
+
+        def parts(text):
+            """ "Hood Warfare arsenal: starter kit, item menu (F6) and the gun shop" -> its named pieces """
+            body = text.split(":", 1)[1] if ":" in text[:60] else ""
+            inner = re.findall(r"\(([^)]*,[^)]*)\)", text)  # "(rival boss, weapons dealer, crooked cop)"
+            if inner and not body.strip():
+                body = inner[0]
+            return [x.strip(" .") for x in re.split(r",|\band\b|\bplus\b", re.sub(r"\([^)]*\)", "", body)) if 2 < len(x.strip(" .")) < 48]
+        arsenal = ARSENALS.get(t.id, [])
         for sl in t.slots:
             text, kind = standin_for(r.id if r else "", sl.name, sl.builtin)
             caption = sl.name if kind == "story" else "%s: %s" % (sl.name, text.split(":")[0] if ":" in text[:40] else text)
-            add(caption, pics.get(sl.name), "★ Hero" if sl.hero else "")
+            items = (parts(text) if kind != "story" else []) or parts("x: " + ", ".join(re.findall(r"\(([^)]*)\)", sl.name)))
+            if playas.is_play_as(sl.name):
+                st = playas.settings(r.id if r else "", src)
+                items = [st["who"].capitalize()] + [x.strip() for x in st["moves"].split(",")]
+            elif sl.hero and arsenal:
+                items = ["%s → %s" % (gun, like) for gun, like, _q in arsenal]
+            add(caption, pics.get(sl.name), "★ Hero" if sl.hero else "", items, pics.get(sl.name) or (shots["source"] or [None])[0])
         kit = KITS.get(t.id)
         if kit and r and r.id == "schedule1":
-            add("Buy %s's guns at Handy Hank's hardware store" % t.from_game.split(" /")[0], None, "Gun shop")
-            add("Start with the %s: %s" % (kit["name"], ", ".join(i.split("=")[-1].split("*")[0] for i in kit["items"][:5])), None, "Starter kit")
+            shop = [x.split("=")[-1].replace("@", "  $") for x in kit.get("shop", []) if "magazine" not in x.lower()]
+            add("Buy %s's guns at Handy Hank's hardware store" % src, None, "Gun shop", shop)
+            names = [i.split("=")[-1].split("*")[0] for i in kit["items"] if "magazine" not in i.lower()]
+            add("Start with the %s: %s" % (kit["name"], ", ".join(names[:5])), None, "Starter kit", names)
         b = BUILTIN.get(r.id if r else "")
         if b:
-            add(b["what"].split(":")[0] + ": " + b["what"].split(":", 1)[-1].strip().split(".")[0], None, "Built in")
+            add(b["what"].split(":")[0] + ": " + b["what"].split(":", 1)[-1].strip().split(".")[0], None, "Built in", parts(b["what"]))
         if storymode.depth(r)["level"] == "in-game":
             add("A new story: quests from the merge's own characters, inside the game", None, "Story")
-        return slides[:10]
+        slides = slides[:10]
+        for i, sl in enumerate(slides):
+            sl["at"] = round(0.12 + 0.76 * i / max(1, len(slides) - 1), 3)
+        return slides
 
     def owned_cover(self, key):
         g = getattr(self, "_owned", {}).get(key)
@@ -1029,6 +1106,22 @@ class Api:
     def cover(self, key):
         g = self._game(key)
         return covers.as_data_uri(covers.cover_path(g, steam_root=self._steam_root()))
+
+    def cover_clip(self, key, owned=False):
+        """The moving picture inside a game's box: a short muted loop of its Steam trailer, or None."""
+        if owned:
+            g = getattr(self, "_owned", {}).get(key) or {}
+            appid = g.get("appid") if g.get("source") == "Steam" else covers.search_appid(g.get("name", "")) if g else None
+        else:
+            g = self._game(key)
+            appid = covers.appid_for(g, allow_search=True)
+        return covers.steam_clip(appid) if appid else None
+
+    def merge_cover_clip(self, merge_id):
+        """A merge's box moves with both games: the main game's trailer on the left, the other game's on the right."""
+        m = Merge.load(merge_id)
+        sid = m.data.get("source_appid") or (covers.search_appid(m.data["source_name"]) if m.data.get("source_name") else None)
+        return {"base": covers.steam_clip(m.data.get("cover_appid")), "source": covers.steam_clip(sid)}
 
     def add_game_folder(self):
         picked = self._dialog("folder", title="Pick the folder the game is installed in")
@@ -1074,6 +1167,7 @@ class Api:
             t.description = got["description"] or t.description
             t.slots = [recipes.Slot(**x) for x in got["slots"]]
             t.filled = True
+            playas.add_to(r)
 
     @staticmethod
     def _is_mc(r):
@@ -1484,7 +1578,7 @@ class Api:
 
     AUTO_ORDER = ("Thunderstore", "Modrinth", "CurseForge", "Nexus Mods")
 
-    def _auto_pick(self, r, search, loader=None, version=None, skip=(), prefer="", mono=None):
+    def _auto_pick(self, r, search, loader=None, version=None, skip=(), prefer="", mono=None, must=None):
         """The best mod for a search that Frankenstein can download by itself: [(name, path)], hit; or ([], None).
         prefer: a mod picked by hand, matched by name and tried first. mono: for Unity games that ship separate
         Mono and IL2CPP builds of a mod, which one this copy of the game needs (None if it doesn't matter)."""
@@ -1493,6 +1587,8 @@ class Api:
             key = re.sub(r"[^a-z0-9]", "", prefer.lower())
             mine = [x for x in found if re.sub(r"[^a-z0-9]", "", x["name"].lower()).startswith(key)]
             found = mine + [x for x in self.mod_search(r.id, search, "all", loader, version)["results"] if x not in mine]
+        if must:
+            found = [x for x in found if re.search(must, x["name"])]
         if mono is False:
             # "... Mono" packages are for the Mono (beta) build only; this is the normal IL2CPP build
             found = [x for x in found if "mono" not in x["name"].lower()]
@@ -1527,10 +1623,13 @@ class Api:
         """A part with no download: Frankenstein's own built-in or a story stand-in, plus one-click picks."""
         text, kind = standin_for(r.id if r else "", slot.name, getattr(slot, "builtin", ""))
         picks = list(getattr(slot, "picks", None) or [])
+        if playas.is_play_as(slot.name):
+            picks += playas.nexus_pick(getattr(r, "nexus_domain", ""), slot.name)
         picks += [x for x in locked if x["url"] not in {p["url"] for p in picks}]
         return {"slot": slot.name, "ok": True, "mod": text, "source": "Built in" if kind == "builtin" else "Stand-in",
                 "standin": kind, "page": "", "extra": 0, "creative": bool(prefix), "why": "", "search": slot.search,
                 "hero": bool(getattr(slot, "hero", False)),
+                "close": playas.closeness(r.id if r else "", "") if playas.is_play_as(slot.name) else "",
                 "picks": picks[:8]}
 
     @staticmethod
@@ -1562,6 +1661,29 @@ class Api:
             m.save()
         return changed
 
+    def _add_new_parts(self, m, r):
+        """Parts that newer versions of Frankenstein add to every merge (like Play as) come to older merges too,
+        as Frankenstein's own built-in or a stand-in (Auto-fill can still find a mod for them later)."""
+        try:
+            t = r.theme(m.data.get("theme_id")) if r else None
+        except KeyError:
+            t = None
+        if not t or "adds" not in m.data:
+            return False
+        have = {a.get("slot") for a in m.data["adds"]}
+        new = [sl for sl in t.slots if playas.is_play_as(sl.name) and sl.name not in have]
+        for sl in new:
+            a = self._standin_add(r, sl, "", [])
+            if sl.hero:
+                for other in m.data["adds"]:
+                    other["hero"] = False
+                m.data["adds"].insert(0, a)
+            else:
+                m.data["adds"].append(a)
+        if new:
+            m.save()
+        return bool(new)
+
     def _auto_fill(self, m, r, slots, job, prefix="", skip_slots=()):
         """Install the best mod for each slot. Records what the merge adds (and what it couldn't) in m.data["adds"]."""
         adds = [a for a in m.data.get("adds", []) if a.get("slot") not in {s.name for s in slots}] if not prefix else m.data.get("adds", [])
@@ -1581,7 +1703,8 @@ class Api:
                     hit = {"name": slot.name, "source": "GitHub", "page": "https://github.com/%s" % gh}
                 else:
                     got, hit = self._auto_pick(r, slot.search, loader, version, prefer=getattr(slot, "prefer", ""),
-                                               mono=self._unity_mono(m.target_path))
+                                               mono=self._unity_mono(m.target_path),
+                                               must=playas.must_match(slot.name) if playas.is_play_as(slot.name) else None)
             except Exception as e:
                 got, hit = [], None
                 job.write("✖ Search failed: %s" % e)
@@ -1604,6 +1727,7 @@ class Api:
                 m.data.setdefault("creative_mods", []).extend(labels)
             adds.append({"slot": slot.name, "ok": bool(labels), "mod": hit["name"], "source": hit["source"],
                          "hero": bool(getattr(slot, "hero", False)),
+                         "close": "a character mod made for this game" if playas.is_play_as(slot.name) else "",
                          "page": hit.get("page", ""), "extra": max(0, len(got) - 1), "creative": bool(prefix),
                          "why": "" if labels else "it was found but didn't install"})
             job.write("✔ %s: %s from %s" % (slot.name, hit["name"], hit["source"]))
@@ -1784,12 +1908,38 @@ class Api:
         os.replace(tmp, p)
         return {"sent": True, "live": self._playing == merge_id}
 
+    @staticmethod
+    def _ingame(m):
+        """What Frankenstein's own mod puts inside this merge's game (menus, keys), or "" if it has none there."""
+        b = BUILTIN.get(m.data.get("recipe_id") or "")
+        if b and b.get("ingame") and any(i["label"] == b["label"] for i in m.data.get("installs", [])):
+            return b["ingame"]
+        return ""
+
+    def _ingame_rundown(self, m, creative):
+        """The rundown, short enough for a menu inside the game."""
+        d = m.data.get("rundown_creative" if creative else "rundown") or self._rundown_basic(m, creative)
+        lines = [d.get("headline", "")]
+        if d.get("tagline"):
+            lines.append(d["tagline"])
+        ok = [a for a in m.data.get("adds", []) if a.get("ok")]
+        lines += ["%s%s: %s" % ("★ " if a.get("hero") else "", a["slot"], a["mod"]) for a in ok[:6]]
+        lines += ["Try: " + x for x in (d.get("try") or [])[:3]]
+        lines += list(d.get("keys") or [])[:2]
+        if d.get("quest"):
+            lines.append("Quest: " + d["quest"])
+        return [x[:180] for x in lines if x][:14]
+
     def _builtin_settings(self, m, r, creative):
         """Tell Frankenstein's own mod whether the item menu is on for this launch."""
         b = BUILTIN.get(r.id if r else "")
         if not b:
             return
         on = bool(creative or self._settings.get("item_menu_normal"))
+        source = m.data.get("source_name") or m.data.get("theme_name", "")
+        extra_all = {"creative": bool(creative), "merge": m.name, "rundown": self._ingame_rundown(m, creative),
+                     "rundown_text": "\n".join(self._ingame_rundown(m, creative)),
+                     "play_as": dict(playas.settings(r.id, source), on=bool(m.data.get("play_as_on", True)))}
         kit = KITS.get(m.data.get("theme_id"))
         if m.data.get("story_kit"):
             kit = {"name": "%s starter kit" % (m.data.get("source_name") or m.name), "items": m.data["story_kit"]}
@@ -1801,7 +1951,7 @@ class Api:
                 shop = KITS.get(m.data.get("theme_id"), {})
                 if shop.get("shop"):
                     extra.update(shop=shop["shop"], shop_name=shop.get("shop_name", "hardware"))
-                json.dump(dict({"item_menu": on}, **extra), f)
+                json.dump(dict({"item_menu": on}, **dict(extra_all, **extra)), f)
         except OSError:
             pass
 
@@ -2174,6 +2324,7 @@ class Api:
                         "has_saves": os.path.isdir(saves.slot_root(m.id)),
                         "offline_lock": bool(self._recipe(m.data.get("recipe_id")) and
                                              self._recipe(m.data.get("recipe_id")).launch_args and m.mode != MODE_INPLACE),
+                        "ingame": self._ingame(m),
                         "playing": self._playing == m.id, "needs_upgrade": m.data.get("upgraded", 1) < self.UPGRADE, "originals": self._originals_note(m), "save_fix": m.data.get("save_fix"),
                         "sources": self._sources_for(self._recipe(m.data.get("recipe_id"))),
                         "mc_loader": m.data.get("mc_loader"), "mc_version": m.data.get("mc_version"),

@@ -39,6 +39,16 @@ namespace Frankenstein
                 KitName = J.S(s, "kit_name", "Starter kit");
                 foreach (var k in J.L(s, "shop")) Shop.Add(k.ToString());
                 ShopName = J.S(s, "shop_name", "hardware");
+                MainMenu.Merge = J.S(s, "merge");
+                MainMenu.Creative = J.S(s, "creative", "false").ToLowerInvariant() == "true";
+                foreach (var k in J.L(s, "rundown")) MainMenu.Rundown.Add(k.ToString());
+                var pa = s is System.Collections.Generic.Dictionary<string, object> d && d.TryGetValue("play_as", out var v) ? v : null;
+                if (pa != null && J.S(pa, "style").Length > 0)
+                {
+                    MainMenu.Who = J.S(pa, "who");
+                    MainMenu.Moves = J.S(pa, "moves");
+                    MainMenu.Close = J.S(pa, "close");
+                }
             }
             catch (Exception e)
             {
@@ -46,9 +56,12 @@ namespace Frankenstein
             }
         }
 
+        public override void OnSceneWasInitialized(int buildIndex, string sceneName) => MainMenu.Scene(sceneName);
+
         public override void OnUpdate()
         {
             ItemMenu.Update();
+            MainMenu.Update();
             if (Time.unscaledTime < _next) return;
             _next = Time.unscaledTime + 1f;
             try { Story.Tick(); }
@@ -62,6 +75,7 @@ namespace Frankenstein
         public override void OnGUI()
         {
             ItemMenu.Draw();
+            MainMenu.Draw();
         }
     }
 }

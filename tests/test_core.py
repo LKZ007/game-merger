@@ -756,3 +756,67 @@ class StandardTests(unittest.TestCase):
         self.assertEqual(api.standin_for("cyberpunk2077", "Radio stations")[1], "story")
         self.assertEqual(api.standin_for("whatever", "Dragons")[0], api.STORY_STANDIN)
         self.assertEqual(api.standin_for("x", "y", "Own thing"), ("Own thing", "builtin"))
+
+
+class PlayAsAndInGameTests(unittest.TestCase):
+    def test_the_other_games_character(self):
+        from gamemerger import playas
+        self.assertEqual(playas.style("Gang Beasts")[0], "wobbly")
+        self.assertEqual(playas.style("Batman: Arkham Knight")[0], "superhero")
+        self.assertEqual(playas.style("Stick Fight: The Game")[0], "stick")
+        self.assertEqual(playas.style("ELDEN RING")[0], "knight")
+        self.assertEqual(playas.source_of(playas.slot_name("Gang Beasts")), "Gang Beasts")
+        self.assertTrue(playas.must_match(playas.slot_name("Gang Beasts")))
+        self.assertIn("Impotent Rage", playas.host_text("gta5", "Injustice 2"))
+        self.assertEqual(playas.host_text("eldenring", "Gang Beasts"), "")  # no own mod there: honest stand-in
+
+    def test_character_games_make_play_as_the_hero(self):
+        from gamemerger import playas, recipes
+        r = types.SimpleNamespace(id="gta5", themes=[
+            types.SimpleNamespace(from_game="Gang Beasts", name="Gang Beasts style", slots=[recipes.Slot("Ragdoll", "ragdoll", hero=True)]),
+            types.SimpleNamespace(from_game="Forza Horizon 5", name="Forza", slots=[recipes.Slot("Cars", "cars", hero=True)])])
+        playas.add_to(r)
+        playas.add_to(r)  # twice changes nothing
+        self.assertTrue(playas.is_play_as(r.themes[0].slots[0].name) and r.themes[0].slots[0].hero)
+        self.assertFalse(r.themes[0].slots[1].hero)
+        self.assertEqual([s.hero for s in r.themes[1].slots], [True, False])
+        self.assertEqual(len(r.themes[1].slots), 2)
+
+    def test_old_merges_get_play_as(self):
+        from gamemerger import api, playas, recipes
+        a = api.Api.__new__(api.Api)
+        t = types.SimpleNamespace(id="t", from_game="Gang Beasts", name="GB", slots=[recipes.Slot("Ragdoll", "ragdoll", hero=True)])
+        r = types.SimpleNamespace(id="gta5", themes=[t], nexus_domain="gta5", theme=lambda i: t)
+        playas.add_to(r)
+        m = types.SimpleNamespace(data={"theme_id": "t", "adds": [{"slot": "Ragdoll", "ok": True, "hero": True}]}, save=lambda: None)
+        self.assertTrue(a._add_new_parts(m, r))
+        self.assertFalse(a._add_new_parts(m, r))
+        first = m.data["adds"][0]
+        self.assertTrue(playas.is_play_as(first["slot"]) and first["hero"] and first["standin"] == "builtin")
+        self.assertTrue(first["close"] and first["picks"])
+        self.assertFalse(m.data["adds"][1]["hero"])
+
+    def test_creative_switch_from_inside_the_game(self):
+        import time as _t
+        from gamemerger import api
+        folder = tempfile.mkdtemp()
+        sub = os.path.join(folder, "UserData", "Frankenstein")
+        os.makedirs(sub)
+        with open(os.path.join(sub, "switch.json"), "w") as f:
+            f.write('{"to": "creative"}')
+        a = api.Api.__new__(api.Api)
+        played = []
+        a.play = lambda mid, creative=False: played.append((mid, creative))
+        old_load, old_sleep = api.Merge.load, api.time.sleep
+        api.Merge.load = staticmethod(lambda mid: types.SimpleNamespace(target_path=folder, data={"recipe_id": "schedule1"}))
+        api.time.sleep = lambda s: None
+        try:
+            a._switch_from_game("m9")
+            for _ in range(50):
+                if played:
+                    break
+                _t.sleep(0.02)
+        finally:
+            api.Merge.load, api.time.sleep = old_load, old_sleep
+        self.assertEqual(played, [("m9", True)])
+        self.assertFalse(os.path.exists(os.path.join(sub, "switch.json")))

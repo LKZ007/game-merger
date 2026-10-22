@@ -20,6 +20,53 @@ local function readSettings()
     local ok, s = pcall(json.decode, f:read("*a"))
     f:close()
     if ok and s and s.item_menu == false then menu.allowed = false end
+    if ok and s then menu.s = s end
+end
+
+-- This merge: the rundown, Creative (its own saves) and Play as, inside the game.
+-- Creative needs the game to start again with other saves: Frankenstein reads switch.json when the game closes.
+local function switchTo(to)
+    local f = io.open("switch.json", "w")
+    if not f then menu.note = "Couldn't ask Frankenstein to switch"; return end
+    f:write(json.encode({ to = to })); f:close()
+    menu.note = "Save first. The game closes and Frankenstein starts it again in " .. (to == "creative" and "Creative" or "your normal game") .. "."
+    menu.quitAt = menu.now + 4
+end
+
+local function playAs(on)
+    local pa = menu.s and menu.s.play_as
+    if not pa or (pa.style or "") == "" then return end
+    menu.playing = on
+    -- what Cyberpunk can give V: the other game's toughness and speed (V's body stays V's)
+    local tough = pa.style == "superhero" or pa.style == "knight"
+    pcall(function()
+        local gm, id = Game.GetGodModeSystem(), Game.GetPlayer():GetEntityID()
+        if on and tough then gm:AddGodMode(id, gameGodModeType.Invulnerable, CName.new("FrankensteinPlayAs"))
+        else gm:RemoveGodMode(id, gameGodModeType.Invulnerable, CName.new("FrankensteinPlayAs")) end
+    end)
+    menu.note = on and ("Playing as " .. (pa.who or "the other game's hero") .. ": " .. (pa.moves or "")) or "Back to V"
+end
+
+local function drawMerge()
+    local s = menu.s or {}
+    ImGui.TextWrapped((s.merge or "This merge") .. (s.creative and "  ·  Creative (its own saves)" or ""))
+    ImGui.Separator()
+    if s.creative then
+        if ImGui.Button("Back to my normal game (restarts)") then switchTo("normal") end
+    else
+        if ImGui.Button("Creative: every item, own saves (restarts)") then switchTo("creative") end
+    end
+    ImGui.TextWrapped("Creative keeps its own saves, so your normal game is never touched.")
+    local pa = s.play_as
+    if pa and (pa.style or "") ~= "" then
+        ImGui.Separator()
+        ImGui.Text("Play as " .. (pa.who or ""))
+        ImGui.TextWrapped((pa.moves or "") .. ". How close: " .. (pa.close or ""))
+        if ImGui.Button(menu.playing and "Back to V" or "Play as them") then playAs(not menu.playing) end
+    end
+    ImGui.Separator()
+    ImGui.Text("Rundown")
+    for _, line in ipairs(s.rundown or {}) do ImGui.TextWrapped(line) end
 end
 
 local function nameOf(rec)
@@ -297,10 +344,16 @@ registerForEvent("onInit", function()
     end)
 end)
 registerForEvent("onUpdate", function(dt)
-    menu.now = menu.now + dt
+    menu.now = (menu.now or 0) + dt
     menu.clock = menu.clock + dt
     if menu.clock < 0.5 then return end
     menu.clock = 0
+    if menu.quitAt and menu.now >= menu.quitAt then
+        menu.quitAt = nil
+        if not pcall(function() Game.GetSystemRequestsHandler():ExitGame() end) then
+            menu.note = "Quit the game now: Frankenstein starts it again in the other mode."
+        end
+    end
     pcall(raceTick)
     pcall(bridge)
     pcall(storyTick)
@@ -339,9 +392,12 @@ registerForEvent("onDraw", function()
     if not (menu.overlay or menu.open) then return end
     if not menu.allowed then
         if menu.overlay then
-            ImGui.Begin("Frankenstein item menu")
-            ImGui.Text("The item menu is off for normal play.")
-            ImGui.Text("Play this merge in Creative, or turn it on in Frankenstein > Settings.")
+            ImGui.SetNextWindowSize(520, 520, ImGuiCond.FirstUseEver)
+            ImGui.Begin("Frankenstein · this merge")
+            ImGui.TextWrapped(menu.note)
+            pcall(drawMerge)
+            ImGui.Separator()
+            ImGui.TextWrapped("The item menu and spawner are off for normal play. Creative has them all.")
             ImGui.End()
         end
         return
@@ -350,6 +406,10 @@ registerForEvent("onDraw", function()
     if ImGui.Begin("Frankenstein sandbox · every item and car in this merge") then
         ImGui.Text(menu.note)
         if ImGui.BeginTabBar("frank_tabs") then
+            if ImGui.BeginTabItem("This merge") then
+                pcall(drawMerge)
+                ImGui.EndTabItem()
+            end
             if ImGui.BeginTabItem("Items (" .. #menu.items .. ")") then
                 if #menu.items == 0 and ImGui.Button("Load items") then load() end
                 menu.search = ImGui.InputText("Search", menu.search, 100)
@@ -403,7 +463,7 @@ registerForEvent("onDraw", function()
                 if god ~= menu.god then
                     menu.god = god
                     try(god and "God mode on" or "God mode off", function()
-                        local gm, id = Game.GetGodModeSystem(), player():GetEntityID()
+                        local gm, id = Game.GetGodModeSystem(), Game.GetPlayer():GetEntityID()
                         if god then gm:AddGodMode(id, gameGodModeType.Invulnerable, CName.new("Frankenstein"))
                         else gm:ClearGodMode(id, CName.new("Frankenstein")) end
                     end)

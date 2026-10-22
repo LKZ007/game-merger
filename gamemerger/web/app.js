@@ -795,9 +795,10 @@ function addsHtml(a) {
   const heroFirst = [...a.adds].sort((x, y) => (y.hero ? 1 : 0) - (x.hero ? 1 : 0));
   const real = heroFirst.filter((x) => x.ok && !x.standin), own = heroFirst.filter((x) => x.ok && x.standin), miss = heroFirst.filter((x) => !x.ok);
   const star = (x) => (x.hero ? `<span class="tag live">★ Hero</span> ` : "");
+  const close = (x) => (x.close ? ` <span class="tag" title="How close Play as gets in this game">How close: ${esc(x.close)}</span>` : "");
   const picks = (x) => (x.picks || []).length ? `<div class="small muted">Want the real mod? On Nexus Mods (only Premium lets apps download): ${x.picks.map((k) => `<a href="#" data-ext="${esc(k.url)}">${esc(k.name)}</a>`).join(" · ")}. Press <strong>Mod Manager Download</strong> there and Frankenstein adds it.</div>` : "";
-  const line = (x) => `<li>${star(x)}<strong>${esc(x.slot)}</strong>: ${esc(x.mod)} <span class="muted small">from ${esc(x.source)}${x.extra ? `, plus ${x.extra} mod${x.extra > 1 ? "s" : ""} it needs` : ""}${x.creative ? " · creative only" : ""}</span></li>`;
-  const ownLine = (x) => `<li>${star(x)}<strong>${esc(x.slot)}</strong>: ${esc(x.mod)} <span class="tag">${x.standin === "story" ? "story stand-in" : "built into Frankenstein"}</span>${x.creative ? ` <span class="muted small">creative only</span>` : ""}${picks(x)}</li>`;
+  const line = (x) => `<li>${star(x)}<strong>${esc(x.slot)}</strong>: ${esc(x.mod)} <span class="muted small">from ${esc(x.source)}${x.extra ? `, plus ${x.extra} mod${x.extra > 1 ? "s" : ""} it needs` : ""}${x.creative ? " · creative only" : ""}</span>${close(x)}</li>`;
+  const ownLine = (x) => `<li>${star(x)}<strong>${esc(x.slot)}</strong>: ${esc(x.mod)} <span class="tag">${x.standin === "story" ? "story stand-in" : "built into Frankenstein"}</span>${x.creative ? ` <span class="muted small">creative only</span>` : ""}${close(x)}${picks(x)}</li>`;
   return `<div class="adds">
     ${real.length || a.builtin.length ? `<p class="muted">Mods brought over${a.source ? " from " + esc(a.source) : ""}:</p><ul>${real.map(line).join("")}${a.builtin.map((b) => `<li><strong>Frankenstein</strong>: ${esc(b)}</li>`).join("")}</ul>` : ""}
     ${own.length ? `<p class="muted">Made by Frankenstein itself (no mod for these could be downloaded, so Frankenstein's own mod or the merge's story covers them):</p><ul>${own.map(ownLine).join("")}</ul>` : ""}
@@ -828,20 +829,28 @@ async function loadMerges() {
         <div class="muted small" title="${esc(m.folder)}">${esc(m.folder)}</div>
       </div>
       <div class="merge-actions">
-        <button class="btn primary" data-act="play">▶ Play</button>
-        <button class="btn creative" data-act="creative" title="Sandbox: every item, spawners, free camera. Own saves, offline.">✦ Creative</button>
-        <button class="btn ghost" data-act="rundown" title="What's in this merge and what to do">Rundown</button>
-        <button class="btn" data-act="spawner" title="Send items and cars into the game while you play (works from a second screen)">Spawner</button>
-        <button class="btn" data-act="adds" title="What this merge brings over from the other game">What it adds${m.adds ? ` (${m.adds})` : ""}</button>
-        <button class="btn" data-act="autofill" title="Frankenstein finds and installs the mods that bring the other game's features over">Auto-fill</button>
-        <button class="btn" data-act="mods">Mods &amp; profiles</button>
-        <button class="btn" data-act="add">Add mods</button>
-        <button class="btn" data-act="share">Share</button>
-        <button class="btn" data-act="fix">Fix crash</button>
-        ${m.needs_upgrade ? `<button class="btn" data-act="upgrade" title="Give this merge everything new merges get. Mods and saves stay as they are.">Upgrade</button>` : ""}
-        <button class="btn ghost" data-act="folder">Open folder</button>
-        <button class="btn ghost" data-act="undo">Undo all mods</button>
-        <button class="btn ghost danger" data-act="delete">Delete</button>
+        <button class="btn primary play-big" data-act="play">▶ Play</button>
+        <div class="merge-row">
+          <button class="btn" data-act="adds" title="What this merge brings over from the other game">What it adds${m.adds ? ` (${m.adds})` : ""}</button>
+          <button class="btn" data-act="share">Share</button>
+          ${m.ingame ? "" : `<button class="btn creative" data-act="creative" title="Sandbox: every item, spawners, free camera. Own saves, offline.">✦ Creative</button>`}
+          <div class="more"><button class="btn ghost" data-more aria-haspopup="true" aria-expanded="false">⋯ More</button>
+            <div class="more-menu" role="menu" hidden>
+              ${m.ingame ? `<button data-act="creative" title="Also in the game itself">✦ Creative (own saves)</button>` : ""}
+              <button data-act="rundown">Rundown</button>
+              <button data-act="spawner" title="Send items and cars into the game while you play (works from a second screen)">Spawner</button>
+              <button data-act="autofill" title="Frankenstein finds and installs the mods that bring the other game's features over">Auto-fill</button>
+              <button data-act="mods">Mods &amp; profiles</button>
+              <button data-act="add">Add mods</button>
+              <button data-act="fix">Fix crash</button>
+              ${m.needs_upgrade ? `<button data-act="upgrade" title="Give this merge everything new merges get. Mods and saves stay as they are.">Upgrade</button>` : ""}
+              <button data-act="folder">Open folder</button>
+              <hr>
+              <button data-act="undo">Undo all mods</button>
+              <button data-act="delete" class="danger">Delete</button>
+            </div></div>
+        </div>
+        ${m.ingame ? `<div class="ingame small" title="Frankenstein's own mod adds these to the game itself">🎮 <strong>In the game:</strong> ${esc(m.ingame)}</div>` : `<div class="ingame small muted">This game has no menu Frankenstein can add to, so Creative stays here.</div>`}
       </div>
     </div>`).join("");
   const now = state.merges.find((m) => m.playing);
@@ -854,9 +863,23 @@ async function loadMerges() {
     const uri = await call("merge_cover", c.dataset.mergeCover).catch(() => null);
     if (uri) c.querySelectorAll(".face, .spine").forEach((f) => { f.style.backgroundImage = `url('${uri}')`; f.classList.remove("placeholder"); f.classList.contains("face") && (f.textContent = ""); });
   });
-  el.querySelectorAll("[data-act]").forEach((b) => (b.onclick = () => mergeAction(b.closest("[data-id]").dataset.id, b.dataset.act)));
+  el.querySelectorAll("[data-act]").forEach((b) => (b.onclick = () => { closeMore(); mergeAction(b.closest("[data-id]").dataset.id, b.dataset.act); }));
+  el.querySelectorAll("[data-more]").forEach((b) => (b.onclick = (e) => {
+    e.stopPropagation();
+    const menu = b.nextElementSibling, open = menu.hidden;
+    closeMore();
+    menu.hidden = !open;
+    b.setAttribute("aria-expanded", String(open));
+    if (open) menu.querySelector("button")?.focus();
+  }));
   $("#importBtn").onclick = async () => { const p = await call("pick_share_file"); if (p) importMerge(p); };
 }
+
+function closeMore() {
+  document.querySelectorAll(".more-menu").forEach((m) => { m.hidden = true; m.previousElementSibling?.setAttribute("aria-expanded", "false"); });
+}
+document.addEventListener("click", (e) => { if (!(e.target.closest && e.target.closest(".more"))) closeMore(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeMore(); });
 
 // ---------- Spawner: items and cars straight into the running game ----------
 const CAT_HUE = (c) => [...(c || "x")].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) % 360, 7);
@@ -905,6 +928,72 @@ document.addEventListener("pointermove", (e) => {
   c.style.setProperty("--rx", (-y * 20).toFixed(1) + "deg");
   c.style.setProperty("--lx", ((x + 0.5) * 100).toFixed(0) + "%");
 });
+
+// ---------- moving covers: the picture inside each box plays a short muted loop of the game's trailer ----------
+// Streamed from Steam, never saved. Only boxes on screen play (at most CLIP_MAX at once, the one under the mouse
+// always), and nothing moves with reduced motion. Games without a trailer get a slow pan across their still art.
+const CLIP_MAX = 6, clipCache = {}, clipLive = new Set();
+function clipFor(box) {
+  const tile = box.closest("[data-cover], [data-owned], [data-merge-cover]");
+  if (!tile) return null;
+  if (tile.dataset.mergeCover) return { key: "m:" + tile.dataset.mergeCover, get: () => call("merge_cover_clip", tile.dataset.mergeCover) };
+  if (tile.dataset.owned) return { key: "o:" + tile.dataset.owned, get: () => call("cover_clip", tile.dataset.owned, true) };
+  return { key: "g:" + tile.dataset.cover, get: () => call("cover_clip", tile.dataset.cover, false) };
+}
+function clipVideo(c, cls) {
+  const v = document.createElement("video");
+  v.className = "face-clip " + (cls || "");
+  v.muted = true; v.loop = false; v.playsInline = true; v.preload = "metadata"; v.setAttribute("aria-hidden", "true");
+  (c.sources || []).filter((x) => !x.type || v.canPlayType(x.type)).forEach((x) => {
+    const s = document.createElement("source"); s.src = x.url; if (x.type) s.type = x.type; v.appendChild(s);
+  });
+  if (!v.children.length) return null;
+  // trailers open on logos: skip a quarter in and loop eight seconds of gameplay, like a GIF
+  v.addEventListener("loadedmetadata", () => { v.dataset.start = (v.duration > 30 ? v.duration * 0.25 : 0).toFixed(1); v.currentTime = +v.dataset.start; });
+  v.addEventListener("timeupdate", () => { if (v.currentTime > +(v.dataset.start || 0) + 8) v.currentTime = +(v.dataset.start || 0); });
+  v.addEventListener("ended", () => { v.currentTime = +(v.dataset.start || 0); v.play().catch(() => {}); });
+  v.addEventListener("playing", () => v.classList.add("on"));
+  v.addEventListener("error", () => v.remove(), true);
+  return v;
+}
+async function clipStart(box) {
+  if (calm.matches || box.dataset.clip === "none") return;
+  const face = box.querySelector(".face") || box;
+  let vids = face.querySelectorAll("video.face-clip");
+  if (!vids.length) {
+    const want = clipFor(box);
+    if (!want) return;
+    if (!(want.key in clipCache)) clipCache[want.key] = want.get().catch(() => null);
+    const c = await clipCache[want.key];
+    const parts = c && c.sources ? [[c, ""]] : c ? [[c.base, "half l"], [c.source, "half r"]].filter((x) => x[0]) : [];
+    if (parts.length === 1 && parts[0][1]) parts[0][1] = "";  // only one of the two games has a trailer: it fills the box
+    const made = parts.map(([x, cls]) => clipVideo(x, cls)).filter(Boolean);
+    if (!made.length) { box.dataset.clip = "none"; face.classList.add("pan"); return; }
+    made.forEach((v) => face.appendChild(v));
+    vids = face.querySelectorAll("video.face-clip");
+  }
+  clipLive.add(box);
+  vids.forEach((v) => v.play().catch(() => {}));
+  if (clipLive.size > CLIP_MAX) clipStop([...clipLive].find((b) => b !== box && !b.matches(":hover")));
+}
+function clipStop(box) {
+  if (!box) return;
+  clipLive.delete(box);
+  box.querySelectorAll("video.face-clip").forEach((v) => v.pause());
+}
+const clipSeen = "IntersectionObserver" in window ? new IntersectionObserver((list) => list.forEach((e) => {
+  if (e.isIntersecting) setTimeout(() => e.target.isConnected && clipStart(e.target), 400 + Math.random() * 900);
+  else clipStop(e.target);
+}), { threshold: 0.6 }) : null;
+function watchClips(root) {
+  (root || document).querySelectorAll(".case:not([data-clip-watch])").forEach((b) => {
+    b.dataset.clipWatch = "1";
+    if (clipSeen) clipSeen.observe(b);
+  });
+}
+document.addEventListener("pointerover", (e) => { const b = e.target.closest && e.target.closest(".case"); if (b) clipStart(b); });
+new MutationObserver(() => watchClips()).observe(document.body, { childList: true, subtree: true });
+(calm.addEventListener ? calm.addEventListener("change", () => calm.matches && [...clipLive].forEach(clipStop)) : null);
 
 // ---------- updates ----------
 async function offerUpdate(u, asked = false) {
@@ -1420,11 +1509,13 @@ async function previewMerge(key, themeId) {
           <div class="pv-half r" style="background-image:url('${esc(right)}')"></div><div class="pv-seam"></div>
           <div class="pv-cap big"><span>${esc(g.name)}</span><b>×</b><span>${esc(t.from_game.split(" /")[0])}</span></div></div>`
       : `<div class="pv-slide ${i ? "" : "on"}"><div class="pv-img" style="background-image:url('${esc(sl.image || genCover(sl.caption))}')"></div>
+          ${(sl.items || []).length ? `<div class="pv-items">${sl.items.map((x, k) => `<span style="--d:${(0.5 + k * 0.45).toFixed(2)}s">${esc(x)}</span>`).join("")}</div>` : ""}
           <div class="pv-cap">${sl.tag ? `<span class="tag live">${esc(sl.tag)}</span> ` : ""}${esc(sl.caption)}</div></div>`;
     $("#modalBody").innerHTML = `
       <div class="pv-label">Preview · trailers and mod pictures, not your merged game</div>
       <div class="pv-pitch"><p>${esc(p.summary)}</p></div>
-      <div class="pv-show" id="pvShow">${slides.map(slideHtml).join("")}
+      <div class="pv-show" id="pvShow"><div class="pv-bg" id="pvBg"></div>${slides.map(slideHtml).join("")}
+        <div class="pv-inset" id="pvInset" hidden><div class="pv-inset-art" id="pvInsetArt"></div><span id="pvInsetL"></span></div>
         <button class="pv-nav prev" aria-label="Previous">‹</button><button class="pv-nav next" aria-label="Next">›</button>
         <div class="pv-dots">${slides.map((_, i) => `<button class="${i ? "" : "on"}" data-i="${i}" aria-label="Slide ${i + 1}"></button>`).join("")}</div></div>
       ${p.clips.length ? `<h3 class="pv-h">Trailers</h3><div class="pv-clips">${p.clips.map(clip).join("")}</div>` : ""}
@@ -1432,21 +1523,46 @@ async function previewMerge(key, themeId) {
       <p class="muted small">Clips stream straight from Steam and pictures from Nexus Mods at low quality, so nothing is saved to your PC. Your merge will be ${esc(g.name)} with these mods layered on. <a href="#" id="pvVideos">Watch mod showcase videos</a></p>`;
     $("#pvVideos").onclick = (e) => { e.preventDefault(); call("open_url", p.videos_url); };
     let cur = 0;
+    // GIF-style: the main game's trailer moves behind every slide (a different moment each), the other game's
+    // trailer (or the mod's own picture) sits in the corner, and the named guns, items or characters pop up
+    const mv = p.moving || {};
+    const bg = !calm.matches && mv.base ? clipVideo(mv.base, "") : null;
+    const ins = !calm.matches && mv.source ? clipVideo(mv.source, "") : null;
+    if (bg) { $("#pvBg").appendChild(bg); bg.addEventListener("playing", () => $("#pvShow")?.classList.add("live")); }
+    const seek = (v, at) => {
+      if (!v) return;
+      const go = () => { v.dataset.start = (v.duration * at).toFixed(1); v.currentTime = +v.dataset.start; v.play().catch(() => {}); };
+      if (v.readyState >= 1 && v.duration) go(); else v.addEventListener("loadedmetadata", go, { once: true });
+    };
     const show = (i) => {
       cur = (i + slides.length) % slides.length;
       $("#pvShow").querySelectorAll(".pv-slide").forEach((el, j) => el.classList.toggle("on", j === cur));
       $("#pvShow").querySelectorAll(".pv-dots button").forEach((el, j) => el.classList.toggle("on", j === cur));
+      const sl = slides[cur], inset = $("#pvInset"), art = $("#pvInsetArt");
+      if (sl.fused) { bg && bg.pause(); ins && ins.pause(); inset.hidden = true; return; }
+      seek(bg, sl.at || 0.3);
+      inset.hidden = false;
+      $("#pvInsetL").textContent = "From " + (sl.from || t.from_game);
+      if (ins && !(sl.inset && /nexus|mods/i.test(sl.inset))) {
+        if (ins.parentNode !== art) { art.innerHTML = ""; art.appendChild(ins); }
+        seek(ins, 1 - (sl.at || 0.3) * 0.8);
+      } else if (sl.inset) { ins && ins.pause(); art.innerHTML = `<img src="${esc(sl.inset)}" alt="">`; }
+      else inset.hidden = true;
+      inset.classList.remove("pop"); void inset.offsetWidth; inset.classList.add("pop");
     };
-    const timer = setInterval(() => { if (!$("#pvShow")) return clearInterval(timer); show(cur + 1); }, 4200);
+    let timer = null;
+    const tick = () => { clearInterval(timer); timer = setInterval(() => { if (!$("#pvShow")) return clearInterval(timer); show(cur + 1); }, 4200); };
+    tick();
     done.then(() => clearInterval(timer));
-    $("#pvShow .prev").onclick = () => show(cur - 1);
-    $("#pvShow .next").onclick = () => show(cur + 1);
-    $("#pvShow").querySelectorAll(".pv-dots button").forEach((b) => (b.onclick = () => show(+b.dataset.i)));
+    const pick = (i) => { show(i); tick(); };  // a click gives that slide its full time
+    $("#pvShow .prev").onclick = () => pick(cur - 1);
+    $("#pvShow .next").onclick = () => pick(cur + 1);
+    $("#pvShow").querySelectorAll(".pv-dots button").forEach((b) => (b.onclick = () => pick(+b.dataset.i)));
     $("#modalBody").querySelectorAll("[data-url]").forEach((a) => (a.onclick = (e) => { e.preventDefault(); call("open_url", a.dataset.url); }));
   }
   const go = await done;
   box.classList.remove("wide");
-  $("#modalBody").querySelectorAll("video").forEach((v) => { v.pause(); v.removeAttribute("src"); v.load(); }); // stop streaming
+  $("#modalBody").querySelectorAll("video").forEach((v) => { v.pause(); v.removeAttribute("src"); v.querySelectorAll("source").forEach((x) => x.remove()); v.load(); }); // stop streaming
   if (go) startSetup();
 }
 
