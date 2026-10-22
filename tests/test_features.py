@@ -61,6 +61,7 @@ WEB = {
     "moving covers: the original cover art, living (3.28)": ["cover-live", "live-fx", "clipStart"],
     "new logo and startup: covers over each palm, clap, dotted burst (3.28)": ["logo/base.png", "logo/hand_l.png", "splashProgress", "splash-burst", "front: true"],
     "startup never blocks: Skip, 30 s timeout, fresh scripts, random covers (3.28.1)": ["splash-skip", "skipSplash", "ASSET_V", "APP_BUILD", "atMost", "splashGames"],
+    "full-screen purple explosion at the end of startup (3.29)": ["far * 1.15", "length: 2400"],
     "roomy merge card: big Play, the rest under More": ["play-big", "data-more", "more-menu", "closeMore"],
     "what's inside the game itself": ["In the game:"],
     "animated preview slides with named guns, items, characters": ["pv-items", "pv-bg"],
@@ -231,6 +232,21 @@ class FeatureChecklist(unittest.TestCase):
         self.assertIn("def _scene", read(PKG, "covers.py"))  # no blank covers: painted art for games without any
         for f in ("base.png", "hand_l.png", "hand_r.png", "icon.png"):
             self.assertTrue(os.path.isfile(os.path.join(PKG, "web", "logo", f)), f)
+
+    def test_329_guns_held_right_every_gun_and_cars(self):
+        dll = open(os.path.join(PKG, "mods", "schedule1", "Frankenstein.dll"), "rb").read()
+        for word in ("Weapons", "Vehicles", "Grenade Launcher", "Frag Grenade", "VehiclePrefabs", "Frankenstein part", "TakeDamage"):
+            self.assertIn(word.encode("utf-16-le"), dll, word)
+        guns = read(ROOT, "mods", "schedule1", "Guns.cs")
+        self.assertNotIn("SetParent", guns, "no blocks stuck on in world space (the floating part)")
+        self.assertNotIn("go.transform.localScale =", guns, "the held gun is never stretched (the bent grip)")
+        from gamemerger.api import REPLICAS
+        for g in REPLICAS["hoodwarfare"]:
+            self.assertNotIn("length", g)
+            self.assertNotIn("parts", g)
+            self.assertTrue(0.85 <= g.get("size", 1) <= 1.15)
+        for gun in ("ak47", "smg", "sniper", "minigun", "rpg", "pumpshotgun", "m1911", "revolver"):
+            self.assertTrue(any(g["match"] == gun for g in REPLICAS["hoodwarfare"]), gun)
 
 if __name__ == "__main__":
     unittest.main()

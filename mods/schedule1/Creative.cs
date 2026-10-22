@@ -63,7 +63,7 @@ namespace Frankenstein
         }
 
         /// <summary>Lists from either build: a normal list, or IL2CPP's own (Count and an indexer).</summary>
-        static IEnumerable<object> Each(object list)
+        internal static IEnumerable<object> Each(object list)
         {
             if (list == null) yield break;
             if (list is System.Collections.IEnumerable e)

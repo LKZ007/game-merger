@@ -1,5 +1,5 @@
 "use strict";
-window.APP_BUILD = "3.28.1";  // must match index.html: a mixed-up install is caught at start
+window.APP_BUILD = "3.29.0";  // must match index.html: a mixed-up install is caught at start
 
 // ---------- talking to the Python side ----------
 const TOKEN = document.querySelector('meta[name="gm-token"]')?.content;
@@ -1905,7 +1905,7 @@ function splashDraw(now) {
 }
 requestAnimationFrame(splashFrame);
 function splashBurst() {
-  // a purple explosion of dots from the slap, filling the screen
+  // a purple explosion of dots from the slap that fills the whole screen, corner to corner
   const cv = $("#splashBurst"), st = $("#splashStage");
   if (!cv || !st || calm.matches) { if (cv) cv.remove(); return Promise.resolve(); }
   const r = st.getBoundingClientRect(), dpr = window.devicePixelRatio || 1;
@@ -1913,28 +1913,35 @@ function splashBurst() {
   const ctx = cv.getContext("2d");
   ctx.scale(dpr, dpr);
   const ox = r.left + r.width * 0.5, oy = r.top + r.height * 0.62;
-  const dots = Array.from({ length: 700 }, () => {
-    const a = Math.random() * Math.PI * 2, v = 120 + Math.random() * Math.max(innerWidth, innerHeight) * 1.1;
-    return { x: ox, y: oy, vx: Math.cos(a) * v, vy: Math.sin(a) * v, r: 1 + Math.random() * 2.6, h: 260 + Math.random() * 40 };
+  const far = Math.hypot(Math.max(ox, innerWidth - ox), Math.max(oy, innerHeight - oy));  // to the furthest corner
+  const DUR = 1.7;
+  const dots = Array.from({ length: 2400 }, () => {
+    const a = Math.random() * Math.PI * 2, reach = far * (0.35 + Math.random() * 0.95);
+    return { a, reach, r: 1.2 + Math.random() * 4.2, h: 255 + Math.random() * 50, l: 62 + Math.random() * 28 };
   });
   return new Promise((done) => {
     const start = performance.now();
-    let last = start;
     const step = (now) => {
-      const t = (now - start) / 1000, dt = (now - last) / 1000;
-      last = now;
+      const t = (now - start) / 1000, k = Math.min(1, t / DUR), out = 1 - Math.pow(1 - k, 3);
       ctx.clearRect(0, 0, innerWidth, innerHeight);
-      if (t < 0.18) {  // the flash where the hands meet
-        const g = ctx.createRadialGradient(ox, oy, 0, ox, oy, 260);
-        g.addColorStop(0, `rgba(240,220,255,${0.9 - t * 4})`); g.addColorStop(1, "rgba(168,85,247,0)");
+      // the flash: a white-violet glow that floods the screen, then fades
+      const fl = Math.max(0, 1 - t / 0.5);
+      if (fl > 0) {
+        const g = ctx.createRadialGradient(ox, oy, 0, ox, oy, far * (0.4 + out));
+        g.addColorStop(0, `rgba(248,236,255,${0.95 * fl})`); g.addColorStop(0.35, `rgba(192,132,252,${0.6 * fl})`); g.addColorStop(1, "rgba(88,28,135,0)");
         ctx.fillStyle = g; ctx.fillRect(0, 0, innerWidth, innerHeight);
       }
+      // the shockwave ring
+      ctx.lineWidth = 6 + 30 * (1 - k);
+      ctx.strokeStyle = `rgba(216,180,254,${0.7 * (1 - k)})`;
+      ctx.beginPath(); ctx.arc(ox, oy, far * 1.15 * out, 0, Math.PI * 2); ctx.stroke();
+      const fade = Math.max(0, 1 - Math.max(0, k - 0.55) / 0.45);
       for (const d of dots) {
-        d.x += d.vx * dt; d.y += d.vy * dt; d.vx *= 0.985; d.vy *= 0.985;
-        ctx.fillStyle = `hsla(${d.h},95%,${70 + Math.random() * 20}%,${Math.max(0, 1 - t / 1.1)})`;
-        ctx.beginPath(); ctx.arc(d.x, d.y, d.r, 0, Math.PI * 2); ctx.fill();
+        const dist = d.reach * out, x = ox + Math.cos(d.a) * dist, y = oy + Math.sin(d.a) * dist;
+        ctx.fillStyle = `hsla(${d.h},95%,${d.l}%,${fade})`;
+        ctx.beginPath(); ctx.arc(x, y, d.r * (1 + out * 0.8), 0, Math.PI * 2); ctx.fill();
       }
-      if (t < 1.15) requestAnimationFrame(step); else { cv.remove(); done(); }
+      if (k < 1) requestAnimationFrame(step); else { cv.remove(); done(); }
     };
     requestAnimationFrame(step);
   });

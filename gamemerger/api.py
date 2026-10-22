@@ -128,19 +128,19 @@ KITS = {
 }
 
 # The Extension game's guns rebuilt on the Host's (Frankenstein's Schedule I mod does it when you hold one).
-# match: words in the held gun's name. damage/rate/reload: times the gun's own; mag: rounds. length/size: shape.
-# parts: blocks added in the gun's own material. Hood Warfare's real numbers aren't published: these are estimates
-# from how its guns play (the Choppa hits hard and fast, the Uzi sprays, the .308 one-shots).
+# match: words in the held gun's name. damage/rate/reload: times the gun's own; mag: rounds. size: the model a little
+# bigger or smaller (85-115%, never stretched, so the hand stays on the grip). Hood Warfare's real numbers aren't
+# published: these are estimates from how its guns play (the Choppa hits hard and fast, the Uzi sprays, the .308
+# one-shots). The grenade launcher and grenades are Frankenstein's own (Boom.cs), not More Guns'.
 REPLICAS = {
     "hoodwarfare": [
-        {"match": "ak47", "name": "Choppa", "damage": 1.35, "rate": 1.15, "mag": 30, "auto": "true", "length": 1.1, "parts": "curved_mag"},
-        {"match": "smg", "name": "Uzi", "damage": 0.8, "rate": 1.45, "mag": 32, "auto": "true", "length": 0.8, "size": 0.9,
-         "parts": "ext_mag"},
-        {"match": "m1911", "name": "Glock", "damage": 0.9, "rate": 1.3, "mag": 17, "length": 0.9, "parts": "ext_mag"},
-        {"match": "pumpshotgun", "name": "Pump Shotty", "damage": 1.25, "reload": 0.85, "mag": 6, "length": 1.05},
-        {"match": "sniper", "name": ".308 Sniper", "damage": 1.5, "rate": 0.8, "mag": 5, "length": 1.15, "parts": "scope"},
+        {"match": "ak47", "name": "Choppa", "damage": 1.35, "rate": 1.15, "mag": 30, "auto": "true"},
+        {"match": "smg", "name": "Uzi", "damage": 0.8, "rate": 1.45, "mag": 32, "auto": "true", "size": 0.9},
+        {"match": "m1911", "name": "Glock", "damage": 0.9, "rate": 1.3, "mag": 17},
+        {"match": "pumpshotgun", "name": "Pump Shotty", "damage": 1.25, "reload": 0.85, "mag": 6},
+        {"match": "sniper", "name": ".308 Sniper", "damage": 1.5, "rate": 0.8, "mag": 5},
         {"match": "revolver", "name": "Revolver", "damage": 1.3, "rate": 0.9, "mag": 6},
-        {"match": "minigun", "name": "Minigun", "damage": 1.0, "mag": 200, "auto": "true", "parts": "drum"},
+        {"match": "minigun", "name": "Minigun", "damage": 1.0, "mag": 200, "auto": "true"},
         {"match": "rpg", "name": "RPG", "damage": 1.2, "mag": 1},
     ],
 }

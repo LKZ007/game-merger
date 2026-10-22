@@ -81,6 +81,7 @@ namespace Frankenstein
             try { Creative.Update(); } catch (Exception e) { Melon<Plugin>.Logger.Warning("Creative: " + e.Message); }
             try { Gangs.Update(); } catch (Exception e) { Melon<Plugin>.Logger.Warning("Gangs: " + e.Message); }
             try { Guns.Update(); } catch (Exception e) { Melon<Plugin>.Logger.Warning("Guns: " + e.Message); }
+            try { Boom.Update(); } catch (Exception e) { Melon<Plugin>.Logger.Warning("Explosives: " + e.Message); }
             try { Carry.Update(); } catch (Exception e) { Melon<Plugin>.Logger.Warning("Carry: " + e.Message); }
             try { World.Update(); } catch (Exception e) { Melon<Plugin>.Logger.Warning("World: " + e.Message); }
             if (Time.unscaledTime < _next) return;
@@ -98,6 +99,7 @@ namespace Frankenstein
             ItemMenu.Draw();
             MainMenu.Draw();
             World.Draw();
+            try { Boom.Draw(); } catch (Exception) { }
             try { Gangs.Draw(); } catch (Exception e) { Melon<Plugin>.Logger.Warning("Gangs: " + e.Message); }
             try { Loading.Draw(); } catch (Exception e) { Melon<Plugin>.Logger.Warning("Loading screen: " + e.Message); Loading.Tips.Clear(); Loading.Extension = ""; }
         }

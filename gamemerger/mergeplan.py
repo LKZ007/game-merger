@@ -106,7 +106,9 @@ SHOWCASE = {
         "loading": "A Schedule I × Hood Warfare loading screen (both games' scenes merged, Hood tips), the merged title card, "
                    "and Creative in the game's own main menu under New Game",
         "items": "Hood Warfare's guns rebuilt on Schedule I's and More Guns': their fire rate, damage, magazine, reload, "
-                 "length, size and parts (curved mag, extended mag, scope, drum); a starter kit and the gun shop at Handy Hank's",
+                 "auto fire and size (held properly, never stretched); every gun type in Creative's F6 menu: pistols, revolver, "
+                 "shotgun, AK, Uzi, sniper, minigun, RPG, plus Frankenstein's own grenade launcher and frag grenades; "
+                 "a starter kit and the gun shop at Handy Hank's",
     },
 }
 

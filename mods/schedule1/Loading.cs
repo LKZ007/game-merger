@@ -17,6 +17,7 @@ namespace Frankenstein
 
         static Texture2D _art;
         static bool _artTried, _left, _showing;
+        public static bool Showing => _showing;
         static float _since, _fallbackUntil;
         static object _screen;
         static float _nextFind;

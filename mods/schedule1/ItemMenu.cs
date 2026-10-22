@@ -20,9 +20,12 @@ namespace Frankenstein
             public string Id, Name, Category, Search;
             public Sprite Icon;
             public int Stack;
+            public Vehicles.Car Car;  // a vehicle: spawned in front of you
+            public string Own;        // Frankenstein's own: "grenade" or "launcher"
         }
 
         static bool _open;
+        public static bool IsOpen => _open;
         static List<Entry> _all = new List<Entry>();
         static List<string> _cats = new List<string>();
         static int _cat;
@@ -56,11 +59,22 @@ namespace Frankenstein
                     .Where(d => d != null && !string.IsNullOrEmpty(d.ID))
                     .Select(d => new Entry
                     {
-                        Id = d.ID, Name = string.IsNullOrEmpty(d.Name) ? d.ID : d.Name, Category = CatName(d.Category),
+                        Id = d.ID, Name = string.IsNullOrEmpty(d.Name) ? d.ID : d.Name, Category = IsWeapon(d.ID, d.Name) ? "Weapons" : CatName(d.Category),
                         Icon = IconOf(d), Stack = Math.Max(1, d.StackLimit),
                     })
                     .OrderBy(e => e.Category).ThenBy(e => e.Name).ToList();
-                foreach (var e in _all) e.Search = (e.Name + " " + e.Id + " " + e.Category).ToLowerInvariant();
+                // Frankenstein's own explosives, with the guns; every vehicle in the game in its own tab
+                var shotgun = _all.FirstOrDefault(e => e.Id.ToLowerInvariant().Contains("shotgun"));
+                _all.Add(new Entry { Id = "frankenstein:launcher", Name = "Grenade Launcher", Category = "Weapons", Own = "launcher", Stack = 1, Icon = shotgun?.Icon });
+                _all.Add(new Entry { Id = "frankenstein:grenade", Name = "Frag Grenade", Category = "Weapons", Own = "grenade", Stack = 10 });
+                try
+                {
+                    foreach (var c in Vehicles.All())
+                        _all.Add(new Entry { Id = "vehicle:" + c.Code, Name = c.Name, Category = "Vehicles", Car = c, Stack = 1 });
+                }
+                catch (Exception ex) { Melon<Plugin>.Logger.Warning("Item menu: vehicles: " + ex.Message); }
+                _all = _all.OrderBy(e => e.Category).ThenBy(e => e.Name).ToList();
+                foreach (var e in _all) e.Search = (e.Name + " " + e.Id + " " + e.Category + (e.Car != null ? " car " + e.Car.Kind : "")).ToLowerInvariant();
                 _cats = new[] { "All" }.Concat(_all.Select(e => e.Category).Distinct().OrderBy(c => c)).ToList();
             }
             catch (Exception e)
@@ -214,6 +228,9 @@ namespace Frankenstein
         {
             try
             {
+                if (e.Car != null) { Vehicles.Spawn(e.Car); Close(); return; }  // closed, so you see it arrive
+                if (e.Own == "grenade") { Boom.GiveGrenades(qty); return; }
+                if (e.Own == "launcher") { Boom.GiveLauncher(); return; }
                 ConsoleHelper.AddItemToInventory(e.Id, qty);
                 Toast("Got " + qty + " x " + e.Name);
             }
@@ -234,6 +251,19 @@ namespace Frankenstein
                 e.Icon = null;
                 if (!_iconsLogged) { _iconsLogged = true; Melon<Plugin>.Logger.Warning("Icons: " + ex.Message); }
             }
+        }
+
+        // every gun (the game's and More Guns': pistols, revolver, shotgun, AK, SMG, sniper, minigun, RPG), its
+        // ammo and melee weapons go together under Weapons
+        static readonly string[] WeaponWords = { "m1911", "pistol", "revolver", "shotgun", "rifle", "smg", "ak47", "sniper", "minigun",
+                                                 "rpg", "rocket", "uzi", "glock", "magazine", "cylinder", "shell", "ammo", "machete",
+                                                 "knife", "bat", "taser", "grenade", "launcher" };
+
+        static bool IsWeapon(string id, string name)
+        {
+            var key = ((id ?? "") + " " + (name ?? "")).ToLowerInvariant().Replace(" ", "").Replace("_", "");
+            if (key.Contains("battery") || key.Contains("bathtub") || key.Contains("seashell")) return false;
+            return WeaponWords.Any(w => key.Contains(w));
         }
 
         // the game's item categories by number, for builds where a category has no name (it shows as "12")
@@ -328,8 +358,13 @@ namespace Frankenstein
                     string label = e.Name.Length > 22 ? e.Name.Substring(0, 21) + "…" : e.Name;
                     if (GUI.Button(r, "")) { _sel = i; Give(e, 1); }
                     if (i == _sel) GUI.Box(new Rect(r.x - 2, r.y - 2, r.width + 4, r.height + 4), "");
-                    DrawIcon(e, new Rect(r.x + (Tile - 64) / 2, r.y + 8, 64, 64));
-                    if (e.Icon == null) Glyph(e, new Rect(r.x + (Tile - 56) / 2, r.y + 12, 56, 56));
+                    if (e.Car != null) Vehicles.Picture(e.Car, new Rect(r.x + 8, r.y + 10, Tile - 16, 60));
+                    else
+                    {
+                        DrawIcon(e, new Rect(r.x + (Tile - 64) / 2, r.y + 8, 64, 64));
+                        if (e.Icon == null) Glyph(e, new Rect(r.x + (Tile - 56) / 2, r.y + 12, 56, 56));
+                        if (e.Own == "launcher") Paint.Fill(new Rect(r.x + Tile - 30, r.y + 10, 18, 18), new Color(0.35f, 0.5f, 0.2f));  // a grenade on the shotgun
+                    }
                     GUI.Label(new Rect(r.x + 6, r.y + 76, Tile - 12, 40), label);
                 }
             }
