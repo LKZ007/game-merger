@@ -3,6 +3,9 @@
 Every release, newest first. Downloads are on the [releases page](https://github.com/LKZ007/game-merger/releases).
 The app was called Game Merger before 3.8.0.
 
+## v3.21.0 (2026-10-22)
+- **Preview shows both games merged, as a slideshow.** It opens on one picture of the two games fused together (a screenshot from each, split by a glowing seam). Then it plays slides of what you can actually do in the merge, one for each part, with a picture and a caption, for example "Buy Hood Warfare's guns at Handy Hank's hardware store" or "Races and street racing: Street races". The trailers for both games are still below it. It works for every merge, and it's still labelled as a preview, not your merged game.
+
 ## v3.20.0 (2026-10-22)
 - **No blank covers.** A game with no art anywhere gets its own cover, made from its name in Frankenstein's style. Minecraft gets blocks.
 - **Covers are 3D and move.** Every cover floats gently in 3D with a light sweep across it, and tilts toward your mouse when you point at it. Turn on Windows' reduce animations setting to keep them still.

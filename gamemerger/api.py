@@ -949,8 +949,25 @@ class Api:
                 pass
 
         base_id = g.appid or (r.steam_appids[0] if r.steam_appids else "")
+        # the other game's Steam page: the recipe's, or the installed copy's, or a store search by name
+        other = next((x for x in self._games if x is not g and any(mk in x.name.lower() for mk in (t.source_match or [])
+                                                                    or [t.from_game.lower()])), None)
+        source_id = t.source_appid or (other.appid if other else "")
+        if not source_id:
+            try:
+                source_id = covers.search_appid(t.from_game.split(" /")[0]) or ""
+            except Exception:
+                source_id = ""
+        shots = {"base": [], "source": []}
+
+        def screens(which, appid):
+            try:
+                shots[which] = covers.steam_shots(appid)
+            except Exception:
+                pass
         work = [threading.Thread(target=f, args=a, daemon=True) for f, a in
-                [(clip, (base_id, g.name)), (clip, (t.source_appid, t.from_game)), (pitch, ())] +
+                [(clip, (base_id, g.name)), (clip, (source_id, t.from_game)), (pitch, ()),
+                 (screens, ("base", base_id)), (screens, ("source", source_id))] +
                 [(pictures, (s,)) for s in t.slots]]
         for w in work:
             w.start()
@@ -959,7 +976,35 @@ class Api:
         out["clips"].sort(key=lambda c: c["label"] != g.name)
         order = [s.name for s in t.slots]
         out["pictures"].sort(key=lambda p: order.index(p["slot"]))
+        out["slides"] = self._preview_slides(g, r, t, shots, out["pictures"])
+        out["base_art"] = (shots["base"] or [None])[0]
+        out["source_art"] = (shots["source"] or [None])[0]
         return out
+
+    def _preview_slides(self, g, r, t, shots, pictures):
+        """The slideshow: one slide per thing you can do in the merge, each with a picture (the mod's own,
+        or a screenshot from either game) and a one-line caption."""
+        pics = {p["slot"]: p["url"] for p in pictures}
+        pool = [x for pair in zip(shots["base"], shots["source"]) for x in pair] + shots["base"][len(shots["source"]):] + \
+            shots["source"][len(shots["base"]):]
+        slides = []
+
+        def add(caption, image=None, tag=""):
+            slides.append({"caption": caption, "image": image or (pool[len(slides) % len(pool)] if pool else None), "tag": tag})
+        for sl in t.slots:
+            text, kind = standin_for(r.id if r else "", sl.name, sl.builtin)
+            caption = sl.name if kind == "story" else "%s: %s" % (sl.name, text.split(":")[0] if ":" in text[:40] else text)
+            add(caption, pics.get(sl.name), "★ Hero" if sl.hero else "")
+        kit = KITS.get(t.id)
+        if kit and r and r.id == "schedule1":
+            add("Buy %s's guns at Handy Hank's hardware store" % t.from_game.split(" /")[0], None, "Gun shop")
+            add("Start with the %s: %s" % (kit["name"], ", ".join(i.split("=")[-1].split("*")[0] for i in kit["items"][:5])), None, "Starter kit")
+        b = BUILTIN.get(r.id if r else "")
+        if b:
+            add(b["what"].split(":")[0] + ": " + b["what"].split(":", 1)[-1].strip().split(".")[0], None, "Built in")
+        if storymode.depth(r)["level"] == "in-game":
+            add("A new story: quests from the merge's own characters, inside the game", None, "Story")
+        return slides[:10]
 
     def owned_cover(self, key):
         g = getattr(self, "_owned", {}).get(key)

@@ -138,6 +138,15 @@ def steam_trailer(appid):
     return None
 
 
+def steam_shots(appid, count=6):
+    """Low-res screenshot links from a game's Steam page (streamed when shown, never saved)."""
+    if not appid:
+        return []
+    data = json.loads(_get("https://store.steampowered.com/api/appdetails?appids=%s&filters=screenshots" % appid))
+    shots = (((data or {}).get(str(appid)) or {}).get("data") or {}).get("screenshots") or []
+    return [x.get("path_thumbnail", "").replace("http://", "https://") for x in shots[:count] if x.get("path_thumbnail")]
+
+
 def url_cover(url):
     """Download a cover image once (Epic and GOG give image links) and keep it."""
     import hashlib

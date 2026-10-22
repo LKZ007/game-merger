@@ -51,6 +51,7 @@ WEB = {
     "originals untouched tag": ["Originals untouched"],
     "creative dialog": ["creativeSetup"],
     "hero item first": ["★ Hero"],
+    "preview slideshow with both games fused": ["pvShow", "pv-fused"],
     "no blank covers, 3D moving covers": ["genCover", "cover-float", "cover-sweep", "prefers-reduced-motion"],
 }
 

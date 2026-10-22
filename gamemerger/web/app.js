@@ -1410,13 +1410,38 @@ async function previewMerge(key, themeId) {
         ${c.url ? `<video src="${esc(c.url)}" poster="${esc(c.poster)}" muted loop autoplay playsinline preload="metadata" controls></video>`
           : `<a href="#" data-url="${esc(c.page)}"><img src="${esc(c.poster)}" alt=""></a>`}
         <figcaption>${c.label === g.name ? "Your game" : "Bringing in"}: <strong>${esc(c.label)}</strong></figcaption></figure>`;
+    const other = t.source_key != null ? game(t.source_key) : null;
+    const left = p.base_art || state.covers[key] || genCover(g.name);
+    const right = p.source_art || (other && state.covers[other.key]) || genCover(t.from_game);
+    // slide 0: both games fused into one picture; then one slide per thing you can do in the merge
+    const slides = [{ fused: true, caption: `${g.name} × ${t.from_game.split(" /")[0]}` }, ...(p.slides || [])];
+    const slideHtml = (sl, i) => sl.fused
+      ? `<div class="pv-slide pv-fused ${i ? "" : "on"}"><div class="pv-half l" style="background-image:url('${esc(left)}')"></div>
+          <div class="pv-half r" style="background-image:url('${esc(right)}')"></div><div class="pv-seam"></div>
+          <div class="pv-cap big"><span>${esc(g.name)}</span><b>×</b><span>${esc(t.from_game.split(" /")[0])}</span></div></div>`
+      : `<div class="pv-slide ${i ? "" : "on"}"><div class="pv-img" style="background-image:url('${esc(sl.image || genCover(sl.caption))}')"></div>
+          <div class="pv-cap">${sl.tag ? `<span class="tag live">${esc(sl.tag)}</span> ` : ""}${esc(sl.caption)}</div></div>`;
     $("#modalBody").innerHTML = `
       <div class="pv-label">Preview · trailers and mod pictures, not your merged game</div>
       <div class="pv-pitch"><p>${esc(p.summary)}</p></div>
-      ${p.clips.length ? `<div class="pv-clips">${p.clips.map(clip).join("")}</div>` : ""}
+      <div class="pv-show" id="pvShow">${slides.map(slideHtml).join("")}
+        <button class="pv-nav prev" aria-label="Previous">‹</button><button class="pv-nav next" aria-label="Next">›</button>
+        <div class="pv-dots">${slides.map((_, i) => `<button class="${i ? "" : "on"}" data-i="${i}" aria-label="Slide ${i + 1}"></button>`).join("")}</div></div>
+      ${p.clips.length ? `<h3 class="pv-h">Trailers</h3><div class="pv-clips">${p.clips.map(clip).join("")}</div>` : ""}
       ${p.pictures.length ? `<h3 class="pv-h">What the mods look like</h3><div class="pv-pics">${p.pictures.map((x) => `<figure><img src="${esc(x.url)}" alt="" loading="lazy"><figcaption><strong>${esc(x.slot)}</strong><span>${esc(x.name)}</span></figcaption></figure>`).join("")}</div>` : ""}
       <p class="muted small">Clips stream straight from Steam and pictures from Nexus Mods at low quality, so nothing is saved to your PC. Your merge will be ${esc(g.name)} with these mods layered on. <a href="#" id="pvVideos">Watch mod showcase videos</a></p>`;
     $("#pvVideos").onclick = (e) => { e.preventDefault(); call("open_url", p.videos_url); };
+    let cur = 0;
+    const show = (i) => {
+      cur = (i + slides.length) % slides.length;
+      $("#pvShow").querySelectorAll(".pv-slide").forEach((el, j) => el.classList.toggle("on", j === cur));
+      $("#pvShow").querySelectorAll(".pv-dots button").forEach((el, j) => el.classList.toggle("on", j === cur));
+    };
+    const timer = setInterval(() => { if (!$("#pvShow")) return clearInterval(timer); show(cur + 1); }, 4200);
+    done.then(() => clearInterval(timer));
+    $("#pvShow .prev").onclick = () => show(cur - 1);
+    $("#pvShow .next").onclick = () => show(cur + 1);
+    $("#pvShow").querySelectorAll(".pv-dots button").forEach((b) => (b.onclick = () => show(+b.dataset.i)));
     $("#modalBody").querySelectorAll("[data-url]").forEach((a) => (a.onclick = (e) => { e.preventDefault(); call("open_url", a.dataset.url); }));
   }
   const go = await done;

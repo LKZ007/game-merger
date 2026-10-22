@@ -415,3 +415,30 @@ body.pad .tile:focus .face { border: 2px solid var(--accent); box-shadow: 0 0 30
   .tile:hover .case-inner { transform: rotateY(8deg) translateY(-6px); }
 }
 .pair-cover.placeholder { align-items: flex-end; font-weight: 700; color: #fff; text-shadow: 0 2px 8px rgba(0,0,0,.8); }
+
+/* preview slideshow: the two games fused, then what you can do in the merge */
+.pv-show { position: relative; aspect-ratio: 16 / 8; border-radius: 12px; overflow: hidden; margin: 12px 0; background: #0d0818; border: 1px solid #5b3fa8; box-shadow: 0 0 30px rgba(139,92,246,.35); }
+.pv-slide { position: absolute; inset: 0; opacity: 0; transition: opacity .8s ease; }
+.pv-slide.on { opacity: 1; }
+.pv-img, .pv-half { position: absolute; inset: 0; background: center / cover no-repeat; }
+.pv-slide.on .pv-img { animation: pv-zoom 5s ease-out both; }
+@keyframes pv-zoom { from { transform: scale(1.02); } to { transform: scale(1.12); } }
+.pv-half.l { clip-path: polygon(0 0, 58% 0, 42% 100%, 0 100%); }
+.pv-half.r { clip-path: polygon(58% 0, 100% 0, 100% 100%, 42% 100%); filter: saturate(1.2) hue-rotate(-12deg); }
+.pv-slide.on .pv-half.l { animation: pv-in-l 1.2s ease-out both; }
+.pv-slide.on .pv-half.r { animation: pv-in-r 1.2s ease-out both; }
+@keyframes pv-in-l { from { transform: translateX(-8%); } to { transform: none; } }
+@keyframes pv-in-r { from { transform: translateX(8%); } to { transform: none; } }
+.pv-seam { position: absolute; inset: 0; background: linear-gradient(107deg, transparent 48.2%, #c4a5ff 49.6%, #fff 50%, #c4a5ff 50.4%, transparent 51.8%);
+  filter: drop-shadow(0 0 12px #a855f7); mix-blend-mode: screen; }
+.pv-cap { position: absolute; left: 0; right: 0; bottom: 0; padding: 40px 20px 18px; font-size: 18px; font-weight: 700; color: #fff;
+  background: linear-gradient(transparent, rgba(8,4,18,.92)); text-shadow: 0 2px 8px rgba(0,0,0,.9); }
+.pv-cap.big { display: flex; align-items: center; justify-content: center; gap: 16px; font-family: var(--display); font-size: 30px; }
+.pv-cap.big b { color: #c4a5ff; text-shadow: 0 0 16px #a855f7; }
+.pv-nav { position: absolute; top: 50%; transform: translateY(-50%); width: 38px; height: 38px; border-radius: 50%; border: 0; z-index: 2;
+  background: rgba(10,6,20,.6); color: #fff; font-size: 24px; cursor: pointer; }
+.pv-nav.prev { left: 10px; } .pv-nav.next { right: 10px; }
+.pv-dots { position: absolute; top: 12px; right: 14px; display: flex; gap: 6px; z-index: 2; }
+.pv-dots button { width: 9px; height: 9px; border-radius: 50%; border: 0; padding: 0; background: rgba(255,255,255,.35); cursor: pointer; }
+.pv-dots button.on { background: #c4a5ff; box-shadow: 0 0 8px #a855f7; }
+@media (prefers-reduced-motion: reduce) { .pv-slide.on .pv-img, .pv-slide.on .pv-half { animation: none; } }
