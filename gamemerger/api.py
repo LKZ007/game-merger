@@ -15,7 +15,7 @@ import urllib.parse
 import uuid
 import webbrowser
 
-from . import accounts, achievements, ai, autorecipe, controller, covers, minecraft, modsources, storeinfo, discord, profiles, detect, downloader, gallery, network, nexus, paths, permissions, saves, scan, sharing, updater
+from . import storymode, accounts, achievements, ai, autorecipe, controller, covers, minecraft, modsources, storeinfo, discord, profiles, detect, downloader, gallery, network, nexus, paths, permissions, saves, scan, sharing, updater
 from .version import VERSION
 from .installer import MODE_COPY, MODE_HARDLINK, MODE_INPLACE, Merge, MergeError, find_clashes, preview
 from . import recipes
@@ -525,7 +525,9 @@ class Api:
                 out[n] = v
         mine_self = {"yes": ("green", "Moddable: %s" % ((getattr(g.recipe, "auto", None) or {}).get("note") or "built-in recipe")),
                      "limited": ("yellow", "Limited mod support"), "no": ("red", "No real mod support")}[moddable]
-        return {"scores": out, "self": {"rating": mine_self[0], "why": mine_self[1]}, "pending": pending}
+        how = storymode.depth(g.recipe)
+        return {"scores": out, "self": {"rating": mine_self[0], "why": "%s. Merge depth: %s (%s)" % (
+            mine_self[1], how["label"], how["note"])}, "pending": pending}
 
     def game_ratings(self, names):
         """Before a main game is picked: every game's own colour, for how much you can mod it as the main game.
@@ -1318,6 +1320,8 @@ class Api:
             return
         on = bool(creative or self._settings.get("item_menu_normal"))
         kit = KITS.get(m.data.get("theme_id"))
+        if m.data.get("story_kit"):
+            kit = {"name": "%s starter kit" % (m.data.get("source_name") or m.name), "items": m.data["story_kit"]}
         p = os.path.join(m.target_path, *b["settings"].split("/"))
         try:
             os.makedirs(os.path.dirname(p), exist_ok=True)
@@ -1639,6 +1643,7 @@ class Api:
                         "playing": self._playing == m.id, "needs_upgrade": m.data.get("upgraded", 1) < self.UPGRADE,
                         "sources": self._sources_for(self._recipe(m.data.get("recipe_id"))),
                         "mc_loader": m.data.get("mc_loader"), "mc_version": m.data.get("mc_version"),
+                        "story": storymode.depth(self._recipe(m.data.get("recipe_id")))["label"],
                         "creative": True, "adds": len([a for a in m.data.get("adds", []) if a.get("ok")]),
                         "pad": "native" if not self._mapper_wanted(m, self._pad_status(m.data.get("game_name", ""))) else "mapped"})
         return out
@@ -1913,13 +1918,30 @@ class Api:
         m = Merge.load(merge_id)
         bot = self._ai()
 
+        r = self._recipe(m.data.get("recipe_id"))
+        how = storymode.depth(r)
+
         def work(job):
-            job.write("Writing your questline …")
+            job.write("Writing the story (%s) …" % how["label"].lower())
+            w = storymode.world(m.target_path, r)
             try:
-                q = bot.questline(m.data.get("game_name", ""), m.data.get("source_name") or m.data.get("theme_name", ""),
-                                  m.name, [i["label"] for i in m.data.get("installs", [])], (idea or "").strip()[:300])
+                raw = bot.story_pack(m.data.get("game_name", ""), m.data.get("source_name") or m.data.get("theme_name", ""),
+                                     m.name, [i["label"] for i in m.data.get("installs", [])], (idea or "").strip()[:300],
+                                     [i.get("name", "") for i in w.get("items", [])], [n.get("name", "") for n in w.get("npcs", [])],
+                                     how["level"] == "in-game")
+                pack = storymode.clean(raw, m.name)
             except ai.AIError as e:
                 raise MergeError(str(e))
+            except ValueError:
+                raise MergeError("The story came out without playable quests. Try again.")
+            q = storymode.as_questline(pack)
+            q["depth"] = how["label"]
+            where = storymode.install(pack, m.target_path, r)
+            if pack["kit"]:
+                m.data["story_kit"] = pack["kit"]
+            m.data["story_pack"] = pack
+            job.write("Saved in the game: %s" % where if where else
+                      "This game's in-game loader isn't ready yet, so the story is in Questlines and the rundown.")
             q["id"] = uuid.uuid4().hex[:8]
             q["done"] = [[False] * len(x["objectives"]) for x in q["quests"]]
             q["created"] = time.time()

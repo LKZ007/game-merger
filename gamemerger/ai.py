@@ -138,6 +138,44 @@ class AI:
             raise AIError("The questline came out garbled. Try again.")
         return {"title": str(data.get("title") or merge_name)[:80], "intro": str(data.get("intro", ""))[:500], "quests": quests}
 
+    def story_pack(self, base, source, merge_name, mods, idea="", items=(), people=(), in_game=False):
+        """The merge standard's story: a DLC-style storyline for the host game with the other game's gameplay
+        in it, characters with new roles, quests the game can check, shops and a starter kit (raw JSON)."""
+        known = ""
+        if items:
+            known += "Items that really exist in %s (use these exact names for shops, rewards and the kit): %s. " % (
+                base, ", ".join(items[:250]))
+        if people:
+            known += "People already in %s: %s. " % (base, ", ".join(people[:80]))
+        ask = (
+            "Write a story expansion, like a DLC, for my merged game \"%s\": %s with %s mixed in through mods (%s). %s"
+            "It continues %s's own world and characters after the start of its main story, and brings in %s's kind of "
+            "gameplay (for example weapons, gangs and fighting police if that's what %s is about). %s"
+            "Make 6 characters with roles that fit the merge (weapons dealer, rival boss, crooked cop, fixer, getaway "
+            "driver, insider), each with a short bio and how they talk. 3 acts, 8 to 12 quests in order that build to a "
+            "finale. Each quest has a giver (a character id), a start_text (a phone message from the giver, in their "
+            "voice, 1-3 sentences), a done_text, and 2 to 4 steps. Step types the game can check: text (reply to the "
+            "giver; give a short reply line), earn (make $amount more), cash (have $amount), takedown (amount, "
+            "target: police, any, or a person's name), wanted (reach wanted level amount 1-4), escape (lose the "
+            "police after being wanted), buy (buy item from a character's shop), days (wait amount in-game days). "
+            "Rewards: cash, xp and items. Give the weapons dealer and one other character a shop of 2-5 items with "
+            "prices and after_quest (the quest index after which it's on sale, -1 for from the start). Add a kit: 2 to "
+            "6 starting items that give %s's signature gear. Keep it fun, 18+ crime-drama tone is fine, no slurs. "
+            "Answer with only JSON: {\"title\", \"intro\", \"unlock_day\": 1, \"kit\": [\"Item*qty\"], "
+            "\"characters\": [{\"id\": \"c0\", \"first\", \"last\", \"role\", \"bio\", \"shop_line\", "
+            "\"shop\": [{\"item\", \"price\", \"after_quest\"}]}], \"quests\": [{\"title\", \"act\", "
+            "\"briefing\", \"giver\", \"start_text\", \"done_text\", \"steps\": [{\"type\", \"text\", "
+            "\"amount\", \"target\", \"item\", \"reply\"}], \"reward\": {\"cash\", \"xp\", "
+            "\"items\": [{\"item\", \"qty\"}], \"text\"}}]}" % (
+                merge_name, base, source, ", ".join(mods[:20]) or "none yet",
+                ("The player wants: %s. " % idea) if idea else "", base, source, source, known, source))
+        if not in_game:
+            ask += " This game has no in-game loader yet, so the player ticks steps off themselves: keep steps clear."
+        data = _json(self.ask(ask))
+        if not isinstance(data, dict):
+            raise AIError("The story came out garbled. Try again.")
+        return data
+
     def game_identity(self, base, theme, slots, avoid=()):
         """A name and tagline for the merged game, as if it were a new game of its own."""
         ask = ("Name a new game that is %s merged with %s (mods: %s). Give it a catchy, original title (2 to 4 words, "

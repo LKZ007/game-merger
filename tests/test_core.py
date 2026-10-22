@@ -647,6 +647,24 @@ class ModSourceAndControllerTests(unittest.TestCase):
         with zipfile.ZipFile(z) as zz:
             self.assertEqual(zz.namelist(), ["Mods/MoreGuns.dll"])
 
+    def test_story_pack_is_cleaned_for_the_game(self):
+        from gamemerger import storymode
+        raw = {"title": "Hood Point", "kit": ["M1911*1"], "characters": [{"id": "c0", "first": "Dre", "last": "Vance", "role": "Weapons dealer",
+               "bio": "Sells iron.", "shop": [{"item": "Revolver", "price": "900", "after_quest": 0}]}],
+               "quests": [{"title": "Strapped", "giver": "c0", "steps": [{"type": "text", "text": "Answer Dre"},
+                           {"type": "takedown", "text": "Drop 3 cops", "amount": 3, "target": "police"},
+                           {"type": "fly", "text": "nonsense"}], "reward": {"cash": 500, "items": [{"item": "M1911"}]}},
+                          {"title": "Empty", "steps": []}]}
+        pack = storymode.clean(raw, "X")
+        self.assertEqual(len(pack["characters"]), 6)
+        self.assertEqual([s["type"] for s in pack["quests"][0]["steps"]], ["text", "takedown"])
+        self.assertEqual(len(pack["quests"]), 1)
+        self.assertEqual(pack["characters"][0]["shop"][0]["price"], 900)
+        q = storymode.as_questline(pack)
+        self.assertEqual(q["quests"][0]["giver"], "Dre Vance")
+        self.assertEqual(storymode.depth(RECIPES["schedule1"])["level"], "in-game")
+        self.assertEqual(storymode.depth(None)["level"], "light")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,11 +1,9 @@
-## Frankenstein 3.14.0
+## Frankenstein 3.15.0
 
-- **Frankenstein does the merging itself.** When you press Merge, it looks up the host-game mods that bring each part of the other game over (weapons, vehicles, gangs, police, gameplay and so on) on Thunderstore, Modrinth, CurseForge and Nexus Mods (with Premium), then installs the best one for each part, plus anything those mods need. You don't have to search for anything.
-- **What it adds**: every merge lists what it brought over and from where, plus anything it couldn't find and why. Merges you already have get an **Auto-fill** button that does the same for them.
-- **Thunderstore** is now a mod source (no account needed). That's where most Schedule I, Valheim, Lethal Company and R.E.P.O. mods live.
-- **Schedule I x Hood Warfare**: the merge now pulls in Schedule I gun mods automatically, and the first time you load a save it hands you a starter kit with a pistol, a revolver, a shotgun and ammo, built from Schedule I's own guns. Nothing is copied from Hood Warfare.
-- **An item menu for every item in the game, mods' items included.** In Schedule I press F6 (or Back + Y on a controller) for a searchable menu with categories and icons. In Cyberpunk 2077 open the Cyber Engine Tweaks overlay (~). In GTA V, Menyoo (F8) spawns any weapon or vehicle. In Minecraft use the Creative inventory plus Just Enough Items. It's always on in Creative; Settings > Item menu turns it on for normal play too.
-- **Creative on every merge, with sandbox tools in one click**: press ✦ Creative, then **Add sandbox tools for me**.
-- Existing Schedule I and Cyberpunk merges get the item menu the first time this version opens.
+- **The merge standard, for every merge.** Every merge now gets the same four layers: gameplay from the other game (auto-installed mods), its signature gear (a starter kit and shops), a story like a DLC that continues the main game's world, and characters with new roles (weapons dealer, rival boss, crooked cop, fixer, getaway driver, insider).
+- **Questlines write that story**: acts and quests, with phone messages from the characters, what each one sells, and rewards. They use the real items and people from your game (Frankenstein's Schedule I mod lists them the first time you play).
+- **How deep each game goes is shown honestly**: on the main game's colour and as a tag on each merge. Schedule I: in-game story. GTA V and Cyberpunk: a companion story you follow from Frankenstein for now. Games with little mod support: light.
+- The story's starter kit is handed over in game (Schedule I).
+- The in-game quests and texts in Schedule I are built and ready; they switch on after a test run on a real PC.
 
 Already installed? Frankenstein will offer this update when you open the app.

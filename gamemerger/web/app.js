@@ -740,7 +740,7 @@ async function loadMerges() {
       <div class="merge-info">
         <div class="merge-name">${esc(m.name)}</div>
         <div class="muted">${m.tagline ? `<em>${esc(m.tagline)}</em> · ` : ""}${esc(m.game)} × ${esc(m.theme)}</div>
-        <div class="row small"><span class="tag">${esc(m.mode_label)}</span><span class="tag">${m.mods.length} installed</span>${m.has_saves ? `<span class="tag">Own saves</span>` : ""}${m.offline_lock ? `<span class="tag" title="Starts in offline mode so mods can't reach online play">Online locked</span>` : ""}<button class="tag tag-btn" data-act="pad" title="${m.pad === "native" ? "This game supports controllers itself" : "Frankenstein's key mapper runs while you play. Click to change the buttons."}">🎮 ${m.pad === "native" ? "Controller" : "Controller (mapped)"}</button>${m.playing ? `<span class="tag live">Playing now</span>` : ""}${m.status === "restored" ? `<span class="tag">Mods removed</span>` : ""}</div>
+        <div class="row small"><span class="tag">${esc(m.mode_label)}</span><span class="tag">${m.mods.length} installed</span><span class="tag" title="How deep this merge's story goes in this game">${esc(m.story || "")}</span>${m.has_saves ? `<span class="tag">Own saves</span>` : ""}${m.offline_lock ? `<span class="tag" title="Starts in offline mode so mods can't reach online play">Online locked</span>` : ""}<button class="tag tag-btn" data-act="pad" title="${m.pad === "native" ? "This game supports controllers itself" : "Frankenstein's key mapper runs while you play. Click to change the buttons."}">🎮 ${m.pad === "native" ? "Controller" : "Controller (mapped)"}</button>${m.playing ? `<span class="tag live">Playing now</span>` : ""}${m.status === "restored" ? `<span class="tag">Mods removed</span>` : ""}</div>
         <div class="muted small" title="${esc(m.folder)}">${esc(m.folder)}</div>
       </div>
       <div class="merge-actions">
@@ -1093,6 +1093,8 @@ async function renderQuests() {
       <div class="row" style="flex-wrap:nowrap"><div class="grow"><div class="eyebrow">${q.finished ? "Complete" : "Questline"}</div><h2 style="margin:4px 0">${esc(q.title)}</h2></div>
         <button class="btn ghost danger" data-del>Delete</button></div>
       <p class="muted">${esc(q.intro)}</p>
+      ${q.depth ? `<p class="small"><span class="tag">${esc(q.depth)}</span></p>` : ""}
+      ${(q.characters || []).filter((c) => c.bio).length ? `<div class="small" style="margin:8px 0"><strong>Characters</strong><ul>${q.characters.filter((c) => c.bio).map((c) => `<li><strong>${esc((c.first + " " + c.last).trim())}</strong>, ${esc(c.role)}: ${esc(c.bio)}${c.shop?.length ? ` <span class="muted">Sells: ${c.shop.map((x) => esc(x.item) + " $" + x.price).join(", ")}</span>` : ""}</li>`).join("")}</ul></div>` : ""}
       ${q.quests.map((x, i) => `<div class="q-step"><strong>${i + 1}. ${esc(x.title)}</strong><div class="muted small">${esc(x.briefing)}</div>
         ${x.objectives.map((o, j) => `<label class="switch small"><input type="checkbox" data-i="${i}" data-j="${j}" ${q.done[i][j] ? "checked" : ""}> ${esc(o)}</label>`).join("")}
         ${x.reward ? `<div class="small q-reward">Reward: ${esc(x.reward)}</div>` : ""}</div>`).join("")}
