@@ -142,6 +142,13 @@ def find_xbox(drives=None):
     return games
 
 
+def find_minecraft():
+    """Minecraft: Java Edition, if the Minecraft Launcher has been used on this PC."""
+    from . import minecraft
+    root = minecraft.default_root()
+    return [InstalledGame("Minecraft: Java Edition", root, "Minecraft Launcher")] if os.path.isdir(os.path.join(root, "versions")) else []
+
+
 def find_manual(folders):
     return [InstalledGame(os.path.basename(os.path.normpath(p)) or p, p, "Added by you")
             for p in folders if os.path.isdir(p)]
@@ -160,7 +167,7 @@ def match_recipes(games, recipes):
 
 def scan(recipes, manual_folders=()):
     games = []
-    for finder in (find_steam, find_epic, find_gog, find_xbox):
+    for finder in (find_steam, find_epic, find_gog, find_xbox, find_minecraft):
         try:
             games.extend(finder())
         except Exception:  # one broken launcher must not hide the others

@@ -547,5 +547,64 @@ class AnyGameTests(unittest.TestCase):
         self.assertEqual(storeinfo.parse("5", raw)["controller"], "partial")
 
 
+
+class ModSourceAndControllerTests(unittest.TestCase):
+    def setUp(self):
+        os.environ["GAMEMERGER_HOME"] = tempfile.mkdtemp()
+
+    def test_modrinth_pulls_in_required_mods_once(self):
+        from gamemerger import modsources
+        versions = {
+            "sodium": {"name": "Sodium 1", "files": [{"primary": True, "url": "u1", "filename": "sodium.jar"}],
+                       "dependencies": [{"project_id": "fabric-api", "dependency_type": "required"},
+                                        {"project_id": "iris", "dependency_type": "optional"}]},
+            "fabric-api": {"name": "Fabric API", "files": [{"primary": True, "url": "u2", "filename": "fabric-api.jar"}],
+                           "dependencies": [{"project_id": "sodium", "dependency_type": "required"}]},
+        }
+        old_v, old_d = modsources.modrinth_version, modsources.download
+        modsources.modrinth_version = lambda p, l=None, g=None: versions[p]
+        modsources.download = lambda url, folder, name=None, progress=None: "/dl/" + name
+        try:
+            got = modsources.modrinth_get("sodium", "fabric", "1.21.1")
+        finally:
+            modsources.modrinth_version, modsources.download = old_v, old_d
+        self.assertEqual([p for _n, p in got], ["/dl/sodium.jar", "/dl/fabric-api.jar"])
+
+    def test_link_must_be_a_web_address(self):
+        from gamemerger import modsources
+        with self.assertRaises(modsources.SourceError):
+            modsources.from_link("C:/mods/thing.zip")
+
+    def test_minecraft_profile_points_at_the_merge(self):
+        from gamemerger import minecraft, autorecipe
+        root = tempfile.mkdtemp(dir=TMP)
+        write(os.path.join(root, "launcher_profiles.json"), json.dumps({"profiles": {"x": {"name": "Latest"}}}))
+        self.assertEqual(autorecipe.detect(root)["engine"], "minecraft")
+        minecraft.add_profile(root, "m1", "Blocky Night City", "D:/Frankenstein/Blocky", "fabric-loader-0.16-1.21.1")
+        with open(os.path.join(root, "launcher_profiles.json")) as f:
+            prof = json.load(f)["profiles"]
+        self.assertEqual(prof["frankenstein-m1"]["gameDir"], "D:/Frankenstein/Blocky")
+        self.assertIn("x", prof)
+        minecraft.select_profile(root, "m1")
+        minecraft.remove_profile(root, "m1")
+        with open(os.path.join(root, "launcher_profiles.json")) as f:
+            self.assertNotIn("frankenstein-m1", json.load(f)["profiles"])
+        d = tempfile.mkdtemp(dir=TMP)
+        jar = os.path.join(d, "sodium.jar")
+        write(jar, "jar")
+        rels, _ = installer.preview(jar, autorecipe.detect(root)["layout"])
+        self.assertEqual(rels, ["mods/sodium.jar"])
+
+    def test_controller_map_and_badges(self):
+        from gamemerger import controller
+        m = controller.merged_map({"a": "e", "bogus": "x"})
+        self.assertEqual((m["a"], m["b"]), ("e", "ctrl"))
+        self.assertNotIn("bogus", m)
+        self.assertEqual(controller.badge("full")[0], "native")
+        self.assertEqual(controller.badge("none")[0], "mapped")
+        self.assertTrue(all(v in controller.KEYS for k, v in controller.DEFAULT.items()
+                            if k not in ("left_stick", "right_stick", "sensitivity")))
+
+
 if __name__ == "__main__":
     unittest.main()

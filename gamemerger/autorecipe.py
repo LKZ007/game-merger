@@ -11,7 +11,7 @@ import json
 import os
 import re
 
-from . import paths
+from . import minecraft, paths
 from .recipes import Slot, Theme, _parse
 
 SKIP_EXE = re.compile(r"(unins|crash|setup|redist|vc_?redist|dxsetup|directx|launcherhelper|easyanticheat|eac_|"
@@ -56,6 +56,13 @@ def detect(folder):
     """{"engine", "label", "moddable": "yes"|"limited"|"no", "frameworks", "layout", "logs", "note"}."""
     def has(*parts):
         return glob.glob(os.path.join(folder, *parts))
+
+    if minecraft.is_minecraft(folder):
+        return {"engine": "minecraft", "label": "Minecraft: Java Edition", "moddable": "yes", "frameworks": [],
+                "layout": {"root_markers": ["mods", "config"], "loose_rules": [{"ext": [".jar"], "dest": "mods"}]},
+                "logs": ["logs/latest.log", "crash-reports/*.txt"],
+                "note": "Minecraft: each merge is its own launcher profile with Fabric, Quilt, Forge or NeoForge, "
+                        "and mods from Modrinth or CurseForge."}
 
     data_dirs = [d for d in has("*_Data") if os.path.isdir(d)]
     if data_dirs and (has("UnityPlayer.dll") or has("*_Data", "globalgamemanagers") or has("*_Data", "data.unity3d")):

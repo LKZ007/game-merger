@@ -14,7 +14,7 @@ import urllib.parse
 import uuid
 import webbrowser
 
-from . import accounts, achievements, ai, autorecipe, covers, storeinfo, discord, profiles, detect, downloader, gallery, network, nexus, paths, permissions, saves, scan, sharing, updater
+from . import accounts, achievements, ai, autorecipe, controller, covers, minecraft, modsources, storeinfo, discord, profiles, detect, downloader, gallery, network, nexus, paths, permissions, saves, scan, sharing, updater
 from .version import VERSION
 from .installer import MODE_COPY, MODE_HARDLINK, MODE_INPLACE, Merge, MergeError, find_clashes, preview
 from . import recipes
@@ -55,6 +55,8 @@ class Api:
         self._owned = {}
         self._jobs = {}
         self._fun_busy = set()
+        self._pad_busy = False
+        self._mapper = None
         self._lock = threading.Lock()
         self._playing = None
         self._recover_saves()
@@ -672,10 +674,14 @@ class Api:
         return {
             "frameworks": [{"id": fid, "name": r.framework(fid).name, "manual_url": r.framework(fid).manual_url}
                            for fid in t.frameworks],
-            "slots": [{"name": s.name, "search": s.search} for s in t.slots],
+            "slots": [{"name": s.name, "search": s.search} for s in t.slots] + (
+                [{"name": "Controller support (optional)", "search": "controller"}]
+                if self._pad_status(g.name, g.appid) in ("partial", "none") and not self._is_mc(r) else []),
             "default_name": "%s - %s" % (r.name.split(" (")[0], t.from_game.split(" /")[0]),
             "destination": self._settings.get("destination") or default_destination(g.path),
             "mode": self._settings.get("mode", MODE_HARDLINK),
+            "sources": self._sources_for(r),
+            "minecraft": {"loaders": minecraft.LOADERS} if self._is_mc(r) else None,
         }
 
     def _fill_style(self, r, t):
@@ -694,10 +700,229 @@ class Api:
             t.slots = [recipes.Slot(**x) for x in got["slots"]]
             t.filled = True
 
+    @staticmethod
+    def _is_mc(r):
+        return bool(r) and (getattr(r, "auto", None) or {}).get("engine", "").startswith("Minecraft")
+
+    def _sources_for(self, r):
+        """Where mods for this game can come from, best first."""
+        out = []
+        if self._is_mc(r):
+            out.append("Modrinth")
+        if self._settings.get("curseforge_key"):
+            out.append("CurseForge")
+        if r and r.nexus_domain and not self._is_mc(r):
+            out.append("Nexus Mods")
+        return out
+
+    def mc_version(self, loader):
+        """The newest Minecraft version a loader supports (asked when the loader is picked)."""
+        try:
+            return minecraft.pick_version(loader)
+        except (modsources.SourceError, StopIteration, KeyError, ValueError) as e:
+            raise MergeError(str(e) or "Couldn't find a Minecraft version for that loader.")
+
+    def mod_search(self, recipe_id, text, source="all", loader=None, game_version=None):
+        """Search every mod site that has this game at once. Each result says where it's from."""
+        r = self._recipe(recipe_id)
+        sources = self._sources_for(r) if source == "all" else [source]
+        results, errors = [], []
+
+        def nx():
+            try:
+                for m in nexus.search(r.nexus_domain, text):
+                    results.append(dict(m, source="Nexus Mods", downloads=m.get("endorsements", 0),
+                                        page=nexus.files_page(r.nexus_domain, m["id"])))
+            except nexus.NexusError as e:
+                errors.append("Nexus Mods: %s" % e)
+
+        def mr():
+            try:
+                results.extend(modsources.modrinth_search(text, loader, game_version))
+            except modsources.SourceError as e:
+                errors.append("Modrinth: %s" % e)
+
+        def cf():
+            key = self._settings.get("curseforge_key")
+            try:
+                gid = modsources.curseforge_game(r.name, key)
+                if not gid:
+                    return errors.append("CurseForge doesn't have %s." % r.name) if source != "all" else None
+                results.extend(modsources.curseforge_search(gid, text, key, loader, game_version))
+            except modsources.SourceError as e:
+                errors.append("CurseForge: %s" % e)
+        work = [threading.Thread(target={"Nexus Mods": nx, "Modrinth": mr, "CurseForge": cf}[x], daemon=True)
+                for x in sources if x in ("Nexus Mods", "Modrinth", "CurseForge")]
+        for w in work:
+            w.start()
+        for w in work:
+            w.join(30)
+        # interleave the sites so the best of each shows near the top
+        by = {}
+        for x in results:
+            by.setdefault(x["source"], []).append(x)
+        mixed = [x for row in __import__("itertools").zip_longest(*by.values()) for x in row if x]
+        return {"results": mixed, "errors": errors, "sources": sources}
+
+    def mod_get(self, recipe_id, source, mod_id, loader=None, game_version=None):
+        """Download a mod (and the mods it needs). Returns a job, or None when a page was opened instead
+        (free Nexus accounts, and CurseForge mods whose authors only allow downloads on their site)."""
+        self._perm("mods", "download mods")
+        if source == "Nexus Mods":
+            return self.nexus_get(recipe_id, mod_id)
+
+        def work(job):
+            prog = lambda d, t: setattr(job, "progress", [d, t] if t else None)
+            pages = []
+            if source == "Modrinth":
+                got = modsources.modrinth_get(mod_id, loader, game_version, prog)
+            else:
+                got, pages = modsources.curseforge_get(int(mod_id), self._settings.get("curseforge_key"), loader, game_version, prog)
+            for name, _p in got:
+                job.write("Downloaded %s" % name)
+            if len(got) > 1:
+                job.write("(%d of those are mods it needs)" % (len(got) - 1))
+            for page in pages:
+                job.write("Opening CurseForge for a file its author only shares there …")
+                webbrowser.open(page)
+            return {"files": [{"path": p, "name": os.path.basename(p)} for _n, p in got], "pages": pages}
+        try:
+            return self._run(work)
+        except modsources.SourceError as e:
+            raise MergeError(str(e))
+
+    def mod_link(self, link):
+        """Download a mod from any direct link."""
+        self._perm("mods", "download mods")
+
+        def work(job):
+            job.write("Downloading …")
+            try:
+                p = modsources.from_link(link, lambda d, t: setattr(job, "progress", [d, t] if t else None))
+            except modsources.SourceError as e:
+                raise MergeError(str(e))
+            return {"files": [{"path": p, "name": os.path.basename(p)}], "pages": []}
+        return self._run(work)
+
+    def install_files(self, merge_id, files):
+        """Put downloaded or picked mod files into an existing merge."""
+        self._perm("mods", "add mods")
+        m = Merge.load(merge_id)
+        r = self._recipe(m.data.get("recipe_id"))
+
+        def work(job):
+            for p in files:
+                try:
+                    m.install(p, os.path.basename(p), r.layout, log=job.write, check=scan.scan)
+                except Exception as e:
+                    job.write("✖ %s failed: %s" % (os.path.basename(p), e))
+            self._rundown_stale(m)
+            return True
+        return self._run(work)
+
+    def curseforge_set_key(self, key):
+        self._admin()
+        key = (key or "").strip()
+        if key:
+            try:
+                modsources._cf("/games?pageSize=1", key)
+            except modsources.SourceError as e:
+                raise MergeError(str(e))
+        self._settings["curseforge_key"] = key
+        paths.save_settings(self._settings)
+        return {"has_key": bool(key)}
+
     def find_mods(self, key, query):
         r = self._game(key).recipe
         webbrowser.open("https://www.nexusmods.com/games/%s/mods?keyword=%s"
                         % (r.nexus_domain, urllib.parse.quote(query)))
+
+    # ---------- controllers ----------
+
+    def _pad_cache(self):
+        try:
+            with open(os.path.join(paths.sub("library"), "controllers.json"), encoding="utf-8") as f:
+                return json.load(f)
+        except (OSError, ValueError):
+            return {}
+
+    def _pad_status(self, name, appid=None, fetch=False):
+        """"full", "partial", "none" or "unknown" (from the Steam store, cached)."""
+        cache = self._pad_cache()
+        if name in cache or not fetch:
+            return cache.get(name, "unknown")
+        info = self._store_info(name, appid or self._appid_for_name(name))
+        return (info or {}).get("controller", "unknown")
+
+    def controller_info(self, names):
+        """The controller badge for each game: {"games": {name: {"badge", "why"}}, "pending"}. Every game is
+        playable with a controller: natively, or through Frankenstein's key mapper."""
+        cache = self._pad_cache()
+        todo = [n for n in names if n not in cache]
+        if todo and not self._pad_busy:
+            self._pad_busy = True
+
+            def run():
+                try:
+                    for i, n in enumerate(todo):
+                        info = self._store_info(n, self._appid_for_name(n))
+                        if info is None:
+                            continue  # offline or not on Steam: ask again next time
+                        with self._lock:
+                            c = self._pad_cache()
+                            c[n] = info.get("controller", "unknown")
+                            with open(os.path.join(paths.sub("library"), "controllers.json"), "w", encoding="utf-8") as f:
+                                json.dump(c, f)
+                finally:
+                    self._pad_busy = False
+            threading.Thread(target=run, daemon=True).start()
+        out = {}
+        for n in names:
+            b, why = controller.badge(cache.get(n, "unknown"))
+            out[n] = {"badge": b, "why": why}
+        return {"games": out, "pending": bool(todo)}
+
+    def pad_settings(self, merge_id):
+        m = Merge.load(merge_id)
+        status = self._pad_status(m.data.get("game_name", ""))
+        return {"status": status, "mode": m.data.get("pad_mode", "auto"), "map": controller.merged_map(m.data.get("pad_map")),
+                "keys": controller.KEYS, "names": controller.NAMES, "default": controller.DEFAULT,
+                "mapper_on": self._mapper_wanted(m, status)}
+
+    def pad_save(self, merge_id, mode, mapping=None):
+        """mode: "auto" (mapper unless the game supports controllers fully), "on" or "off"."""
+        m = Merge.load(merge_id)
+        m.data["pad_mode"] = mode if mode in ("auto", "on", "off") else "auto"
+        if mapping is not None:
+            m.data["pad_map"] = {k: v for k, v in mapping.items() if k in controller.DEFAULT}
+        m.save()
+        return self.pad_settings(merge_id)
+
+    @staticmethod
+    def _mapper_wanted(m, status):
+        mode = m.data.get("pad_mode", "auto")
+        return mode == "on" or (mode == "auto" and status != "full")
+
+    def _start_mapper(self, m, processes):
+        """Run the key mapper while the game runs (only acts while the game's window is in front)."""
+        if not self._mapper_wanted(m, self._pad_status(m.data.get("game_name", ""))) or not processes:
+            return
+        if self._mapper:
+            self._mapper.stop()
+        mapper = self._mapper = controller.Mapper(processes, m.data.get("pad_map"))
+        if not mapper.start():
+            return
+
+        def until_closed():
+            time.sleep(20)
+            for _ in range(18):  # the game can take a while to start
+                if saves.running(processes):
+                    break
+                time.sleep(5)
+            while saves.running(processes):
+                time.sleep(5)
+            mapper.stop()
+        threading.Thread(target=until_closed, daemon=True).start()
 
     # ---------- Nexus Mods ----------
 
@@ -741,8 +966,8 @@ class Api:
         Download" sends it back to the app."""
         self._perm("mods", "download mods")
         r = self._recipe(recipe_id)
-        key = self._nexus_key()
-        if not self._settings.get("nexus_premium"):
+        key = self._settings.get("nexus_key", "")
+        if not key or not self._settings.get("nexus_premium"):
             webbrowser.open(nexus.files_page(r.nexus_domain, mod_id))
             return None
 
@@ -818,6 +1043,12 @@ class Api:
                                      "when Windows asks." % needs[0])
             merge = self._new_merge(g, t, p["mode"], p["destination"], p["name"], job, p.get("tagline", ""))
             problems = []
+            if self._is_mc(r):
+                try:
+                    self._mc_setup(merge, g.path, p.get("mc_loader") or "fabric", p.get("mc_version"), job.write)
+                except (modsources.SourceError, OSError) as e:
+                    problems.append("Mod loader: %s" % e)
+                    job.write("✖ Mod loader failed: %s" % e)
             for fw in frameworks:
                 try:
                     if fw.id in manual:
@@ -848,10 +1079,28 @@ class Api:
             return {"merge_id": merge.id, "name": merge.name, "problems": problems}
         return self._run(work)
 
+    def _mc_setup(self, merge, root, loader, version, log):
+        """A Minecraft merge: the loader in the launcher, and a launcher profile playing from the merge's folder."""
+        version = version or minecraft.pick_version(loader)
+        vid = minecraft.install_loader(root, loader, version, log)
+        minecraft.add_profile(root, merge.id, merge.name, merge.target_path, vid)
+        merge.data.update(mc_root=root, mc_loader=loader, mc_version=version, mc_version_id=vid)
+        merge.save()
+        log("Added “%s” to the Minecraft Launcher. Worlds you make in it stay in this merge." % merge.name)
+
+    def _rundown_stale(self, m):
+        """The mods changed, so the rundown shown on Play gets written again."""
+        if m.data.pop("rundown", None) is not None:
+            m.save()
+
     def _new_merge(self, g, t, mode, destination, name, job, tagline=""):
         """Copy the base game, give the merge its cover info and its own saves."""
         r = g.recipe
-        merge = Merge.create(r, t, g.path, destination, mode, name,
+        base = g.path
+        if self._is_mc(r):
+            # a Minecraft merge is a fresh instance folder; the game itself stays in the launcher
+            base, mode = paths.sub("mc-empty"), MODE_COPY
+        merge = Merge.create(r, t, base, destination, mode, name,
                              appid=g.appid if g.source == "Steam" else "", log=job.write,
                              progress=lambda d, n: setattr(job, "progress", [d, n]))
         merge.data["cover_appid"] = covers.appid_for(g) or ""
@@ -1140,7 +1389,10 @@ class Api:
                         "has_saves": os.path.isdir(saves.slot_root(m.id)),
                         "offline_lock": bool(self._recipe(m.data.get("recipe_id")) and
                                              self._recipe(m.data.get("recipe_id")).launch_args and m.mode != MODE_INPLACE),
-                        "playing": self._playing == m.id, "needs_upgrade": m.data.get("upgraded", 1) < self.UPGRADE})
+                        "playing": self._playing == m.id, "needs_upgrade": m.data.get("upgraded", 1) < self.UPGRADE,
+                        "sources": self._sources_for(self._recipe(m.data.get("recipe_id"))),
+                        "mc_loader": m.data.get("mc_loader"), "mc_version": m.data.get("mc_version"),
+                        "pad": "native" if not self._mapper_wanted(m, self._pad_status(m.data.get("game_name", ""))) else "mapped"})
         return out
 
     def _cover_parts(self, m):
@@ -1175,6 +1427,14 @@ class Api:
             raise MergeError("Another merged game is still running. Close it first.")
         m = Merge.load(merge_id)
         r = self._recipe(m.data.get("recipe_id"))
+        if m.data.get("mc_root"):
+            try:
+                minecraft.select_profile(m.data["mc_root"], m.id)
+            except (OSError, ValueError, modsources.SourceError) as e:
+                raise MergeError(str(e))
+            minecraft.launch()
+            self._award("first_play")
+            return {"note": "The Minecraft Launcher is opening with “%s” picked. Press Play there." % m.name}
         exe = r.launch_exe(m.target_path) if r else None
         if not exe:
             raise MergeError("Couldn't find the game's .exe in %s." % m.target_path)
@@ -1197,6 +1457,7 @@ class Api:
         args = list(r.launch_args) if r and m.mode != MODE_INPLACE else []
         subprocess.Popen([exe] + args, cwd=os.path.dirname(exe))
         self._discord_playing(m, r.processes or [os.path.basename(exe)])
+        self._start_mapper(m, r.processes or [os.path.basename(exe)])
         return True
 
     # ---------- questlines ----------
@@ -1301,6 +1562,7 @@ class Api:
                     m.install(p, os.path.basename(p), r.layout, log=job.write, check=scan.scan)
                 except Exception as e:
                     job.write("✖ %s failed: %s" % (os.path.basename(p), e))
+            self._rundown_stale(m)
         return self._run(work)
 
     # ---------- mod profiles ----------
@@ -1385,6 +1647,8 @@ class Api:
         def work(job):
             m.delete(log=job.write)
             saves.delete_slot(merge_id)
+            if m.data.get("mc_root"):
+                minecraft.remove_profile(m.data["mc_root"], merge_id)
         return self._run(work)
 
     # ---------- first run and downloads ----------
@@ -1459,6 +1723,7 @@ class Api:
                 "data_folder": paths.data_dir(),
                 "version": VERSION,
                 "fun_style": self._settings.get("fun_style", "dot"),
+                "has_curseforge": bool(self._settings.get("curseforge_key")),
                 "cloud_folder": self._settings.get("cloud_folder", ""),
                 "cloud_options": saves.cloud_folders()}
 

@@ -319,3 +319,27 @@ body.pad .tile:focus .face { border: 2px solid var(--accent); box-shadow: 0 0 30
 
 .logo { display: flex; align-items: center; }
 .logo-brain { width: 30px; height: 30px; flex-shrink: 0; margin-right: 8px; }
+
+/* mod browser: every site in one list */
+.mod-results { max-height: 420px; overflow: auto; margin-top: 10px; }
+.mod-hit { padding: 10px 0; border-top: 1px solid var(--line); flex-wrap: nowrap; align-items: flex-start; }
+.mod-pic { width: 96px; height: 54px; object-fit: cover; border-radius: 6px; flex-shrink: 0; background: var(--card); }
+.src-tag { display: inline-block; font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 999px; margin-left: 6px; vertical-align: 2px; border: 1px solid currentColor; }
+.src-nexus { color: #f7a24b; }
+.src-curseforge { color: #f16436; }
+.src-modrinth { color: #1bd96a; }
+.chips { gap: 6px; margin-top: 10px; }
+.chip { background: transparent; color: var(--text-2); border: 1px solid var(--line-2); border-radius: 999px; padding: 6px 12px; font-size: 13px; cursor: pointer; }
+.chip.on, .chip:hover { border-color: var(--accent); color: #fff; }
+
+/* controller badge and button map */
+.pad-badge { position: absolute; left: 22px; top: 8px; font-size: 13px; line-height: 1; padding: 4px 6px; border-radius: 8px;
+  background: rgba(12,9,18,.85); border: 1px solid var(--line-2); color: var(--text); z-index: 2; }
+.pad-badge[data-kind="mapped"] { border-color: var(--accent); }
+.tag-btn { cursor: pointer; font: inherit; }
+.tag-btn:hover { border-color: var(--accent); color: #fff; }
+.pad-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px 14px; margin: 12px 0; max-height: 340px; overflow: auto; }
+.pad-row { display: flex; align-items: center; gap: 8px; }
+.pad-row label { flex: 1; font-size: 13px; color: var(--text-2); }
+.pad-row .input { width: 120px; }
+.tile .case { position: relative; }

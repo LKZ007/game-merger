@@ -207,6 +207,7 @@ function renderLibrary() {
   }));
   $("#rescan").onclick = scan;
   loadFun();
+  loadPads();
   const add = async () => {
     try { const r = await call("add_game_folder"); if (r) { state.games = r; await scan(); } } catch (e) { toast(errText(e)); }
   };
@@ -227,9 +228,11 @@ async function startSetup() {
       frameworks: new Set(o.frameworks.map((f) => f.id)),
       manual: {}, mods: [], check: { mods: [], clashes: [] },
       mode: o.mode, name: o.default_name, destination: o.destination, tagline: "", names: [],
+      loader: o.minecraft ? "fabric" : null, version: null,
     };
     show("setup");
     nameMerge(state.setup);
+    if (o.minecraft) pickLoader(state.setup, "fabric");
   } catch (e) { toast(errText(e)); }
 }
 
@@ -243,6 +246,14 @@ async function nameMerge(s) {
       s.name = id.title; s.tagline = id.tagline; s.names.push(id.title);
     }
   } catch (e) { /* keep the plain name */ }
+  if (state.setup === s && state.view === "setup") renderSetup();
+}
+
+// Minecraft: the loader decides which Minecraft version (and which mods) the merge uses.
+async function pickLoader(s, loader) {
+  s.loader = loader; s.version = null;
+  if (state.view === "setup") renderSetup();
+  try { s.version = await call("mc_version", loader); } catch (e) { toast(errText(e)); }
   if (state.setup === s && state.view === "setup") renderSetup();
 }
 
@@ -286,8 +297,12 @@ function renderSetup() {
         <p class="lede" style="margin-top:6px">${esc(t.description)}</p></div>
     </div>
     ${g.warning ? `<div class="note">${esc(g.warning)}</div>` : ""}
+    ${s.options.minecraft ? `<div class="card"><div class="section-title"><span class="step">0</span><h2>Mod loader</h2></div>
+      <div class="row"><select class="input" id="mcLoader">${Object.entries(s.options.minecraft.loaders).map(([id, n]) => `<option value="${id}" ${s.loader === id ? "selected" : ""}>${esc(n)}</option>`).join("")}</select>
+        <span class="muted">${s.version ? `Minecraft ${esc(s.version)}` : "Finding the newest Minecraft version…"}</span></div>
+      <p class="muted small">Fabric is quickest to set up. Mods only show if they work with the loader and version you pick.</p></div>` : ""}
     <div class="card"><div class="section-title"><span class="step">1</span><h2>Pick your mods</h2></div>
-      <p class="muted" style="margin-top:-6px">Click <strong>Find mods</strong>, then download the ones you like from Nexus Mods. Frankenstein spots each download and adds it here for you. You can also skip this and add mods later.</p>
+      <p class="muted" style="margin-top:-6px">Click <strong>Find mods</strong> to search ${esc((s.options.sources || ["Nexus Mods"]).join(", "))} at once, or paste a download link. Mods it needs come along automatically. You can also skip this and add mods later.</p>
       ${slots}${clashes}</div>
     <div class="card"><div class="section-title"><span class="step">2</span><h2>Merge it</h2></div>
       <p class="muted" style="margin-top:-6px">Everything else is handled: mod loaders download automatically, the merge goes into its own safe copy, and it gets its own save games.</p>
@@ -314,14 +329,13 @@ function renderSetup() {
   v.querySelectorAll("[data-manual]").forEach((b) => (b.onclick = async () => {
     const p = await call("pick_file"); if (p) { s.manual[b.dataset.manual] = p; renderSetup(); }
   }));
-  v.querySelectorAll("[data-find]").forEach((b) => (b.onclick = async () => {
+  v.querySelectorAll("[data-find]").forEach((b) => (b.onclick = () => {
     const slot = s.options.slots[+b.dataset.find];
     watcher.slot = slot.name;
-    const nx = await call("nexus_status").catch(() => ({}));
-    if (nx.has_key) return nexusSearch(slot);
-    call("find_mods", s.key, slot.search);
-    watchDownloads(slot.name);
+    modBrowser({ recipe: g.recipe_id, title: slot.name, search: slot.search, sources: s.options.sources, loader: s.loader, version: s.version,
+      onFiles: (files) => files.forEach((f) => addToSetup(f.path, f.name)), onOpened: () => watchDownloads(slot.name) });
   }));
+  if ($("#mcLoader")) $("#mcLoader").onchange = (e) => pickLoader(s, e.target.value);
   v.querySelectorAll("[data-add]").forEach((b) => (b.onclick = async () => {
     const files = await call("pick_mod_files");
     if (!files || !files.length) return;
@@ -351,36 +365,62 @@ function addToSetup(path, name) {
   }
 }
 
-async function nexusSearch(slot) {
-  const g = game(state.setup.key);
-  const recipe = g.recipe_id;
-  const nx = await call("nexus_status");
-  const render = (list) => list.length ? list.map((m) => `<div class="row" style="padding:10px 0;border-top:1px solid var(--line);flex-wrap:nowrap">
-      ${m.picture ? `<img src="${esc(m.picture)}" alt="" style="width:96px;height:54px;object-fit:cover;border-radius:6px">` : ""}
-      <div class="grow"><strong>${esc(m.name)}</strong> <span class="muted small">by ${esc(m.author)} · ${m.endorsements} endorsements</span><div class="muted small">${esc(m.summary)}</div></div>
-      <button class="btn primary" data-get="${m.id}">Get</button></div>`).join("") : `<p class="muted">Nothing found. Try other words.</p>`;
-  modal("Find mods: " + slot.name, `
-    <div class="row" style="flex-wrap:nowrap"><input class="input" id="nxq" value="${esc(slot.search)}" autocomplete="off"><button class="btn" id="nxgo" type="button">Search</button></div>
-    ${nx.premium ? "" : `<p class="muted small">Free Nexus account: Get opens the mod's Files page. Press <strong>Mod Manager Download</strong> there and it lands here automatically.</p>`}
-    <div id="nxres" style="max-height:380px;overflow:auto;margin-top:10px"><p class="muted">Searching…</p></div>`, [{ label: "Done", value: true, primary: true }]);
+// One search across every mod site that has the game (Nexus Mods, CurseForge, Modrinth), plus any link.
+// o: {recipe, title, search, sources, loader, version, onFiles(files), onOpened()}
+async function modBrowser(o) {
+  const sources = o.sources && o.sources.length ? o.sources : ["Nexus Mods"];
+  let only = "all";
+  const nx = await call("nexus_status").catch(() => ({}));
+  const render = (list) => list.length ? list.map((m, i) => `<div class="row mod-hit">
+      ${m.picture ? `<img src="${esc(m.picture)}" alt="" class="mod-pic">` : `<div class="mod-pic"></div>`}
+      <div class="grow"><strong>${esc(m.name)}</strong> <span class="src-tag src-${esc(m.source.split(" ")[0].toLowerCase())}">${esc(m.source)}</span>
+        <div class="muted small">by ${esc(m.author || "?")} · ${Number(m.downloads || 0).toLocaleString()} ${m.source === "Nexus Mods" ? "endorsements" : "downloads"}</div>
+        <div class="muted small">${esc(m.summary)}</div></div>
+      <button class="btn primary" data-get="${i}">Get</button></div>`).join("") : `<p class="muted">Nothing found. Try other words.</p>`;
+  const done = modal("Find mods: " + o.title, `
+    <div class="row" style="flex-wrap:nowrap"><input class="input" id="mq" value="${esc(o.search)}" autocomplete="off"><button class="btn" id="mgo" type="button">Search</button></div>
+    ${sources.length > 1 ? `<div class="row chips" id="msrc"><button class="chip on" data-src="all">All</button>${sources.map((x) => `<button class="chip" data-src="${esc(x)}">${esc(x)}</button>`).join("")}</div>` : ""}
+    <div id="mres" class="mod-results"><p class="muted">Searching…</p></div>
+    <div class="row" style="flex-wrap:nowrap;margin-top:12px"><input class="input" id="mlink" placeholder="Or paste a download link (https://…)" autocomplete="off"><button class="btn" id="mlinkGo" type="button">Download</button><button class="btn ghost" id="mfile" type="button">Pick a file</button></div>
+    ${sources.includes("Nexus Mods") && !nx.premium ? `<p class="muted small">Nexus Mods: Get opens the mod's Files page. ${nx.has_key ? "Press <strong>Mod Manager Download</strong> there and it lands here automatically." : "Download it there and Frankenstein adds it from your Downloads folder."}</p>` : ""}
+    ${sources.includes("CurseForge") ? "" : `<p class="muted small">Add a CurseForge API key in Settings to search CurseForge too.</p>`}`, [{ label: "Done", value: true, primary: true }]);
+  $("#modal .modal-box").classList.add("wide");
+  done.then(() => $("#modal .modal-box").classList.remove("wide"));
+  let list = [];
+  const got = (r) => { if (r && r.files && r.files.length) { o.onFiles(r.files); toast(`Added ${r.files.map((f) => f.name).join(", ")}.`); } };
   const run = async () => {
-    $("#nxres").innerHTML = `<p class="muted">Searching…</p>`;
-    let list;
-    try { list = await call("nexus_search", recipe, $("#nxq").value); } catch (e) { $("#nxres").innerHTML = `<p class="note">${esc(errText(e))}</p>`; return; }
-    $("#nxres").innerHTML = render(list);
-    $("#nxres").querySelectorAll("[data-get]").forEach((b) => (b.onclick = async () => {
+    $("#mres").innerHTML = `<p class="muted">Searching…</p>`;
+    let r;
+    try { r = await call("mod_search", o.recipe, $("#mq").value, only, o.loader || null, o.version || null); } catch (e) { $("#mres").innerHTML = `<p class="note">${esc(errText(e))}</p>`; return; }
+    list = r.results;
+    $("#mres").innerHTML = (r.errors.length ? `<p class="note small">${r.errors.map(esc).join("<br>")}</p>` : "") + render(list);
+    $("#mres").querySelectorAll("[data-get]").forEach((b) => (b.onclick = async () => {
+      const m = list[+b.dataset.get];
       b.disabled = true;
       try {
-        const job = await call("nexus_get", recipe, +b.dataset.get);
-        if (!job) { b.textContent = "Opened"; return; }
-        const r = (await followJob(job, "Downloading"))?.result;
-        if (r) addToSetup(r.path, r.name);
+        const job = await call("mod_get", o.recipe, m.source, m.id, o.loader || null, o.version || null);
+        if (!job) { b.textContent = "Opened"; o.onOpened && o.onOpened(); return; }
+        const res = (await followJob(job, "Downloading " + m.name))?.result;
+        got(res);
       } catch (e) { toast(errText(e)); b.disabled = false; }
     }));
   };
-  $("#nxgo").onclick = run;
-  $("#nxq").onkeydown = (e) => { if (e.key === "Enter") { e.preventDefault(); run(); } };
+  $("#mgo").onclick = run;
+  $("#mq").onkeydown = (e) => { if (e.key === "Enter") { e.preventDefault(); run(); } };
+  document.querySelectorAll("#msrc [data-src]").forEach((c) => (c.onclick = () => {
+    only = c.dataset.src;
+    document.querySelectorAll("#msrc .chip").forEach((x) => x.classList.toggle("on", x === c));
+    run();
+  }));
+  $("#mlinkGo").onclick = async () => {
+    try { got((await followJob(await call("mod_link", $("#mlink").value), "Downloading"))?.result); } catch (e) { toast(errText(e)); }
+  };
+  $("#mfile").onclick = async () => {
+    const files = await call("pick_mod_files");
+    if (files && files.length) got({ files: files.map((p) => ({ path: p, name: basename(p) })) });
+  };
   run();
+  return done;
 }
 
 // Files and links handed to the app (double-clicked .gmerge files, Nexus "Mod Manager Download").
@@ -583,7 +623,7 @@ async function runMerge() {
   try {
     id = await call("start_merge", {
       key: s.key, theme_id: s.themeId, mode: s.mode, name: s.name, tagline: s.tagline, destination: s.destination,
-      frameworks: fw.map((f) => f.id), manual_files: s.manual, mods: s.mods,
+      frameworks: fw.map((f) => f.id), manual_files: s.manual, mods: s.mods, mc_loader: s.loader, mc_version: s.version,
     });
   } catch (e) { return modal("Couldn't start", `<p>${esc(errText(e))}</p>`); }
   const res = await followJob(id, "Merging " + s.name);
@@ -689,7 +729,7 @@ async function loadMerges() {
       <div class="merge-info">
         <div class="merge-name">${esc(m.name)}</div>
         <div class="muted">${m.tagline ? `<em>${esc(m.tagline)}</em> · ` : ""}${esc(m.game)} × ${esc(m.theme)}</div>
-        <div class="row small"><span class="tag">${esc(m.mode_label)}</span><span class="tag">${m.mods.length} installed</span>${m.has_saves ? `<span class="tag">Own saves</span>` : ""}${m.offline_lock ? `<span class="tag" title="Starts in offline mode so mods can't reach online play">Online locked</span>` : ""}${m.playing ? `<span class="tag live">Playing now</span>` : ""}${m.status === "restored" ? `<span class="tag">Mods removed</span>` : ""}</div>
+        <div class="row small"><span class="tag">${esc(m.mode_label)}</span><span class="tag">${m.mods.length} installed</span>${m.has_saves ? `<span class="tag">Own saves</span>` : ""}${m.offline_lock ? `<span class="tag" title="Starts in offline mode so mods can't reach online play">Online locked</span>` : ""}<button class="tag tag-btn" data-act="pad" title="${m.pad === "native" ? "This game supports controllers itself" : "Frankenstein's key mapper runs while you play. Click to change the buttons."}">🎮 ${m.pad === "native" ? "Controller" : "Controller (mapped)"}</button>${m.playing ? `<span class="tag live">Playing now</span>` : ""}${m.status === "restored" ? `<span class="tag">Mods removed</span>` : ""}</div>
         <div class="muted small" title="${esc(m.folder)}">${esc(m.folder)}</div>
       </div>
       <div class="merge-actions">
@@ -726,6 +766,31 @@ async function offerUpdate(u, asked = false) {
     ${u.notes ? `<div class="log">${esc(u.notes)}</div>` : ""}`,
     [{ label: "Later", value: false }, { label: "Update now", value: true, primary: true }]);
   if (go) followJob(await call("install_update"), "Updating Frankenstein");
+}
+
+// ---------- controller buttons for one merge ----------
+async function padDialog(m) {
+  const d = await call("pad_settings", m.id);
+  const opt = (sel) => d.keys.map((k) => `<option ${k === sel ? "selected" : ""}>${esc(k)}</option>`).join("");
+  const rows = Object.entries(d.names).map(([k, n]) => `<div class="pad-row"><label for="pad-${k}">${esc(n)}</label><select class="input" id="pad-${k}" data-k="${k}">${opt(d.map[k])}</select></div>`).join("");
+  const status = { full: "This game supports controllers itself.", partial: "This game only partly supports controllers.", none: "This game doesn't support controllers.", unknown: "Frankenstein couldn't check this game's controller support." }[d.status];
+  const body = `<p class="muted">${status} ${d.mapper_on ? "Frankenstein's key mapper turns your controller into keyboard and mouse while the game is in front." : "It uses its own controls."}</p>
+    <div class="field"><label for="padMode">Key mapper</label><select class="input" id="padMode">
+      <option value="auto" ${d.mode === "auto" ? "selected" : ""}>Automatic (on unless the game supports controllers fully)</option>
+      <option value="on" ${d.mode === "on" ? "selected" : ""}>Always on</option><option value="off" ${d.mode === "off" ? "selected" : ""}>Off</option></select></div>
+    <div class="pad-grid">${rows}
+      <div class="pad-row"><label for="pad-ls2">Left stick</label><select class="input" id="pad-ls2" data-k="left_stick">${["wasd", "arrows", "none"].map((v) => `<option ${d.map.left_stick === v ? "selected" : ""}>${v}</option>`).join("")}</select></div>
+      <div class="pad-row"><label for="pad-rs2">Right stick</label><select class="input" id="pad-rs2" data-k="right_stick">${["mouse", "none"].map((v) => `<option ${d.map.right_stick === v ? "selected" : ""}>${v}</option>`).join("")}</select></div>
+      <div class="pad-row"><label for="pad-sens">Look speed</label><input class="input" type="number" min="2" max="60" id="pad-sens" data-k="sensitivity" value="${esc(d.map.sensitivity)}"></div></div>
+    <p class="muted small">Xbox controllers work directly. For PlayStation controllers, use Steam Input or DS4Windows.</p>`;
+  const go = await modal("Controller: " + m.name, body, [{ label: "Reset", value: "reset" }, { label: "Cancel", value: false }, { label: "Save", value: true, primary: true }]);
+  if (!go) return;
+  const map = {};
+  if (go !== "reset") document.querySelectorAll("[data-k]").forEach((x) => (map[x.dataset.k] = x.dataset.k === "sensitivity" ? +x.value : x.value));
+  // the modal is closed by now, so read the values before it's reused
+  await call("pad_save", m.id, go === "reset" ? "auto" : $("#padMode")?.value || "auto", go === "reset" ? d.default : map);
+  toast("Controller settings saved.");
+  loadMerges();
 }
 
 // ---------- mod profiles ----------
@@ -802,8 +867,13 @@ function watchPlaying() {
 async function mergeAction(id, act) {
   const m = state.merges.find((x) => x.id === id);
   try {
-    if (act === "play") { await call("play", id); toast("Starting " + m.name + "… its own saves are loaded."); loadMerges(); watchPlaying(); }
+    if (act === "play") {
+      const r = await call("play", id);
+      if (r && r.note) toast(r.note, 6000); else { toast("Starting " + m.name + "… its own saves are loaded."); watchPlaying(); }
+      loadMerges();
+    }
     else if (act === "folder") await call("open_folder", id);
+    else if (act === "pad") await padDialog(m);
     else if (act === "share") await shareMerge(m);
     else if (act === "mods") await modsDialog(m);
     else if (act === "fix") {
@@ -814,7 +884,12 @@ async function mergeAction(id, act) {
       }
     }
     else if (act === "upgrade") { await call("merge_upgrade", id); toast(`“${m.name}” is upgraded.`); loadMerges(); }
-    else if (act === "add") { const job = await call("add_mods", id); if (job) { await followJob(job, "Adding mods"); loadMerges(); } }
+    else if (act === "add") {
+      const picked = [];
+      await modBrowser({ recipe: m.recipe_id, title: m.name, search: "", sources: m.sources, loader: m.mc_loader, version: m.mc_version,
+        onFiles: (files) => picked.push(...files.map((f) => f.path)), onOpened: () => toast("When it's downloaded, use Add mods > Pick a file.", 6000) });
+      if (picked.length) { await followJob(await call("install_files", id, picked), "Adding mods"); loadMerges(); }
+    }
     else if (act === "undo") {
       if (await confirmBox("Undo all mods?", `This removes every mod from “${m.name}” and puts the original files back.`, "Undo all mods")) { await followJob(await call("undo", id), "Undoing"); loadMerges(); }
     } else if (act === "delete") {
@@ -1005,6 +1080,29 @@ function applyFun() {
   });
 }
 
+// ---------- a controller badge on every game ----------
+async function loadPads() {
+  const names = [...state.games.map((g) => g.name), ...(state.owned?.games || []).map((g) => g.name)];
+  clearTimeout(loadPads.timer);
+  let r;
+  try { r = await call("controller_info", names); } catch (e) { return; }
+  state.pads = r.games;
+  applyPads();
+  if (r.pending) loadPads.timer = setTimeout(loadPads, 5000);
+}
+
+function applyPads() {
+  document.querySelectorAll(".tile").forEach((t) => {
+    const p = state.pads?.[t.querySelector(".tile-name")?.textContent];
+    let b = t.querySelector(".pad-badge");
+    if (!p) return b && b.remove();
+    if (!b) { b = document.createElement("span"); b.className = "pad-badge"; t.querySelector(".case").appendChild(b); }
+    b.dataset.kind = p.badge;
+    b.textContent = p.badge === "native" ? "🎮" : "🎮+";
+    b.title = p.why;
+  });
+}
+
 // ---------- preview: what a merge could look like, before downloading anything ----------
 async function previewMerge(key, themeId) {
   const g = game(key);
@@ -1084,6 +1182,7 @@ function renderOwnedShelf() {
     ${r.games.length ? `<div class="grid">${tiles}</div>` : `<div class="empty">Everything you own is installed here.</div>`}`;
   $("#ownedRefresh").onclick = async () => { $("#ownedRefresh").disabled = true; await loadOwned(true); };
   loadFun();
+  loadPads();
   el.querySelectorAll("[data-owned]").forEach((b) => (b.onclick = async () => {
     const g = r.games.find((x) => x.key === b.dataset.owned);
     const go = await modal(g.name, `<p class="muted">${g.elsewhere ? `Installed on <strong>${esc(g.elsewhere)}</strong>, not on this PC.` : "You own this but it isn't installed here."}
@@ -1161,6 +1260,11 @@ async function loadSettings() {
       <div class="field"><label for="nexusKey">API key <span id="nexusTag"></span></label>
         <div class="row" style="flex-wrap:nowrap"><input class="input" type="password" id="nexusKey" placeholder="Paste your Nexus API key" autocomplete="off"><button class="btn primary" id="saveNexus">Save</button></div></div>
     </div>
+    <div class="card"><h2>CurseForge</h2>
+      <p class="muted">CurseForge has mods for Minecraft, The Sims 4, Stardew Valley, Valheim and lots more. Its API needs a free key: sign in at <a href="#" id="cfLink">console.curseforge.com</a>, open <strong>API keys</strong> and copy yours here. Modrinth needs no key.</p>
+      <div class="field"><label for="cfKey">CurseForge API key ${s.has_curseforge ? `<span class="tag">Saved</span>` : ""}</label>
+        <div class="row" style="flex-wrap:nowrap"><input class="input" type="password" id="cfKey" placeholder="${s.has_curseforge ? "Paste a new key to replace it" : "Paste your CurseForge API key"}" autocomplete="off"><button class="btn primary" id="saveCf">Save</button>${s.has_curseforge ? `<button class="btn ghost danger" id="clearCf">Remove</button>` : ""}</div></div>
+    </div>
     <div class="card"><h2>Library</h2>
       <p class="muted">Every game gets a colour for how fun it would be to merge with your main game by how fun they'd be to merge in: green is a great pairing, yellow is OK, red is doable but not as great. Hover a game to see why.</p>
       <div class="field"><label for="funStyle">Show it as</label>
@@ -1191,11 +1295,16 @@ async function loadSettings() {
   };
   if ($("#clearKey")) $("#clearKey").onclick = async () => { await call("save_settings", { claude_api_key: "" }); loadSettings(); };
   $("#nexusLink").onclick = (e) => { e.preventDefault(); call("open_url", "https://next.nexusmods.com/settings/api-keys"); };
+  $("#cfLink").onclick = (e) => { e.preventDefault(); call("open_url", "https://console.curseforge.com/"); };
+  $("#saveCf").onclick = async () => {
+    try { await call("curseforge_set_key", $("#cfKey").value); toast("CurseForge is hooked up."); loadSettings(); } catch (e) { modal("That didn't work", `<p>${esc(errText(e))}</p>`); }
+  };
+  if ($("#clearCf")) $("#clearCf").onclick = async () => { await call("curseforge_set_key", ""); loadSettings(); };
   renderAccounts();
   renderAccountsCard();
   renderDiscord();
   if (!s.admin) {
-    ["#apiKey", "#saveKey", "#clearKey", "#nexusKey", "#saveNexus", "#defDest", "#defBrowse"]
+    ["#apiKey", "#saveKey", "#clearKey", "#nexusKey", "#saveNexus", "#cfKey", "#saveCf", "#clearCf", "#defDest", "#defBrowse"]
       .forEach((q) => { const x = $(q); if (x) { x.disabled = true; x.title = "Set by the admin account"; } });
     if ($("#defMode")) $("#defMode").disabled = true;
   }

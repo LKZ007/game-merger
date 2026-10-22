@@ -18,7 +18,8 @@ merge names and one-click crash repair.
 - **One-click merges**: safe copy of the game (fast copy uses almost no extra space), mod frameworks downloaded for you, undo any time.
 - **Any game can be the main game**: Unity (BepInEx / MelonLoader), Unreal (.pak mods), Bethesda (Data folder), Source and more are detected from the game's files; games without real mod support can still be picked and say so honestly.
 - **AI in the background** (optional Claude API key): fun ratings, mod searches for any pairing, merge names and taglines, one-click crash repair, questlines.
-- **Nexus Mods inside the app**: search and download mods straight into a merge (needs your Nexus API key).
+- **Mods from Nexus Mods, CurseForge, Modrinth or any link** in one search, with required mods pulled in automatically. Minecraft: Java Edition merges get their own launcher profile with Fabric, Quilt, Forge or NeoForge.
+- **A controller on every game**: native where the game supports it, Frankenstein's key mapper everywhere else (buttons editable per merge).
 - **Own saves per merge**, with optional cloud backup to OneDrive or Google Drive.
 - **Mod profiles** (chill / chaos), **Defender scan** of every mod, **online-safety lock** for GTA V.
 - **Play together**: a private network for you and your friends, like Hamachi (built on ZeroTier).
