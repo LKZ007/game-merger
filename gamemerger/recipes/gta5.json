@@ -104,12 +104,15 @@
     "-scOfflineOnly"
   ],
   "sandbox": {
-    "native": "Script Hook V comes with Native Trainer: press F4 in game for god mode, money, vehicles, weapons and teleports.",
+    "native": "Script Hook V comes with Native Trainer: press F4 in game for god mode, money, vehicles, weapons and teleports. Menyoo (F8) spawns any weapon or vehicle by name, add-on cars included.",
     "note": "Story Mode only: creative merges always start offline.",
     "slots": [
       {
-        "name": "Menyoo (spawn objects, peds, vehicles, build maps)",
-        "search": "Menyoo"
+        "name": "Menyoo (spawn any weapon, vehicle, ped or object)",
+        "search": "Menyoo",
+        "github": "MAFINS/MenyooSP",
+        "asset": "(?i)\\.zip$",
+        "flat_root": true
       },
       {
         "name": "Trainer",

@@ -10,6 +10,7 @@ import sys
 import threading
 import time
 import traceback
+import types
 import urllib.parse
 import uuid
 import webbrowser
@@ -39,6 +40,25 @@ class Job:
 
     def write(self, text):
         self.log.append(text)
+
+
+# Frankenstein's own mod per game: where it goes in the game folder, and where its settings file is.
+BUILTIN = {
+    "schedule1": {"label": "Frankenstein item menu and story mode", "dest": "Mods", "needs": ["s1api"],
+                  "settings": "UserData/Frankenstein/settings.json",
+                  "what": "Item menu: press F6 (or Back + Y) in game for every item, mods' items included."},
+    "cyberpunk2077": {"label": "Frankenstein item menu", "dest": "bin/x64/plugins/cyber_engine_tweaks/mods",
+                      "settings": "bin/x64/plugins/cyber_engine_tweaks/mods/frankenstein_items/settings.json",
+                      "what": "Item menu: open the Cyber Engine Tweaks overlay (~) for every item, mods' items included."},
+}
+
+# A starter kit the merge hands you in game, once per save: the merged game's signature gear, made from
+# items the host game really has. Names are matched loosely against the game's own item list.
+KITS = {
+    "hoodwarfare": {"name": "Hood Warfare starter kit",
+                    "items": ["M1911*1", "M1911 Magazine*4", "Revolver*1", "Revolver Cylinder*3", "Pump Shotgun*1",
+                              "Shotgun Shell*12"]},
+}
 
 
 class Api:
@@ -138,7 +158,7 @@ class Api:
 
     # ---------- upgrading merges made by older versions ----------
 
-    UPGRADE = 2  # bump when a release adds something old merges should get
+    UPGRADE = 3  # bump when a release adds something old merges should get
 
     def _upgrade_all(self):
         """Once per release: give merges made by older versions everything new ones get."""
@@ -175,6 +195,10 @@ class Api:
             except Exception:
                 pass
         m.data.setdefault("owner", None)
+        try:
+            self._install_builtin(m, self._recipe(m.data.get("recipe_id")), lambda *_: None)
+        except Exception:
+            pass  # offline: the item menu comes with Auto-fill later
         m.data["upgraded"] = self.UPGRADE
         m.save()
         return True
@@ -758,7 +782,19 @@ class Api:
             out.append("CurseForge")
         if r and r.nexus_domain and not self._is_mc(r):
             out.append("Nexus Mods")
+        if r and not self._is_mc(r) and self._ts_community(r):
+            out.insert(0, "Thunderstore")  # direct downloads, no account needed
         return out
+
+    def _ts_community(self, r):
+        name = r.name.split("(")[0].strip()
+        cache = self.__dict__.setdefault("_ts_ids", {})
+        if name not in cache:
+            try:
+                cache[name] = modsources.thunderstore_community(name)
+            except (modsources.SourceError, KeyError):
+                return None  # offline: ask again next time
+        return cache[name]
 
     def mc_version(self, loader):
         """The newest Minecraft version a loader supports (asked when the loader is picked)."""
@@ -796,8 +832,13 @@ class Api:
                 results.extend(modsources.curseforge_search(gid, text, key, loader, game_version))
             except modsources.SourceError as e:
                 errors.append("CurseForge: %s" % e)
-        work = [threading.Thread(target={"Nexus Mods": nx, "Modrinth": mr, "CurseForge": cf}[x], daemon=True)
-                for x in sources if x in ("Nexus Mods", "Modrinth", "CurseForge")]
+        def ts():
+            try:
+                results.extend(modsources.thunderstore_search(self._ts_community(r), text))
+            except modsources.SourceError as e:
+                errors.append("Thunderstore: %s" % e)
+        work = [threading.Thread(target={"Nexus Mods": nx, "Modrinth": mr, "CurseForge": cf, "Thunderstore": ts}[x], daemon=True)
+                for x in sources if x in ("Nexus Mods", "Modrinth", "CurseForge", "Thunderstore")]
         for w in work:
             w.start()
         for w in work:
@@ -821,6 +862,8 @@ class Api:
             pages = []
             if source == "Modrinth":
                 got = modsources.modrinth_get(mod_id, loader, game_version, prog)
+            elif source == "Thunderstore":
+                got = modsources.thunderstore_get(self._ts_community(self._recipe(recipe_id)), mod_id, prog)
             else:
                 got, pages = modsources.curseforge_get(int(mod_id), self._settings.get("curseforge_key"), loader, game_version, prog)
             for name, _p in got:
@@ -1120,9 +1163,168 @@ class Api:
                 except Exception as e:
                     problems.append("%s: %s" % (name, e))
                     job.write("✖ %s failed: %s" % (name, e))
+            if p.get("auto", True):
+                # Frankenstein does the merging: the best mod for every part of the other game it can find
+                job.write("Bringing %s over …" % (merge.data.get("source_name") or t.name))
+                self._auto_fill(merge, r, t.slots, job, skip_slots={m["slot"] for m in p.get("mods", [])})
+            self._install_builtin(merge, r, job.write)
             job.write("Done.")
             return {"merge_id": merge.id, "name": merge.name, "problems": problems}
         return self._run(work)
+
+    # ---------- auto-merge: Frankenstein picks and installs the mods itself ----------
+
+    AUTO_ORDER = ("Thunderstore", "Modrinth", "CurseForge", "Nexus Mods")
+
+    def _auto_pick(self, r, search, loader=None, version=None, skip=()):
+        """The best mod for a search that Frankenstein can download by itself: [(name, path)], hit; or ([], None)."""
+        found = self.mod_search(r.id, search, "all", loader, version)["results"]
+        premium = bool(self._settings.get("nexus_key") and self._settings.get("nexus_premium"))
+        for src in self.AUTO_ORDER:
+            if src == "Nexus Mods" and not premium:
+                continue
+            for hit in [x for x in found if x["source"] == src and x["name"] not in skip][:2]:
+                try:
+                    if src == "Thunderstore":
+                        got = modsources.thunderstore_get(self._ts_community(r), hit["id"])
+                    elif src == "Modrinth":
+                        got = modsources.modrinth_get(hit["id"], loader, version)
+                    elif src == "CurseForge":
+                        got, _pages = modsources.curseforge_get(int(hit["id"]), self._settings.get("curseforge_key"), loader, version)
+                    else:
+                        key = self._settings.get("nexus_key")
+                        f = nexus.main_file(r.nexus_domain, hit["id"], key)
+                        got = [(hit["name"], nexus.download(r.nexus_domain, hit["id"], f["file_id"], key))]
+                    if got:
+                        return got, hit
+                except Exception:
+                    continue  # try the next one
+        return [], None
+
+    def _auto_fill(self, m, r, slots, job, prefix="", skip_slots=()):
+        """Install the best mod for each slot. Records what the merge adds (and what it couldn't) in m.data["adds"]."""
+        adds = [a for a in m.data.get("adds", []) if a.get("slot") not in {s.name for s in slots}] if not prefix else m.data.get("adds", [])
+        have = {i["label"] for i in m.data.get("installs", [])}
+        loader, version = m.data.get("mc_loader"), m.data.get("mc_version")
+        for slot in slots:
+            if slot.name in skip_slots or not getattr(slot, "search", ""):
+                continue
+            job.write("Looking for %s …" % slot.name.lower())
+            gh = getattr(slot, "github", "")
+            try:
+                if gh:  # a tool published on its own GitHub page
+                    fw = Framework(id=gh, name=slot.name, github=gh, asset=getattr(slot, "asset", r"(?i)\.zip$"),
+                                   flat_root=getattr(slot, "flat_root", False))
+                    got = [(slot.name, downloader.fetch_framework(fw, log=job.write))]
+                    hit = {"name": slot.name, "source": "GitHub", "page": "https://github.com/%s" % gh}
+                else:
+                    got, hit = self._auto_pick(r, slot.search, loader, version)
+            except Exception as e:
+                got, hit = [], None
+                job.write("✖ Search failed: %s" % e)
+            if not got:
+                why = ("no mod for it that Frankenstein can download by itself" +
+                       ("" if self._settings.get("curseforge_key") else " (a CurseForge key in Settings finds more)"))
+                adds.append({"slot": slot.name, "ok": False, "why": why, "search": slot.search, "creative": bool(prefix)})
+                job.write("– %s: %s" % (slot.name, why))
+                continue
+            labels = []
+            for name, path in got:
+                label = "%s%s (%s)" % (prefix, name, slot.name)
+                if label in have:
+                    continue
+                try:
+                    m.install(path, label, r.layout, flat_root=getattr(slot, "flat_root", False), log=job.write, check=scan.scan)
+                    labels.append(label)
+                    have.add(label)
+                except Exception as e:
+                    job.write("✖ %s failed: %s" % (name, e))
+            if prefix:
+                m.data.setdefault("creative_mods", []).extend(labels)
+            adds.append({"slot": slot.name, "ok": bool(labels), "mod": hit["name"], "source": hit["source"],
+                         "page": hit.get("page", ""), "extra": max(0, len(got) - 1), "creative": bool(prefix),
+                         "why": "" if labels else "it was found but didn't install"})
+            job.write("✔ %s: %s from %s" % (slot.name, hit["name"], hit["source"]))
+        m.data["adds"] = adds
+        m.save()
+        return adds
+
+    def merge_autofill(self, merge_id):
+        """Fill an existing merge the same way a new one is: the best mod for every part of the other game."""
+        self._perm("mods", "add mods")
+        m = Merge.load(merge_id)
+        r = self._recipe(m.data.get("recipe_id"))
+        if not r:
+            raise MergeError("Frankenstein doesn't know this game any more. Press Rescan in the Library.")
+        try:
+            t = r.theme(m.data.get("theme_id"))
+        except KeyError:
+            raise MergeError("This merge's style is gone, so there's nothing to fill in.")
+        if self._playing == merge_id:
+            raise MergeError("Close the game first.")
+        done = {a["slot"] for a in m.data.get("adds", []) if a.get("ok") and not a.get("creative")}
+
+        def work(job):
+            adds = self._auto_fill(m, r, t.slots, job, skip_slots=done)
+            self._install_builtin(m, r, job.write)
+            self._rundown_stale(m)
+            job.write("Done.")
+            return {"adds": adds}
+        return self._run(work)
+
+    def merge_adds(self, merge_id):
+        """What this merge brings over from the other game, and what it couldn't."""
+        m = Merge.load(merge_id)
+        r = self._recipe(m.data.get("recipe_id"))
+        builtin = []
+        if r and r.id in BUILTIN:
+            builtin = [BUILTIN[r.id]["what"]]
+        return {"source": m.data.get("source_name") or m.data.get("theme_name", ""), "adds": m.data.get("adds", []),
+                "builtin": builtin, "mods": [i["label"] for i in m.data.get("installs", [])]}
+
+    def _install_builtin(self, m, r, log):
+        """Frankenstein's own mod for this game (the item menu, story mode), if it has one."""
+        b = BUILTIN.get(r.id if r else "")
+        if not b or any(i["label"] == b["label"] for i in m.data.get("installs", [])):
+            return
+        for fid in b.get("needs", []):
+            if fid in r.frameworks and not any(r.framework(fid).name == i["label"] for i in m.data.get("installs", [])):
+                fw = r.framework(fid)
+                try:
+                    m.install(downloader.fetch_framework(fw, log=log), fw.name, r.layout, flat_root=fw.flat_root,
+                              subdir=fw.subdir, log=log)
+                except Exception as e:
+                    log("✖ %s failed: %s" % (fw.name, e))
+        src = os.path.join(os.path.dirname(os.path.abspath(__file__)), "mods", r.id)
+        if not os.path.isdir(src):
+            return log("(Frankenstein's own %s mod isn't in this build.)" % r.name)
+        import zipfile
+        z = os.path.join(paths.sub(os.path.join("downloads", "frankenstein")), "%s.zip" % r.id)
+        with zipfile.ZipFile(z, "w") as out:
+            for root, _d, files in os.walk(src):
+                for f in files:
+                    rel = os.path.relpath(os.path.join(root, f), src).replace(os.sep, "/")
+                    out.write(os.path.join(root, f), b["dest"] + "/" + rel)
+        try:
+            m.install(z, b["label"], r.layout, log=log)
+            log("Added %s." % b["label"])
+        except Exception as e:
+            log("✖ %s failed: %s" % (b["label"], e))
+
+    def _builtin_settings(self, m, r, creative):
+        """Tell Frankenstein's own mod whether the item menu is on for this launch."""
+        b = BUILTIN.get(r.id if r else "")
+        if not b:
+            return
+        on = bool(creative or self._settings.get("item_menu_normal"))
+        kit = KITS.get(m.data.get("theme_id"))
+        p = os.path.join(m.target_path, *b["settings"].split("/"))
+        try:
+            os.makedirs(os.path.dirname(p), exist_ok=True)
+            with open(p, "w", encoding="utf-8") as f:
+                json.dump(dict({"item_menu": on}, **({"kit": kit["items"], "kit_name": kit["name"]} if kit else {})), f)
+        except OSError:
+            pass
 
     def _mc_setup(self, merge, root, loader, version, log):
         """A Minecraft merge: the loader in the launcher, and a launcher profile playing from the merge's folder."""
@@ -1437,7 +1639,7 @@ class Api:
                         "playing": self._playing == m.id, "needs_upgrade": m.data.get("upgraded", 1) < self.UPGRADE,
                         "sources": self._sources_for(self._recipe(m.data.get("recipe_id"))),
                         "mc_loader": m.data.get("mc_loader"), "mc_version": m.data.get("mc_version"),
-                        "creative": bool(self._recipe(m.data.get("recipe_id")) and self._recipe(m.data.get("recipe_id")).sandbox),
+                        "creative": True, "adds": len([a for a in m.data.get("adds", []) if a.get("ok")]),
                         "pad": "native" if not self._mapper_wanted(m, self._pad_status(m.data.get("game_name", ""))) else "mapped"})
         return out
 
@@ -1474,8 +1676,6 @@ class Api:
             raise MergeError("Another merged game is still running. Close it first.")
         m = Merge.load(merge_id)
         r = self._recipe(m.data.get("recipe_id"))
-        if creative and not (r and r.sandbox):
-            raise MergeError("Creative mode isn't available for %s." % m.data.get("game_name", "this game"))
         if m.data.get("mc_root"):
             try:
                 minecraft.select_profile(m.data["mc_root"], m.id)
@@ -1491,6 +1691,7 @@ class Api:
         if not exe:
             raise MergeError("Couldn't find the game's .exe in %s." % m.target_path)
         self._switch_creative(m, r, creative)
+        self._builtin_settings(m, r, creative)
         m.data["plays"] = m.data.get("plays", 0) + 1
         m.save()
         self._award("first_play")
@@ -1525,11 +1726,33 @@ class Api:
         m = Merge.load(merge_id)
         r = self._recipe(m.data.get("recipe_id"))
         sb = (r.sandbox if r else {}) or {}
-        return {"available": bool(sb), "native": sb.get("native", ""), "note": sb.get("note", ""),
+        b = BUILTIN.get(r.id if r else "")
+        return {"available": bool(sb or b), "item_menu": b["what"] if b else "", "adds": [a for a in m.data.get("adds", []) if a.get("creative")],
+                "why_none": "" if (sb or b) else "Frankenstein doesn't know a sandbox tool for this game yet, so Creative only gives it separate saves.", "native": sb.get("native", ""), "note": sb.get("note", ""),
                 "slots": sb.get("slots", []), "mods": m.data.get("creative_mods", []),
                 "own_saves": bool(r and r.saves), "offline": bool(r and r.launch_args),
                 "sources": self._sources_for(r), "recipe_id": r.id if r else None,
                 "mc_loader": m.data.get("mc_loader"), "mc_version": m.data.get("mc_version")}
+
+    def creative_auto(self, merge_id):
+        """One click: Frankenstein finds and adds this game's sandbox tools itself (creative mode only)."""
+        self._perm("mods", "add mods")
+        m = Merge.load(merge_id)
+        r = self._recipe(m.data.get("recipe_id"))
+        if self._playing == merge_id:
+            raise MergeError("Close the game first.")
+        slots = [types.SimpleNamespace(**x) for x in ((r.sandbox if r else {}) or {}).get("slots", [])]
+        done = {a["slot"] for a in m.data.get("adds", []) if a.get("ok") and a.get("creative")}
+
+        def work(job):
+            adds = self._auto_fill(m, r, slots, job, prefix="[Creative] ", skip_slots=done)
+            self._install_builtin(m, r, job.write)
+            m.data["creative_on"] = True
+            m.save()
+            self._rundown_stale(m)
+            job.write("These only run in creative mode. Normal play switches them off again.")
+            return {"adds": [a for a in adds if a.get("creative")]}
+        return self._run(work)
 
     def creative_add(self, merge_id, files):
         """Add sandbox mods (trainers, spawners, free camera). They're only switched on in creative mode."""
@@ -1943,6 +2166,7 @@ class Api:
                 "data_folder": paths.data_dir(),
                 "version": VERSION,
                 "fun_style": self._settings.get("fun_style", "dot"),
+                "item_menu_normal": bool(self._settings.get("item_menu_normal")),
                 "has_curseforge": bool(self._settings.get("curseforge_key")),
                 "cloud_folder": self._settings.get("cloud_folder", ""),
                 "cloud_options": saves.cloud_folders()}
@@ -1951,7 +2175,7 @@ class Api:
         shared = {"mode", "destination", "claude_api_key"}
         if shared & {k for k, v in values.items() if v is not None} and not self._me().get("admin"):
             raise MergeError("Only the admin account can change keys and where copies go.")
-        for k in ("mode", "destination", "cloud_folder", "fun_style"):
+        for k in ("mode", "destination", "cloud_folder", "fun_style", "item_menu_normal"):
             if k in values:
                 self._settings[k] = values[k]
         if values.get("claude_api_key") is not None:

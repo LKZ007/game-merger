@@ -138,7 +138,9 @@ def sandbox_for(eng):
                 "note": "Works on your own (local) games only.", "slots": []}
     if e == "minecraft":
         return {"native": "Minecraft's own Creative mode: pick Creative when you make a world (or /gamemode creative with cheats on).",
-                "note": "Building tools make it even better.", "slots": [{"name": "Building tools", "search": "WorldEdit"}]}
+                "note": "Every item, mods' items included, is in the Creative inventory; Just Enough Items adds a searchable list.",
+                "slots": [{"name": "Just Enough Items (search every item)", "search": "Just Enough Items"},
+                          {"name": "Building tools", "search": "WorldEdit"}]}
     if eng.get("moddable") == "limited":
         return {"note": "Limited: only if someone has made a trainer for this game.",
                 "slots": [{"name": "Trainer / cheats", "search": "trainer"}]}

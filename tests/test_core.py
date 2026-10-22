@@ -632,6 +632,21 @@ class ModSourceAndControllerTests(unittest.TestCase):
                                "Stardew Valley": "green"})
         self.assertTrue(r["pending"])
 
+    def test_thunderstore_search_and_zip_cleanup(self):
+        from gamemerger import modsources, paths
+        pk = [{"full": "Gunsmith-MoreGuns", "name": "More_Guns", "owner": "Gunsmith", "page": "p", "cats": ["Mods"], "nsfw": False,
+               "v": [{"full": "Gunsmith-MoreGuns-1.0.0", "desc": "Adds pistols and rifles", "icon": "", "url": "u", "deps": [], "dl": 9}], "dl": 900},
+              {"full": "Chef-Recipes", "name": "Recipes", "owner": "Chef", "page": "p", "cats": [], "nsfw": False,
+               "v": [{"full": "Chef-Recipes-1.0.0", "desc": "Food", "icon": "", "url": "u", "deps": [], "dl": 1}], "dl": 5}]
+        with open(os.path.join(paths.sub(os.path.join("library", "thunderstore")), "schedule-i.json"), "w") as f:
+            json.dump(pk, f)
+        hits = modsources.thunderstore_search("schedule-i", "guns")
+        self.assertEqual([h["name"] for h in hits], ["More Guns"])
+        z = make_zip(os.path.join(tempfile.mkdtemp(dir=TMP), "m.zip"), {"manifest.json": "{}", "icon.png": "x", "Mods/MoreGuns.dll": "d"})
+        modsources._strip_ts(z)
+        with zipfile.ZipFile(z) as zz:
+            self.assertEqual(zz.namelist(), ["Mods/MoreGuns.dll"])
+
 
 if __name__ == "__main__":
     unittest.main()

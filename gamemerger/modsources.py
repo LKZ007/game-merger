@@ -10,6 +10,7 @@ Required dependencies are downloaded too, so a mod that needs another mod just w
 import json
 import os
 import re
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -214,3 +215,103 @@ def curseforge_get(mod_id, key, loader=None, game_version=None, progress=lambda 
             got += a
             pages += b
     return got, pages
+
+
+# ---------- Thunderstore ----------
+# Open API, no key, direct downloads. It's where most mods for Schedule I, Valheim, Lethal Company,
+# R.E.P.O. and many other Unity games live.
+
+THUNDERSTORE = "https://thunderstore.io"
+TS_SKIP = ("bepinex-bepinexpack", "lavagang-melonloader")  # loaders: Frankenstein installs these itself
+
+
+def thunderstore_community(name):
+    """Thunderstore's id for a game, by name (cached). None if it doesn't have the game."""
+    cache = os.path.join(paths.sub("library"), "thunderstore-communities.json")
+    try:
+        with open(cache, encoding="utf-8") as f:
+            found = json.load(f)
+    except (OSError, ValueError):
+        found, url = [], "%s/api/experimental/community/" % THUNDERSTORE
+        while url:
+            page = _get(url)
+            found += [{"id": c["identifier"], "name": c["name"]} for c in page.get("results", [])]
+            url = (page.get("pagination") or {}).get("next_link")
+        with open(cache, "w", encoding="utf-8") as f:
+            json.dump(found, f)
+    n = _norm(name)
+    return next((c["id"] for c in found if _norm(c["name"]) == n), None)
+
+
+def _ts_packages(community, max_age=6 * 3600):
+    p = os.path.join(paths.sub(os.path.join("library", "thunderstore")), "%s.json" % safe_file_name(community))
+    try:
+        if time.time() - os.path.getmtime(p) < max_age:
+            with open(p, encoding="utf-8") as f:
+                return json.load(f)
+    except (OSError, ValueError):
+        pass
+    raw = _get("%s/c/%s/api/v1/package/" % (THUNDERSTORE, community), timeout=60)
+    slim = [{"full": x["full_name"], "name": x["name"], "owner": x["owner"], "page": x.get("package_url", ""),
+             "cats": x.get("categories", []), "nsfw": x.get("has_nsfw_content", False),
+             "v": [{"full": v["full_name"], "desc": v.get("description", ""), "icon": v.get("icon", ""),
+                    "url": v["download_url"], "deps": v.get("dependencies", []), "dl": v.get("downloads", 0)}
+                   for v in x.get("versions", [])[:1]], "dl": sum(v.get("downloads", 0) for v in x.get("versions", []))}
+            for x in raw if not x.get("is_deprecated")]
+    with open(p, "w", encoding="utf-8") as f:
+        json.dump(slim, f)
+    return slim
+
+
+def thunderstore_search(community, text, count=20):
+    words = [w for w in re.split(r"\W+", (text or "").lower()) if w]
+    hits = []
+    for x in _ts_packages(community):
+        if x["nsfw"] or not x["v"]:
+            continue
+        hay = " ".join([x["name"].replace("_", " "), x["owner"], x["v"][0]["desc"], " ".join(x["cats"])]).lower()
+        score = sum(3 if w in x["name"].lower() else 1 for w in words if w in hay)
+        if score and (len(words) < 2 or score >= len(words)):
+            hits.append((score, x["dl"], x))
+    hits.sort(key=lambda h: (-h[0], -h[1]))
+    return [{"source": "Thunderstore", "id": x["full"], "name": x["name"].replace("_", " "), "summary": x["v"][0]["desc"][:220],
+             "picture": x["v"][0]["icon"], "downloads": x["dl"], "author": x["owner"], "page": x["page"]}
+            for _s, _d, x in hits[:count]]
+
+
+def thunderstore_get(community, full_name, progress=lambda d, t: None, seen=None):
+    """Download a Thunderstore package and the packages it needs. Returns [(name, path)]."""
+    seen = seen if seen is not None else set()
+    if full_name.lower() in seen or full_name.lower().startswith(TS_SKIP):
+        return []
+    seen.add(full_name.lower())
+    x = next((p for p in _ts_packages(community) if p["full"].lower() == full_name.lower()), None)
+    if not x or not x["v"]:
+        raise SourceError("That mod isn't on Thunderstore any more.")
+    v = x["v"][0]
+    out = [(x["name"].replace("_", " "), _strip_ts(download(v["url"], "thunderstore", v["full"] + ".zip", progress)))]
+    for dep in v["deps"]:
+        out += thunderstore_get(community, dep.rsplit("-", 1)[0], progress, seen)
+    return out
+
+
+TS_META = {"manifest.json", "icon.png", "readme.md", "changelog.md", "license", "license.md", "license.txt"}
+
+
+def _strip_ts(path):
+    """Thunderstore zips carry their own manifest, icon and readme at the top; they aren't part of the mod."""
+    import zipfile
+    try:
+        with zipfile.ZipFile(path) as z:
+            names = z.namelist()
+            if not any(n.lower() in TS_META for n in names):
+                return path
+            tmp = path + ".tmp"
+            with zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as out:
+                for n in names:
+                    if n.lower() not in TS_META:
+                        out.writestr(z.getinfo(n), z.read(n))
+        os.replace(tmp, path)
+    except zipfile.BadZipFile:
+        pass
+    return path

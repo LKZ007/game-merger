@@ -630,7 +630,8 @@ async function runMerge() {
   if (res && res.result) {
     await playFusion(res.result.merge_id);
     const p = res.result.problems;
-    const body = `<p>“${esc(res.result.name)}” is ready. Press Play in My merges.</p>` +
+    const adds = await call("merge_adds", res.result.merge_id).catch(() => null);
+    const body = `<p>“${esc(res.result.name)}” is ready. Press Play in My merges.</p>` + (adds ? addsHtml(adds) : "") +
       (p.length ? `<div class="note">Some parts didn't install:<ul>${p.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>Add them later with Add mods on the merge.</div>` : "");
     const go = await modal("Merge complete", body, [{ label: "Stay here", value: false }, { label: "Go to My merges", value: true, primary: true }]);
     state.setup = null;
@@ -718,6 +719,16 @@ async function followJob(id, title) {
   }
 }
 
+// what a merge brings over from the other game, and what it couldn't
+function addsHtml(a) {
+  const ok = a.adds.filter((x) => x.ok), miss = a.adds.filter((x) => !x.ok);
+  const line = (x) => `<li><strong>${esc(x.slot)}</strong>: ${esc(x.mod)} <span class="muted small">from ${esc(x.source)}${x.extra ? `, plus ${x.extra} mod${x.extra > 1 ? "s" : ""} it needs` : ""}${x.creative ? " · creative only" : ""}</span></li>`;
+  return `<div class="adds">
+    ${ok.length || a.builtin.length ? `<p class="muted">Brought over${a.source ? " from " + esc(a.source) : ""}:</p><ul>${ok.map(line).join("")}${a.builtin.map((b) => `<li><strong>Frankenstein</strong>: ${esc(b)}</li>`).join("")}</ul>` : `<p class="muted">Nothing added automatically yet. Press Auto-fill on the merge.</p>`}
+    ${miss.length ? `<p class="muted">Couldn't bring over:</p><ul>${miss.map((x) => `<li><strong>${esc(x.slot)}</strong>: ${esc(x.why)}. <span class="muted small">Try Add mods and search “${esc(x.search || "")}”.</span></li>`).join("")}</ul>` : ""}
+    <p class="muted small">Only mods made for the main game are installed. Nothing is copied out of the other game.</p></div>`;
+}
+
 // ---------- my merges ----------
 async function loadMerges() {
   const el = $("#view-merges");
@@ -734,8 +745,10 @@ async function loadMerges() {
       </div>
       <div class="merge-actions">
         <button class="btn primary" data-act="play">▶ Play</button>
-        ${m.creative ? `<button class="btn creative" data-act="creative" title="Sandbox: spawners, god mode, free camera. Own saves, offline.">✦ Creative</button>` : ""}
+        <button class="btn creative" data-act="creative" title="Sandbox: every item, spawners, free camera. Own saves, offline.">✦ Creative</button>
         <button class="btn ghost" data-act="rundown" title="What's in this merge and what to do">Rundown</button>
+        <button class="btn" data-act="adds" title="What this merge brings over from the other game">What it adds${m.adds ? ` (${m.adds})` : ""}</button>
+        <button class="btn" data-act="autofill" title="Frankenstein finds and installs the mods that bring the other game's features over">Auto-fill</button>
         <button class="btn" data-act="mods">Mods &amp; profiles</button>
         <button class="btn" data-act="add">Add mods</button>
         <button class="btn" data-act="share">Share</button>
@@ -816,13 +829,21 @@ async function showRundown(m, creative, onPlay) {
 async function creativeSetup(m) {
   const c = await call("creative_info", m.id);
   const extra = [];
-  const body = `<p>${esc(c.note)}</p>
+  const body = `<p>${esc(c.note || c.why_none)}</p>
+    ${c.item_menu ? `<div class="note small"><strong>Every item:</strong> ${esc(c.item_menu)}</div>` : ""}
     ${c.native ? `<div class="note small"><strong>Built in:</strong> ${esc(c.native)}</div>` : ""}
-    ${c.slots.length ? `<p class="muted">Sandbox mods you can add (they're only switched on in creative):</p>
+    ${c.slots.length ? `<div class="row" style="margin:10px 0"><button class="btn primary" id="sbAuto" type="button">Add sandbox tools for me</button><span class="muted small grow">Frankenstein finds and installs the best one for each.</span></div>` : ""}
+    ${c.adds.length ? `<ul class="small">${c.adds.map((x) => `<li>${esc(x.slot)}: ${x.ok ? esc(x.mod) + " ✔" : "not found (" + esc(x.why) + ")"}</li>`).join("")}</ul>` : ""}
+    ${c.slots.length ? `<p class="muted">Or pick them yourself (they're only switched on in creative):</p>
       <div>${c.slots.map((x, i) => `<div class="row" style="padding:6px 0;border-top:1px solid var(--line)"><span class="grow">${esc(x.name)}</span><button class="btn" data-sb="${i}" type="button">Find</button></div>`).join("")}</div>` : ""}
     ${c.mods.length ? `<p class="muted small">Added: ${c.mods.map(esc).join(", ")}</p>` : ""}
     <p class="muted small">${c.own_saves ? "Creative has its own saves (a copy of this merge's saves to start), so your normal progress stays clean. " : "This game's saves can't be told apart, so creative uses the same saves; make a new save slot in the game. "}${c.offline ? "It always starts offline, so none of this reaches online play." : "Don't take creative tools into online games."}</p>`;
   const done = modal("Creative mode: " + m.name, body, [{ label: "Cancel", value: false }, { label: "Play creative", value: true, primary: true }]);
+  if ($("#sbAuto")) $("#sbAuto").onclick = async () => {
+    closeModal();
+    await followJob(await call("creative_auto", m.id), "Adding sandbox tools");
+    mergeAction(m.id, "creative");
+  };
   document.querySelectorAll("[data-sb]").forEach((b) => (b.onclick = () => {
     const slot = c.slots[+b.dataset.sb];
     closeModal();
@@ -944,6 +965,12 @@ async function mergeAction(id, act) {
       showRundown(m, creative, true);
     }
     else if (act === "rundown") showRundown(m, false, false);
+    else if (act === "adds") await modal("What " + m.name + " adds", addsHtml(await call("merge_adds", id)));
+    else if (act === "autofill") {
+      const r = await followJob(await call("merge_autofill", id), "Filling in " + m.name);
+      if (r) await modal("What " + m.name + " adds", addsHtml(await call("merge_adds", id)));
+      loadMerges();
+    }
     else if (act === "folder") await call("open_folder", id);
     else if (act === "pad") await padDialog(m);
     else if (act === "share") await shareMerge(m);
@@ -1347,9 +1374,13 @@ async function loadSettings() {
         <div class="row" style="flex-wrap:nowrap"><input class="input" type="password" id="cfKey" placeholder="${s.has_curseforge ? "Paste a new key to replace it" : "Paste your CurseForge API key"}" autocomplete="off"><button class="btn primary" id="saveCf">Save</button>${s.has_curseforge ? `<button class="btn ghost danger" id="clearCf">Remove</button>` : ""}</div></div>
     </div>
     <div class="card"><h2>Library</h2>
-      <p class="muted">Every game gets a colour for how fun it would be to merge with your main game by how fun they'd be to merge in: green is a great pairing, yellow is OK, red is doable but not as great. Hover a game to see why.</p>
+      <p class="muted">Every game gets a colour for how fun it would be to merge into your main game: green is a great pairing, yellow is OK, red is doable but not as great. Hover a game to see why.</p>
       <div class="field"><label for="funStyle">Show it as</label>
         <select class="input" id="funStyle">${[["dot", "A dot in the corner"], ["halo", "A glow around the box"], ["off", "Off"]].map(([v, n]) => `<option value="${v}" ${(s.fun_style || "dot") === v ? "selected" : ""}>${n}</option>`).join("")}</select></div>
+    </div>
+    <div class="card"><h2>Item menu</h2>
+      <p class="muted">Every item in a merge, mods' items included, from a menu in the game (Schedule I: F6 or Back + Y; Cyberpunk: the ~ overlay). It's always on in Creative.</p>
+      <label class="row"><input type="checkbox" id="itemMenuNormal" ${s.item_menu_normal ? "checked" : ""}> Also in normal play</label>
     </div>
     <div class="card" id="accountsCard"></div>
     <div class="card" id="discordCard"></div>
@@ -1396,6 +1427,7 @@ async function loadSettings() {
   };
   $("#cloudPick").onchange = async () => { state.settings = await call("save_settings", { cloud_folder: $("#cloudPick").value }); toast($("#cloudPick").value ? "Cloud backup is on." : "Cloud backup is off."); };
   $("#checkUpdate").onclick = async () => offerUpdate(await call("check_update").catch(() => null), true);
+  $("#itemMenuNormal").onchange = async () => { state.settings = await call("save_settings", { item_menu_normal: $("#itemMenuNormal").checked }); };
   $("#funStyle").onchange = async () => { state.settings = await call("save_settings", { fun_style: $("#funStyle").value }); applyFun(); };
   $("#defBrowse").onclick = async () => { const p = await call("pick_folder"); if (p) $("#defDest").value = p; };
   $("#saveMerging").onclick = async () => { await call("save_settings", { mode: $("#defMode").value, destination: $("#defDest").value.trim() }); toast("Saved."); };

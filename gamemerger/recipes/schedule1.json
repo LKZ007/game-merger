@@ -47,6 +47,13 @@
       "name": "MelonLoader (mod loader)",
       "github": "LavaGang/MelonLoader",
       "asset": "(?i)melonloader\\.x64\\.zip$"
+    },
+    {
+      "id": "s1api",
+      "name": "S1API (for Frankenstein's item menu and story mode)",
+      "github": "ifBars/S1API",
+      "asset": "(?i)S1API.*\\.zip$",
+      "manual_url": "https://thunderstore.io/c/schedule-i/p/ifBars/S1API_Forked/"
     }
   ],
   "themes": [
@@ -59,11 +66,16 @@
       ],
       "description": "Pushes Schedule I toward a hood combat game: more weapons, tougher gang and police fights, and extra areas. Hood Warfare's own files are never copied, only Schedule I mods.",
       "frameworks": [
-        "melonloader"
+        "melonloader",
+        "s1api"
       ],
       "slots": [
         {
-          "name": "Weapons",
+          "name": "Guns (pistols, SMGs, rifles)",
+          "search": "guns"
+        },
+        {
+          "name": "More weapons",
           "search": "weapon"
         },
         {
@@ -90,7 +102,8 @@
       ],
       "description": "Adds GTA-style vehicles, police chases and more freedom to Schedule I's town.",
       "frameworks": [
-        "melonloader"
+        "melonloader",
+        "s1api"
       ],
       "slots": [
         {

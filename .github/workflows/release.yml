@@ -58,7 +58,8 @@ jobs:
           --version-file installer\version_info.txt
           --icon installer\Frankenstein.ico
           --add-data "gamemerger\recipes;gamemerger\recipes"
-          --add-data "gamemerger\web;gamemerger\web" Frankenstein.pyw
+          --add-data "gamemerger\web;gamemerger\web"
+          --add-data "gamemerger\mods;gamemerger\mods" Frankenstein.pyw
 
       - name: Build installer
         shell: pwsh
