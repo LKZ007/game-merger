@@ -6,19 +6,19 @@
 <p align="center">Windows 10/11 · free · always the newest version · updates itself after that</p>
 
 A Windows game launcher that "merges" games the realistic way. You pick any game you
-actually play as the main game, pick the style of another game to bring in, and Frankenstein makes a safe
+actually play as the Host game, pick the style of another game to bring in, and Frankenstein makes a safe
 copy, works out the game's engine and mod loader, and installs the mods you choose. Optional AI
 features (your own Claude API key) work quietly in the background: fun ratings, mod searches,
 merge names and one-click crash repair.
 
-![Frankenstein's library: pick a main game, pick a style to merge in, and see how fun each pairing would be](docs/screenshot.png)
+![Frankenstein's library: pick a Host game, pick a style to merge in, and see how fun each pairing would be](docs/screenshot.png)
 
 ## Features
 
-- **Frankenstein does the merging**: it finds and installs the host-game mods that bring the other game's weapons, vehicles, systems and look over, and lists what each merge adds.
+- **Frankenstein does the merging**: it finds and installs the host-game mods that bring the Extension game's weapons, vehicles, systems and look over, and lists what each merge adds.
 - **Item menu**: every item in the game, mods' items included (Schedule I F6, Cyberpunk CET overlay, GTA V Menyoo, Minecraft JEI).
 - **One-click merges**: safe copy of the game (fast copy uses almost no extra space), mod frameworks downloaded for you, undo any time.
-- **Any game can be the main game**: Unity (BepInEx / MelonLoader), Unreal (.pak mods), Bethesda (Data folder), Source and more are detected from the game's files; games without real mod support can still be picked and say so honestly.
+- **Any game can be the Host game**: Unity (BepInEx / MelonLoader), Unreal (.pak mods), Bethesda (Data folder), Source and more are detected from the game's files; games without real mod support can still be picked and say so honestly.
 - **AI in the background** (optional Claude API key): fun ratings, mod searches for any pairing, merge names and taglines, one-click crash repair, questlines.
 - **Mods from Thunderstore, Nexus Mods, CurseForge, Modrinth or any link** in one search, with required mods pulled in automatically. Minecraft: Java Edition merges get their own launcher profile with Fabric, Quilt, Forge or NeoForge.
 - **A controller on every game**: native where the game supports it, Frankenstein's key mapper everywhere else (buttons editable per merge).
@@ -30,7 +30,7 @@ merge names and one-click crash repair.
 - **Share a merge** as a `.gmerge` file your friend double-clicks.
 - **Gallery**: Ctrl+Alt+S screenshots plus Game Bar clips.
 - **Every game you own**: connect Steam, Epic and GOG to see games that aren't installed here, and which ones are on your other PC.
-- **Fun rating**: green / yellow / red on every game, owned ones and the main game included, for how fun the merge would be. Rough genre-based guesses without an AI key.
+- **Fun rating**: green / yellow / red on every game, owned ones and the Host game included, for how fun the merge would be. Rough genre-based guesses without an AI key.
 - **Preview before merging**: streamed trailers and mod pictures with a short pitch, nothing downloaded.
 - **Accounts** with a "Who's playing?" screen, PINs, and an admin who decides what each account can do.
 - **Questlines** written for each merge, **controller support**, **achievements** and **Discord status**.
@@ -38,9 +38,9 @@ merge names and one-click crash repair.
 
 ## Hand-made recipes
 
-Every game can be the main game. These three have hand-tuned recipes:
+Every game can be the Host game. These three have hand-tuned recipes:
 
-| Main game | Merge with |
+| Host game | Merge with |
 |---|---|
 | Cyberpunk 2077 | Forza style (cars, handling, racing), GTA style (police, traffic, radio) |
 | Schedule I | Hood Warfare style (guns, gang fights), GTA style |

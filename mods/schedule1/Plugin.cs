@@ -23,6 +23,7 @@ namespace Frankenstein
         public override void OnInitializeMelon()
         {
             ReadSettings();
+            World.Load();
             Story.Load();
             ItemMenu.Load();
         }
@@ -43,6 +44,16 @@ namespace Frankenstein
                 MainMenu.Creative = J.S(s, "creative", "false").ToLowerInvariant() == "true";
                 foreach (var k in J.L(s, "rundown")) MainMenu.Rundown.Add(k.ToString());
                 var pa = s is System.Collections.Generic.Dictionary<string, object> d && d.TryGetValue("play_as", out var v) ? v : null;
+                var w = s is System.Collections.Generic.Dictionary<string, object> d2 && d2.TryGetValue("world", out var wv) ? wv : null;
+                if (w != null)
+                {
+                    World.Style = J.S(w, "style");
+                    World.Zone = J.S(w, "zone");
+                    World.Lighting = J.S(w, "lighting");
+                    World.Title = J.S(w, "title");
+                    foreach (var k in J.L(w, "modes")) World.Modes.Add(k.ToString());
+                }
+                World.Host = J.S(s, "host", "Schedule I");
                 if (pa != null && J.S(pa, "style").Length > 0)
                 {
                     MainMenu.Who = J.S(pa, "who");
@@ -56,12 +67,13 @@ namespace Frankenstein
             }
         }
 
-        public override void OnSceneWasInitialized(int buildIndex, string sceneName) => MainMenu.Scene(sceneName);
+        public override void OnSceneWasInitialized(int buildIndex, string sceneName) { MainMenu.Scene(sceneName); World.Scene(sceneName); }
 
         public override void OnUpdate()
         {
             ItemMenu.Update();
             MainMenu.Update();
+            try { World.Update(); } catch (Exception e) { Melon<Plugin>.Logger.Warning("World: " + e.Message); }
             if (Time.unscaledTime < _next) return;
             _next = Time.unscaledTime + 1f;
             try { Story.Tick(); }
@@ -76,6 +88,7 @@ namespace Frankenstein
         {
             ItemMenu.Draw();
             MainMenu.Draw();
+            World.Draw();
         }
     }
 }

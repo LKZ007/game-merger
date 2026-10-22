@@ -1,9 +1,9 @@
-"""The merge standard: what every merge gets, and how deep it can go in each host game.
+"""The merge standard: what every merge gets, and how deep it can go in each Host game.
 
 Every merge has four layers:
-  1. Gameplay brought over: host-game mods for each part of the other game (auto-installed).
-  2. Gear: the other game's signature gear, made from items the host game has (a starter kit, a shop).
-  3. A story like a DLC: acts and quests that continue the host game's world after its own start.
+  1. Gameplay brought over: host-game mods for each part of the Extension game (auto-installed).
+  2. Gear: the Extension game's signature gear, made from items the Host game has (a starter kit, a shop).
+  3. A story like a DLC: acts and quests that continue the Host game's world after its own start.
   4. Characters with new roles: a weapons dealer, a rival boss, a crooked cop, a fixer, a driver ...
 
 How much of that runs inside the game depends on the host. Where Frankenstein has its own in-game loader
@@ -40,7 +40,7 @@ LIMITED = {"level": "light", "label": "Light",
 
 
 def depth(recipe):
-    """How deep a merge can go in this host game."""
+    """How deep a merge can go in this Host game."""
     if recipe is None:
         return LIMITED
     if recipe.id in DEPTH:

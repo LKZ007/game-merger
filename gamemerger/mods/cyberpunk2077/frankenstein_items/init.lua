@@ -47,6 +47,8 @@ local function playAs(on)
     menu.note = on and ("Playing as " .. (pa.who or "the other game's hero") .. ": " .. (pa.moves or "")) or "Back to V"
 end
 
+local drawWorld  -- the World and events section, defined further down
+
 local function drawMerge()
     local s = menu.s or {}
     ImGui.TextWrapped((s.merge or "This merge") .. (s.creative and "  ·  Creative (its own saves)" or ""))
@@ -64,6 +66,7 @@ local function drawMerge()
         ImGui.TextWrapped((pa.moves or "") .. ". How close: " .. (pa.close or ""))
         if ImGui.Button(menu.playing and "Back to V" or "Play as them") then playAs(not menu.playing) end
     end
+    pcall(drawWorld)
     ImGui.Separator()
     ImGui.Text("Rundown")
     for _, line in ipairs(s.rundown or {}) do ImGui.TextWrapped(line) end
@@ -204,6 +207,185 @@ local function raceTick()
     end
 end
 
+-- ---------- World and events: the Extension game built into Night City from Cyberpunk's own cars ----------
+-- The festival (or any merge's zone) is placed where you stand and kept in festival.json, so it comes back every
+-- session. Events start from it: speed trap, drift zone and circuit, on top of the street races above.
+local world = { spot = nil, spawned = {}, ev = nil, last = nil }
+
+local function worldStyle() return (menu.s and menu.s.world and menu.s.world.style) or "" end
+
+local function saveSpot()
+    local f = io.open("festival.json", "w")
+    if f then f:write(json.encode(world.spot or {})); f:close() end
+end
+
+local function loadSpot()
+    local f = io.open("festival.json", "r")
+    if not f then return end
+    local ok, v = pcall(json.decode, f:read("*a")); f:close()
+    if ok and v and v.x then world.spot = v end
+end
+
+local function zoneCars()
+    local out = {}
+    for _, g in ipairs(GARAGE) do
+        for _, c in ipairs(menu.cars) do
+            if #out < 8 and c.id:lower():find(g[1], 1, true) then table.insert(out, c.id); break end
+        end
+    end
+    for _, c in ipairs(menu.cars) do if #out < 8 then table.insert(out, c.id) end end
+    return out
+end
+
+local function spawnZone()
+    local sp = world.spot
+    if not sp then return 0 end
+    local n = 0
+    for i, rec in ipairs(zoneCars()) do
+        local a = (i - 1) / 8 * math.pi * 2
+        local ok, id = pcall(function()
+            local spec = DynamicEntitySpec.new()
+            spec.recordID = rec
+            spec.position = Vector4.new(sp.x + math.cos(a) * 14, sp.y + math.sin(a) * 14, sp.z + 0.5, 1)
+            spec.orientation = EulerAngles.new(0, 0, math.deg(a) + 90):ToQuat()
+            spec.alwaysSpawned = true
+            return Game.GetDynamicEntitySystem():CreateEntity(spec)
+        end)
+        if ok and id then table.insert(world.spawned, id); n = n + 1 end
+    end
+    return n
+end
+
+local function clearZone()
+    for _, id in ipairs(world.spawned) do pcall(function() Game.GetDynamicEntitySystem():DeleteEntity(id) end) end
+    world.spawned = {}
+end
+
+local function buildZoneHere()
+    local pos = Game.GetPlayer():GetWorldPosition()
+    clearZone()
+    world.spot = { x = pos.x, y = pos.y, z = pos.z }
+    saveSpot()
+    local n = spawnZone()
+    menu.note = n > 0 and ("Built the " .. ((menu.s and menu.s.world and menu.s.world.zone) or "zone"):match("^[^:]+") .. " here (" .. n .. " cars)")
+        or "This game version wouldn't place cars here; the spot is saved for events."
+end
+
+local function lighting()
+    try("Festival light", function()
+        Game.GetWeatherSystem():SetWeather("24h_weather_sunny", 10, 0)
+        Game.GetTimeSystem():SetGameTimeByHMS(18, 30, 0)
+    end)
+end
+
+local function startEvent(kind)
+    local p = Game.GetPlayer()
+    local pos = p:GetWorldPosition()
+    local c = world.spot or { x = pos.x, y = pos.y, z = pos.z }
+    local f = p:GetWorldForward()
+    if kind == "trap" then
+        world.ev = { kind = kind, name = "Speed trap", x = c.x + f.x * 400, y = c.y + f.y * 400, start = menu.now }
+    elseif kind == "drift" then
+        world.ev = { kind = kind, name = "Drift zone", start = menu.now, score = 0, len = 30 }
+    else
+        local pts = {}
+        for i = 0, 3 do
+            local a = i / 4 * math.pi * 2
+            table.insert(pts, { x = c.x + math.cos(a) * 300, y = c.y + math.sin(a) * 300 })
+        end
+        world.ev = { kind = "circuit", name = "Circuit", pts = pts, at = 1, lap = 1, laps = 2, start = menu.now }
+    end
+    menu.note = world.ev.name .. " started"
+end
+
+local function arrowTo(x, y)
+    local p = Game.GetPlayer()
+    local pos, f = p:GetWorldPosition(), p:GetWorldForward()
+    local dx, dy = x - pos.x, y - pos.y
+    local ang = math.deg(atan2(dy, dx) - atan2(f.y, f.x)) % 360
+    local arrows = { "↑", "↖", "←", "↙", "↓", "↘", "→", "↗" }
+    return arrows[math.floor((ang + 22.5) / 45) % 8 + 1], math.sqrt(dx * dx + dy * dy)
+end
+
+local function pay(n, msg)
+    pcall(function() Game.AddToInventory("Items.money", n) end)
+    menu.note = msg .. "  +" .. n .. " eddies"
+    world.ev = nil
+end
+
+local function worldTick(dt)
+    if world.spot and #world.spawned == 0 and not world.tried then
+        local pos = Game.GetPlayer():GetWorldPosition()
+        local dx, dy = pos.x - world.spot.x, pos.y - world.spot.y
+        if dx * dx + dy * dy < 300 * 300 then world.tried = true; spawnZone() end
+    end
+    local e = world.ev
+    if not e then return end
+    local p = Game.GetPlayer()
+    local v = Game.GetMountedVehicle(p)
+    local pos = p:GetWorldPosition()
+    local kmh = 0
+    if v then pcall(function() kmh = math.abs(v:GetCurrentSpeed()) * 3.6 end) end
+    e.time = menu.now - e.start
+    if e.kind == "trap" then
+        e.arrow, e.left = arrowTo(e.x, e.y)
+        if e.left < 20 then
+            local stars = kmh >= 250 and 3 or kmh >= 200 and 2 or kmh >= 150 and 1 or 0
+            pay(500 + stars * 1000, string.format("Speed trap: %d km/h  %s", kmh, string.rep("★", stars) .. string.rep("☆", 3 - stars)))
+        end
+    elseif e.kind == "drift" then
+        if world.last and v then
+            local mx, my = pos.x - world.last.x, pos.y - world.last.y
+            local d = math.sqrt(mx * mx + my * my)
+            local f = v:GetWorldForward()
+            if d > 1 then
+                local cos = (mx * f.x + my * f.y) / d
+                local slide = math.deg(math.acos(math.max(-1, math.min(1, cos))))
+                if slide > 12 and slide < 100 and kmh > 30 then e.score = e.score + math.floor(kmh * slide / 10) end
+            end
+        end
+        if e.time >= e.len then pay(math.floor(e.score / 10), "Drift zone: " .. e.score .. " points") end
+    else
+        local pt = e.pts[e.at]
+        e.arrow, e.left = arrowTo(pt.x, pt.y)
+        if e.left < 30 then
+            e.at = e.at + 1
+            if e.at > #e.pts then e.at = 1; e.lap = e.lap + 1 end
+            if e.lap > e.laps then pay(3000, string.format("Circuit done in %.1f s", e.time)) end
+        end
+    end
+    world.last = { x = pos.x, y = pos.y }
+end
+
+drawWorld = function()
+    local w = menu.s and menu.s.world
+    if not w then return end
+    ImGui.Separator()
+    ImGui.Text("World")
+    ImGui.TextWrapped(w.zone or "")
+    if ImGui.Button(world.spot and "Move it here" or "Build it here") then try("Built", buildZoneHere) end
+    if world.spot then
+        ImGui.SameLine()
+        if ImGui.Button("Go there") then
+            try("At the zone", function()
+                local p, s = Game.GetPlayer(), world.spot
+                Game.GetTeleportationFacility():Teleport(p, Vector4.new(s.x + 20, s.y, s.z + 1, 1), p:GetWorldOrientation():ToEulerAngles())
+            end)
+        end
+    end
+    if (w.lighting or "") ~= "" then
+        if ImGui.Button("Light: " .. w.lighting) then lighting() end
+    end
+    ImGui.Separator()
+    ImGui.Text("Events")
+    for _, ev in ipairs({ { "Speed trap", "trap" }, { "Drift zone (30 s)", "drift" }, { "Circuit (2 laps)", "circuit" } }) do
+        if ImGui.Button(ev[1]) then try(ev[1], function() startEvent(ev[2]) end) end
+        ImGui.SameLine()
+    end
+    ImGui.NewLine()
+    for _, m in ipairs(w.modes or {}) do ImGui.TextWrapped("· " .. m) end
+end
+
 -- ---------- the merge's story: quests from its characters (Frankenstein writes story.json) ----------
 local story = { pack = nil, q = 1, s = 1, base = 0, day = 0, had = false, msg = nil, msgUntil = 0, done = false }
 
@@ -334,6 +516,7 @@ registerForEvent("onInit", function()
     loadCars()
     pcall(catalog)
     pcall(loadStory)
+    pcall(loadSpot)
     -- requests sent before this session started don't count
     pcall(function()
         local f = io.open("commands.json", "r")
@@ -355,6 +538,7 @@ registerForEvent("onUpdate", function(dt)
         end
     end
     pcall(raceTick)
+    pcall(worldTick)
     pcall(bridge)
     pcall(storyTick)
 end)
@@ -373,11 +557,25 @@ local function drawHud()
     local q = story.pack and not story.done and story.pack.quests[story.q]
     local line = story.msg and menu.now < story.msgUntil and story.msg or nil
     local goal = q and story.s > 0 and q.steps[story.s] and (q.title .. ": " .. q.steps[story.s].text) or nil
-    if not kmh and not menu.race and not line and not goal then return end
+    local ev = world.ev
+    if not kmh and not menu.race and not line and not goal and not ev then return end
     ImGui.SetNextWindowPos(30, 30, ImGuiCond.FirstUseEver)
     ImGui.SetNextWindowBgAlpha(0.55)
     if ImGui.Begin("Frankenstein HUD", ImGuiWindowFlags.NoTitleBar + ImGuiWindowFlags.AlwaysAutoResize + ImGuiWindowFlags.NoScrollbar) then
-        if kmh then ImGui.Text(string.format("%3d km/h   %3d mph", kmh, math.floor(kmh / 1.609 + 0.5))) end
+        if kmh and worldStyle() == "forza" then
+            -- Forza-style: big speed, a speed bar, the event
+            ImGui.SetWindowFontScale(2.2)
+            ImGui.Text(string.format("%3d", kmh))
+            ImGui.SetWindowFontScale(1)
+            ImGui.SameLine()
+            ImGui.Text("KM/H")
+            ImGui.ProgressBar(math.min(kmh / 300, 1), 220, 8, "")
+        elseif kmh then ImGui.Text(string.format("%3d km/h   %3d mph", kmh, math.floor(kmh / 1.609 + 0.5))) end
+        if ev then
+            if ev.kind == "drift" then ImGui.Text(string.format("%s  %d pts  %2d s left", ev.name, ev.score or 0, math.max(0, ev.len - math.floor(ev.time or 0))))
+            elseif ev.kind == "circuit" then ImGui.Text(string.format("%s  %s %4d m  lap %d/%d  %5.1f s", ev.name, ev.arrow or "", math.floor(ev.left or 0), ev.lap, ev.laps, ev.time or 0))
+            else ImGui.Text(string.format("%s  %s %4d m", ev.name, ev.arrow or "", math.floor(ev.left or 0))) end
+        end
         if line then ImGui.TextWrapped(line) end
         if goal then ImGui.TextWrapped(goal) end
         if menu.race and menu.race.left then

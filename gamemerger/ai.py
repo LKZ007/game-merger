@@ -18,7 +18,7 @@ SYSTEM = """You work behind the scenes in Frankenstein, a Windows app for PC gam
 before). Games on different engines can't truly be merged, so Frankenstein "merges" them the realistic way: the \
 player picks a base game they will actually play and a style to bring in from another game. Frankenstein makes a \
 safe copy of the base game, installs the mod loaders it needs and mods the player downloads (Nexus Mods, \
-CurseForge, Modrinth). Nothing is copied out of the other game. Everything can be undone.
+CurseForge, Modrinth). Nothing is copied out of the Extension game. Everything can be undone.
 
 What you write is shown in the app as plain text, so: no greetings, no persona, no slang, no swearing, no \
 markdown. Be clear, short and honest. Only name a specific mod if you are confident it exists; otherwise describe \
@@ -139,7 +139,7 @@ class AI:
         return {"title": str(data.get("title") or merge_name)[:80], "intro": str(data.get("intro", ""))[:500], "quests": quests}
 
     def story_pack(self, base, source, merge_name, mods, idea="", items=(), people=(), in_game=False):
-        """The merge standard's story: a DLC-style storyline for the host game with the other game's gameplay
+        """The merge standard's story: a DLC-style storyline for the Host game with the Extension game's gameplay
         in it, characters with new roles, quests the game can check, shops and a starter kit (raw JSON)."""
         known = ""
         if items:
@@ -202,7 +202,7 @@ class AI:
         """How FUN each game would be merged into `base` (not how hard it is).
         Returns {name: {"rating": "green"|"yellow"|"red", "why": one line}}."""
         ask = ("Rate how fun it would be to merge each of these games into %s, as a mod-based merge where %s stays the "
-               "game you play and the other game's style, vehicles, weapons, characters, activities or vibe get layered "
+               "game you play and the Extension game's style, vehicles, weapons, characters, activities or vibe get layered "
                "on. Rate only on fun: how many cool things you could do together and how well the worlds and gameplay "
                "mix. Do NOT rate on how hard it is to mod. green = great pairing, yellow = OK, red = doable but not as "
                "great. Games:\n%s\n\nAnswer with only JSON: {\"<exact game name>\": {\"rating\": \"green|yellow|red\", "
@@ -226,7 +226,7 @@ class AI:
         ask = ("Base game: %s (%s, mod support: %s). Bring in the style of %s, using only mods made for %s on %s. "
                "Write a two-sentence description of the merge (honest: if mod support is limited or missing, say what "
                "is realistically possible), and 3 to 5 mod categories to look for, each with a short search term "
-               "that works on %s (2 to 3 words, no game name). The FIRST category is the other game's hero: its single "
+               "that works on %s (2 to 3 words, no game name). The FIRST category is the Extension game's hero: its single "
                "most iconic thing that people recognise in merge videos (its signature car, main character or skin, "
                "signature weapon, creature, blocks or HUD), named like \"Hero: <the thing>\". Answer with only JSON: {\"description\": \"...\", "
                "\"slots\": [{\"name\": \"<category, e.g. Racing cars>\", \"search\": \"<search term>\"}]}"
@@ -241,6 +241,27 @@ class AI:
         if not slots:
             return None
         return {"description": str(data.get("description") or "")[:500], "slots": slots}
+
+    def merge_plan(self, host, engine, extension, can):
+        """The wording of a Merge plan: how the Host game looks and plays once the Extension game is coded onto it.
+        `can` says what's really possible in this Host; the plan only describes, it never promises more."""
+        ask = ("Host game: %s (%s). Extension game: %s. Frankenstein converts the Host into the Extension using only the "
+               "Host's own engine and assets (nothing is copied from the Extension). What it can really do here: %s. "
+               "Plan the joined game. Answer with only JSON: {\"areas\": [\"up to 3 lines: which Host area becomes which "
+               "Extension area\"], \"zone\": \"the one zone Frankenstein builds from Host props, in the Extension's style\", "
+               "\"lighting\": \"the light and weather\", \"terrain\": \"terrain and foliage, honest about limits\", "
+               "\"modes\": [\"up to 4 of the Extension's game modes, each as 'Name: what you do'\"], \"hud\": \"the "
+               "Extension-style HUD\", \"loading\": \"the merged loading screen\", \"items\": \"signature items and "
+               "vehicles as Host stand-ins\"}" % (host, engine, extension, "; ".join("%s: %s" % (k, v[0]) for k, v in can.items())))
+        data = _json(self.ask(ask, 4000))
+        line = lambda x, n=200: str(x or "")[:n]
+        out = {"areas": [line(x, 160) for x in (data.get("areas") or [])[:3]], "zone": line(data.get("zone")),
+               "lighting": line(data.get("lighting")), "terrain": line(data.get("terrain")),
+               "modes": [line(x, 160) for x in (data.get("modes") or [])[:4]], "hud": line(data.get("hud")),
+               "loading": line(data.get("loading")), "items": line(data.get("items"))}
+        if not (out["zone"] or out["modes"]):
+            raise AIError("The plan came out empty.")
+        return {k: v for k, v in out.items() if v}
 
     def rundown(self, base, source, merge_name, mods, quest="", controls="", creative=False):
         """What's new and what to do, shown while the merged game loads. Plain, short, skimmable."""

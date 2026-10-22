@@ -19,7 +19,7 @@ import webbrowser
 from . import installer, storymode, accounts, achievements, ai, autorecipe, controller, covers, minecraft, modsources, storeinfo, discord, profiles, detect, downloader, gallery, network, nexus, paths, permissions, saves, scan, sharing, updater
 from .version import VERSION
 from .installer import MODE_COPY, MODE_HARDLINK, MODE_INPLACE, Merge, MergeError, find_clashes, preview
-from . import playas, recipes
+from . import mergeplan, playas, recipes
 from .recipes import load_recipes, resource_dir
 
 SHARE_TYPES = ("Shared merges (*.gmerge)", "All files (*.*)")
@@ -104,7 +104,9 @@ def standin_for(recipe_id, slot_name, slot_builtin=""):
     if slot_builtin:
         return slot_builtin, "builtin"
     if playas.is_play_as(slot_name):
-        return STORY_STANDIN, "story"  # only Frankenstein's own mod for the game can stand in for a character
+        return STORY_STANDIN, "story"
+    if mergeplan.is_world(slot_name):
+        return STORY_STANDIN, "story"  # the Extension's places become the story's places  # only Frankenstein's own mod for the game can stand in for a character
     for pattern, text in STANDINS.get(recipe_id, []):
         if re.search(pattern, slot_name, re.I):
             return text, "builtin"
@@ -112,7 +114,7 @@ def standin_for(recipe_id, slot_name, slot_builtin=""):
 
 
 # A starter kit the merge hands you in game, once per save: the merged game's signature gear, made from
-# items the host game really has. Names are matched loosely against the game's own item list.
+# items the Host game really has. Names are matched loosely against the game's own item list.
 KITS = {
     "hoodwarfare": {"name": "Hood Warfare arsenal", "shop_name": "hardware",
                     # sold at Handy Hank's hardware store (game money); names match the kit's stand-ins
@@ -125,7 +127,7 @@ KITS = {
                               "Sniper Magazine*2", "Revolver*1", "Revolver Cylinder*3", "Machete=Blade*1"]},
 }
 
-# The merged game's guns and what stands in for each in the host game. "close": the same kind of gun, works
+# The merged game's guns and what stands in for each in the Host game. "close": the same kind of gun, works
 # the same way; "rough": the nearest thing the host has. Shown in What it adds.
 ARSENALS = {
     "hoodwarfare": [
@@ -161,6 +163,7 @@ class Api:
         self._recipes = self._hand + autorecipe.load_all()
         for r in self._recipes:
             playas.add_to(r)
+            mergeplan.add_world(r)
         self._games = []
         self._owned = {}
         self._jobs = {}
@@ -344,7 +347,7 @@ class Api:
         if self._fill_gaps(m, r):
             out.append("filled empty parts of What it adds")
         if self._add_new_parts(m, r):
-            out.append("added Play as (the other game's character)")
+            out.append("added Play as and World (the Extension game's character and places)")
         heroes = {sl.name for t in (r.themes if r else []) for sl in t.slots if sl.hero}
         marked = False
         for a in m.data.get("adds", []):
@@ -352,7 +355,7 @@ class Api:
                 a["hero"] = marked = True
         if marked:
             m.save()
-            out.append("marked the other game's hero item")
+            out.append("marked the Extension game's hero item")
         if m.mode == MODE_HARDLINK and installer.harden(m.target_path):
             out.append("gave shared files their own copy (originals stay untouched)")
         # mod files that went missing from the merge's folder: put back from the files the merge kept
@@ -621,7 +624,8 @@ class Api:
         built = {g.recipe.id: g.recipe for g in self._games if g.recipe and getattr(g.recipe, "auto", None)}
         self._recipes = self._hand + list(built.values()) + [r for r in autorecipe.load_all(styles) if r.id not in built]
         for r in self._recipes:
-            playas.add_to(r)  # every merge can play as the other game's character
+            playas.add_to(r)  # every merge can play as the Extension game's character
+            mergeplan.add_world(r)  # and gets the Extension's look and places in its world
 
     def library(self):
         installed = {g.name.lower() for g in self._games}
@@ -633,7 +637,7 @@ class Api:
             for t in (r.themes if r else []):
                 themes.append({"id": t.id, "name": t.name, "from_game": t.from_game, "description": t.description,
                                "found": any(any(m in n for m in t.source_match) for n in installed),
-                               # the other game's tile in the library, so it can glow next to the host
+                               # the Extension game's tile in the library, so it can glow next to the host
                                "source_key": next((keys[n] for n in installed if n != g.name.lower() and (
                                    any(m in n for m in t.source_match) or n == (t.from_game or "").lower())), None)})
             themes.sort(key=lambda t: (t["id"].startswith("style-"), not t["found"], t["from_game"].lower()))
@@ -832,7 +836,7 @@ class Api:
             mine_self[1], how["label"], how["note"])}, "pending": pending}
 
     def game_ratings(self, names):
-        """Before a main game is picked: every game's own colour, for how much you can mod it as the main game.
+        """Before a Host game is picked: every game's own colour, for how much you can mod it as the Host game.
         {"scores": {name: {rating, why}}, "pending"}. Installed games are judged from their files; games that
         are only owned are judged from a built-in recipe or Steam Workshop, and say so when it can't be told yet."""
         out, todo = {}, []
@@ -980,7 +984,7 @@ class Api:
                 return
             got = [m for m in mods if m["picture"]]
             if got:
-                # screenshots from mods for the main game: the two games really merged, not side by side
+                # screenshots from mods for the Host game: the two games really merged, not side by side
                 out["pictures"].append({"slot": slot.name, "name": got[0]["name"], "url": got[0]["picture"],
                                         "more": [m["picture"] for m in got[:3]]})
 
@@ -994,7 +998,7 @@ class Api:
                 pass
 
         base_id = g.appid or (r.steam_appids[0] if r.steam_appids else "")
-        # the other game's Steam page: the recipe's, or the installed copy's, or a store search by name
+        # the Extension game's Steam page: the recipe's, or the installed copy's, or a store search by name
         other = next((x for x in self._games if x is not g and any(mk in x.name.lower() for mk in (t.source_match or [])
                                                                     or [t.from_game.lower()])), None)
         source_id = t.source_appid or (other.appid if other else "")
@@ -1038,7 +1042,7 @@ class Api:
     def _preview_slides(self, g, r, t, shots, pictures):
         """The slideshow: one slide per thing you can do in the merge, each with a picture (the mod's own,
         or a screenshot from either game), a one-line caption, and the named things it brings (each gun, item
-        or character) that pop up over the moving picture. "at" spreads the slides across the main game's
+        or character) that pop up over the moving picture. "at" spreads the slides across the Host game's
         trailer so each one shows a different moment."""
         pics = {p["slot"]: p["url"] for p in pictures}
         more = {p["slot"]: p.get("more") or [p["url"]] for p in pictures}
@@ -1085,7 +1089,7 @@ class Api:
         slides = slides[:10]
         for i, sl in enumerate(slides):
             sl["at"] = round(0.12 + 0.76 * i / max(1, len(slides) - 1), 3)
-            # for a blended frame: the main game's scene, with the other game melted into it
+            # for a blended frame: the Host game's scene, with the Extension game melted into it
             sl["host_shot"] = shots["base"][(i + 1) % len(shots["base"])] if shots["base"] else None
             sl["source_shot"] = shots["source"][i % len(shots["source"])] if shots["source"] else None
         return slides
@@ -1114,6 +1118,47 @@ class Api:
         g = self._game(key)
         return covers.as_data_uri(covers.cover_path(g, steam_root=self._steam_root()))
 
+    def merge_plan(self, key, theme_id):
+        """The Merge plan for a Host game and an Extension style, shown before Merge it. The AI words it when a
+        Claude key is set (once, then kept); the template is shown until then. {"plan", "ready"}"""
+        g = self._game(key)
+        r = g.recipe
+        t = next((x for x in (r.themes if r else []) if x.id == theme_id), None)
+        if not t:
+            raise MergeError("Pick a style to merge in first.")
+        return self._plan(r, t)
+
+    def merge_plan_of(self, merge_id):
+        m = Merge.load(merge_id)
+        r = self._recipe(m.data.get("recipe_id"))
+        try:
+            t = r.theme(m.data.get("theme_id"))
+        except (KeyError, AttributeError):
+            raise MergeError("Frankenstein doesn't know this merge's style any more.")
+        return self._plan(r, t)
+
+    def _plan(self, r, t):
+        text = mergeplan.cached(r.id, t.id)
+        if text is not None or not self._settings.get("claude_api_key") or (r.id, t.id) in mergeplan.SHOWCASE:
+            return {"plan": mergeplan.build(r, t, text), "ready": True}
+        busy = getattr(self, "_plan_busy", set())
+        self._plan_busy = busy
+        if (r.id, t.id) not in busy:
+            busy.add((r.id, t.id))
+
+            def run():
+                try:
+                    can = dict(mergeplan.GENERIC, **mergeplan.CAN.get(r.id, {}))
+                    auto = getattr(r, "auto", None) or {}
+                    mergeplan.keep(r.id, t.id, self._ai().merge_plan(r.name, auto.get("engine", "its own engine"),
+                                                                     (t.from_game or t.name).split(" /")[0], can))
+                except Exception:
+                    pass
+                finally:
+                    busy.discard((r.id, t.id))
+            threading.Thread(target=run, daemon=True).start()
+        return {"plan": mergeplan.build(r, t), "ready": False}
+
     def cover_clip(self, key, owned=False):
         """The moving picture inside a game's box: a short muted loop of its Steam trailer, or None."""
         if owned:
@@ -1125,7 +1170,7 @@ class Api:
         return covers.steam_clip(appid) if appid else None
 
     def merge_cover_clip(self, merge_id):
-        """A merge's box moves with both games: the main game's trailer on the left, the other game's on the right."""
+        """A merge's box moves with both games: the Host game's trailer on the left, the Extension game's on the right."""
         m = Merge.load(merge_id)
         sid = m.data.get("source_appid") or (covers.search_appid(m.data["source_name"]) if m.data.get("source_name") else None)
         return {"base": covers.steam_clip(m.data.get("cover_appid")), "source": covers.steam_clip(sid)}
@@ -1161,7 +1206,7 @@ class Api:
 
     def _fill_style(self, r, t):
         """A style that's only a placeholder gets real mod categories and searches from the AI (once,
-        then kept). Without a key the placeholder stays: one slot searching for the other game's name."""
+        then kept). Without a key the placeholder stays: one slot searching for the Extension game's name."""
         if getattr(t, "filled", True) or not self._settings.get("claude_api_key"):
             return
         auto = getattr(r, "auto", None) or {}
@@ -1175,6 +1220,7 @@ class Api:
             t.slots = [recipes.Slot(**x) for x in got["slots"]]
             t.filled = True
             playas.add_to(r)
+            mergeplan.add_world(r)
 
     @staticmethod
     def _is_mc(r):
@@ -1573,7 +1619,7 @@ class Api:
                     problems.append("%s: %s" % (name, e))
                     job.write("✖ %s failed: %s" % (name, e))
             if p.get("auto", True):
-                # Frankenstein does the merging: the best mod for every part of the other game it can find
+                # Frankenstein does the merging: the best mod for every part of the Extension game it can find
                 job.write("Bringing %s over …" % (merge.data.get("source_name") or t.name))
                 self._auto_fill(merge, r, t.slots, job, skip_slots={m["slot"] for m in p.get("mods", [])})
             self._install_builtin(merge, r, job.write)
@@ -1641,9 +1687,9 @@ class Api:
 
     @staticmethod
     def _story_idea(m, idea):
-        """The player's idea, plus a quest for every part of the other game that only the story stands in for."""
+        """The player's idea, plus a quest for every part of the Extension game that only the story stands in for."""
         parts = [a["slot"] for a in m.data.get("adds", []) if a.get("standin") == "story"]
-        extra = (" Give one quest to each of these parts of the other game, since no mod brings them over: %s."
+        extra = (" Give one quest to each of these parts of the Extension game, since no mod brings them over: %s."
                  % ", ".join(parts)) if parts else ""
         return ((idea or "").strip()[:300] + extra).strip()
 
@@ -1678,7 +1724,7 @@ class Api:
         if not t or "adds" not in m.data:
             return False
         have = {a.get("slot") for a in m.data["adds"]}
-        new = [sl for sl in t.slots if playas.is_play_as(sl.name) and sl.name not in have]
+        new = [sl for sl in t.slots if (playas.is_play_as(sl.name) or mergeplan.is_world(sl.name)) and sl.name not in have]
         for sl in new:
             a = self._standin_add(r, sl, "", [])
             if sl.hero:
@@ -1711,7 +1757,8 @@ class Api:
                 else:
                     got, hit = self._auto_pick(r, slot.search, loader, version, prefer=getattr(slot, "prefer", ""),
                                                mono=self._unity_mono(m.target_path),
-                                               must=playas.must_match(slot.name) if playas.is_play_as(slot.name) else None)
+                                               must=playas.must_match(slot.name) if playas.is_play_as(slot.name) else
+                                               mergeplan.must_match(slot.name) if mergeplan.is_world(slot.name) else None)
             except Exception as e:
                 got, hit = [], None
                 job.write("✖ Search failed: %s" % e)
@@ -1752,7 +1799,7 @@ class Api:
         return None
 
     def merge_autofill(self, merge_id):
-        """Fill an existing merge the same way a new one is: the best mod for every part of the other game."""
+        """Fill an existing merge the same way a new one is: the best mod for every part of the Extension game."""
         self._perm("mods", "add mods")
         m = Merge.load(merge_id)
         r = self._recipe(m.data.get("recipe_id"))
@@ -1775,7 +1822,7 @@ class Api:
         return self._run(work)
 
     def merge_adds(self, merge_id):
-        """What this merge brings over from the other game, and what it couldn't."""
+        """What this merge brings over from the Extension game, and what it couldn't."""
         m = Merge.load(merge_id)
         r = self._recipe(m.data.get("recipe_id"))
         builtin = []
@@ -1946,7 +1993,9 @@ class Api:
         source = m.data.get("source_name") or m.data.get("theme_name", "")
         extra_all = {"creative": bool(creative), "merge": m.name, "rundown": self._ingame_rundown(m, creative),
                      "rundown_text": "\n".join(self._ingame_rundown(m, creative)),
-                     "play_as": dict(playas.settings(r.id, source), on=bool(m.data.get("play_as_on", True)))}
+                     "play_as": dict(playas.settings(r.id, source), on=bool(m.data.get("play_as_on", True))),
+                     "world": mergeplan.settings(r.id, m.data.get("theme_id", ""), source.split(" /")[0]),
+                     "host": m.data.get("game_name", "")}
         kit = KITS.get(m.data.get("theme_id"))
         if m.data.get("story_kit"):
             kit = {"name": "%s starter kit" % (m.data.get("source_name") or m.name), "items": m.data["story_kit"]}
@@ -2273,7 +2322,7 @@ class Api:
             t = None
         if t is None and (info.get("theme_id") or "").startswith("style-"):
             # a style from a game this PC doesn't have: the mods come in the file anyway
-            t = autorecipe.style_themes(r.id, r.name, [(info.get("theme_name") or "Other game").rsplit(" style", 1)[0]],
+            t = autorecipe.style_themes(r.id, r.name, [(info.get("theme_name") or "Extension game").rsplit(" style", 1)[0]],
                                         list(r.frameworks))[0]
         if t is None:
             raise MergeError("This merge uses a style this version of Frankenstein doesn't know. Update the app.")

@@ -1,6 +1,8 @@
 // Frankenstein's menu inside GTA V, and Play as. Script Hook V .NET compiles it when the game starts (".3.cs").
 // Frankenstein writes scripts/Frankenstein/settings.json before each launch: the merge's name, its rundown,
 // whether this is Creative, and who you play as.
+// Ctrl+F10: build the Extension's zone where you stand, from GTA V's own props. The Extension's light is set once
+// the game has loaded.
 // F10: the merge's rundown. Shift+F10: switch to Creative (or back); quit the game and Frankenstein restarts it
 // in that mode, with its own saves. F11: Play as on/off.
 // Play as swaps you into the closest GTA V character and gives them the other game's way of moving.
@@ -14,6 +16,8 @@ using GTA.Native;
 public class FrankensteinMenu : Script
 {
     string merge = "", style = "", who = "", moves = "";
+    string world = "", zone = "", title = "";  // the Extension's look and its zone, built from GTA V's own props
+    bool lit;
     string[] rundown = new string[0];
     bool creative, playAs, applied;
     int page = -1, pageAt, tries, nextCheck;
@@ -55,6 +59,13 @@ public class FrankensteinMenu : Script
                 who = Field(pa.Value, "who");
                 moves = Field(pa.Value, "moves");
                 playAs = Field(pa.Value, "on") != "false" && style.Length > 0;
+            }
+            var wd = Regex.Match(s, "\"world\"\\s*:\\s*\\{[^}]*");
+            if (wd.Success)
+            {
+                world = Field(wd.Value, "style");
+                zone = Field(wd.Value, "zone");
+                title = Field(wd.Value, "title");
             }
         }
         catch (Exception) { }
@@ -143,8 +154,39 @@ public class FrankensteinMenu : Script
         GTA.UI.Notification.Show("Frankenstein: back to your own character. F11 plays as " + who + " again.");
     }
 
+    // the Extension's light: sunny late afternoon for racing games, night for gang games, otherwise left alone
+    void Light()
+    {
+        lit = true;
+        string w = world == "forza" ? "EXTRASUNNY" : world == "hoodwarfare" || world == "gta" ? "CLEAR" : "";
+        if (w.Length == 0) return;
+        Function.Call(Hash.SET_WEATHER_TYPE_NOW_PERSIST, w);
+        Function.Call(Hash.SET_CLOCK_TIME, world == "forza" ? 18 : 22, 30, 0);
+    }
+
+    // the Extension's zone where you stand: a ring of GTA V's own props
+    void BuildZone()
+    {
+        var me = Game.Player.Character;
+        string[] props = { "prop_barrier_work05", "prop_roadcone02a", "prop_dumpster_01a", "prop_tyre_wall_01", "prop_mp_barrier_02b",
+                           "prop_worklight_03b", "prop_skip_01a", "prop_pallet_02a" };
+        int made = 0;
+        for (int i = 0; i < 16; i++)
+        {
+            double a = i / 16.0 * Math.PI * 2;
+            var at = me.Position + new GTA.Math.Vector3((float)Math.Cos(a) * 14f, (float)Math.Sin(a) * 14f, 0f);
+            var m = new Model(props[i % props.Length]);
+            if (!m.IsInCdImage || !m.Request(2000)) continue;
+            var p = World.CreateProp(m, at, false, true);
+            m.MarkAsNoLongerNeeded();
+            if (p != null) made++;
+        }
+        GTA.UI.Notification.Show("Frankenstein: built " + (zone.Length > 0 ? zone.Split(':')[0] : "the zone") + " here (" + made + " pieces of GTA V)");
+    }
+
     void OnTick(object sender, EventArgs e)
     {
+        if (!lit && world.Length > 0 && Game.GameTime > 15000) { try { Light(); } catch (Exception) { } }
         if (playAs)
         {
             if (style == "superhero") Function.Call(Hash.SET_SUPER_JUMP_THIS_FRAME, Game.Player);
@@ -165,7 +207,11 @@ public class FrankensteinMenu : Script
 
     void OnKeyDown(object sender, KeyEventArgs e)
     {
-        if (e.KeyCode == Keys.F10 && e.Shift)
+        if (e.KeyCode == Keys.F10 && e.Control)
+        {
+            try { BuildZone(); } catch (Exception ex) { GTA.UI.Notification.Show("Frankenstein couldn't build here: " + ex.Message); }
+        }
+        else if (e.KeyCode == Keys.F10 && e.Shift)
         {
             try
             {
@@ -179,7 +225,7 @@ public class FrankensteinMenu : Script
         {
             GTA.UI.Notification.Show("Frankenstein · " + (merge.Length > 0 ? merge : "this merge") + (creative ? " · Creative" : "") +
                                      "~n~Shift+F10: " + (creative ? "back to your normal game" : "Creative") +
-                                     (style.Length > 0 ? "~n~F11: play as " + who : "") + "~n~F7: every weapon");
+                                     (style.Length > 0 ? "~n~F11: play as " + who : "") + (world.Length > 0 ? "~n~Ctrl+F10: build " + title + "'s zone here" : "") + "~n~F7: every weapon");
             page = 0;
             pageAt = Game.GameTime + 600;
         }

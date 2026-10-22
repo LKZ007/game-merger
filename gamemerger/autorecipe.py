@@ -2,7 +2,7 @@
 
 Hand-made recipes (Cyberpunk, Schedule I, GTA V) know each game in detail. For everything else this
 looks at the files to tell the engine apart, picks the mod loader that engine uses, and offers every
-other game you have as a style to bring in. The AI fills in what to look for, in the background.
+Extension game you have as a style to bring in. The AI fills in what to look for, in the background.
 Where an engine has no real mod support, the game can still be picked, and the merge says so."""
 
 import glob
@@ -187,7 +187,7 @@ def set_theme(rid, tid, description, slots):
 
 
 def style_themes(rid, base_name, styles, frameworks):
-    """One theme per other game: bring that game's style into the base game with the base game's mods."""
+    """One theme per Extension game: bring that game's style into the base game with the base game's mods."""
     saved = _styles()
     out = []
     for name in styles:
@@ -204,7 +204,7 @@ def style_themes(rid, base_name, styles, frameworks):
 
 
 def extend(recipe, styles):
-    """Built-in recipes keep their hand-made styles and get every other game as a style too."""
+    """Built-in recipes keep their hand-made styles and get every other game you have as an Extension too."""
     recipe.themes = [t for t in recipe.themes if not t.id.startswith("style-")]
     for t in recipe.themes:
         t.filled = True
@@ -220,7 +220,7 @@ def _file(rid):
 
 
 def build(game, styles, nexus_domain=None):
-    """A recipe for `game` (detect.InstalledGame) with one style per other game name in `styles`.
+    """A recipe for `game` (detect.InstalledGame) with one style per Extension game name in `styles`.
     Saved so merges made from it keep working after the game is uninstalled or renamed."""
     eng = detect(game.path)
     rid = "auto-" + slug(game.name) + "-" + hashlib.sha1(os.path.normcase(game.path).encode()).hexdigest()[:6]

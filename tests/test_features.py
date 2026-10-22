@@ -38,6 +38,7 @@ API = {
     "merge upgrades": ["merge_upgrade"],
     "settings": ["get_settings", "save_settings"],
     "moving covers (trailer loops in the box)": ["cover_clip", "merge_cover_clip"],
+    "Merge plan before Merge it": ["merge_plan", "merge_plan_of"],
 }
 
 # feature: something the page must still have (a function or element id in the web files)
@@ -60,13 +61,17 @@ WEB = {
     "animated preview slides with named guns, items, characters": ["pv-items", "pv-bg"],
     "each preview slide is one merged picture (mod screenshot or blended frame)": ["pv-real", "pv-mixin", "pv-grade", "Mod screenshot"],
     "Play as, with how close it gets": ["How close"],
+    "Merge plan, honest per engine": ["planHtml", "loadPlan", "Merge plan", "Not possible yet", "Built by Frankenstein"],
+    "merged loading screen while the Host starts": ["loadingScreen", "load-screen"],
+    "Host game and Extension game naming": ["Host game", "Extension game"],
 }
 
 # Frankenstein's own mods for each game, bundled with the app
 BUNDLED = ["mods/schedule1/Frankenstein.dll", "mods/cyberpunk2077/frankenstein_items/init.lua", "mods/gta5/Frankenstein.3.cs",
            "mods/gta5/FrankensteinStory.3.cs", "mods/gta5/FrankensteinMenu.3.cs"]
 LUA = ["Garage", "Tuning", "Races", "drawHud", "bridge", "Cheats", "Fly", "Cars", "storyTick", "Story",
-       "This merge", "drawMerge", "switchTo", "playAs"]
+       "This merge", "drawMerge", "switchTo", "playAs", "drawWorld", "buildZoneHere", "startEvent", "Speed trap",
+       "Drift zone", "Circuit", "worldTick"]
 
 
 class FeatureChecklist(unittest.TestCase):
@@ -99,8 +104,36 @@ class FeatureChecklist(unittest.TestCase):
         self.assertIn("switch.json".encode("utf-16-le"), dll, "Schedule I main menu panel")
         self.assertTrue(os.path.isfile(os.path.join(ROOT, "mods", "schedule1", "MainMenu.cs")))
         gta = read(PKG, "mods", "gta5", "FrankensteinMenu.3.cs")
-        for x in ("Keys.F10", "Keys.F11", "switch.json", "ChangeModel"):
+        for x in ("Keys.F10", "Keys.F11", "switch.json", "ChangeModel", "BuildZone", "SET_WEATHER_TYPE_NOW_PERSIST"):
             self.assertIn(x, gta)
+        for x in ("Hold the block", "block.json", "Build the block here"):
+            self.assertIn(x.encode("utf-16-le"), dll, "Schedule I World: " + x)
+        self.assertTrue(os.path.isfile(os.path.join(ROOT, "mods", "schedule1", "World.cs")))
+
+    def test_merge_plan_and_world_on_every_merge(self):
+        from gamemerger import mergeplan
+        from gamemerger.recipes import load_recipes
+        for r in load_recipes():
+            mergeplan.add_world(r)
+            for t in r.themes:
+                self.assertEqual(sum(mergeplan.is_world(x.name) for x in t.slots), 1)
+                p = mergeplan.build(r, t)
+                self.assertEqual([x["name"] for x in p["sections"]], list(mergeplan.SECTIONS))
+                for sec in p["sections"]:
+                    for row in sec["rows"]:
+                        self.assertIn(row["level"], mergeplan.LEVELS)
+                        self.assertTrue(row["how"])
+        cp = {r.id: r for r in load_recipes()}
+        for rid, tid in (("cyberpunk2077", "forza"), ("schedule1", "hoodwarfare")):
+            p = mergeplan.build(cp[rid], cp[rid].theme(tid))
+            self.assertTrue(p["showcase"])
+            terrain = [row for sec in p["sections"] for row in sec["rows"] if row["part"] == "Terrain and foliage"][0]
+            self.assertEqual(terrain["level"], "can't", "honest: terrain can't be reshaped there")
+
+    def test_host_and_extension_names(self):
+        js = read(PKG, "web", "app.js")
+        self.assertNotIn("Merging in", js, "the second game is the Extension game")
+        self.assertNotRegex(js, r"(?i)\bmain game\b")
 
     def test_play_as_on_every_merge(self):
         from gamemerger import playas

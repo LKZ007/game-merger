@@ -193,7 +193,7 @@ function renderLibrary() {
       <div class="banner-shade"></div>
       ${mergePairHtml(g, t)}
       <div class="banner-content">
-        <div class="eyebrow">Main game${g.engine ? " · " + esc(g.engine) : ""}</div>
+        <div class="eyebrow">Host game${g.engine ? " · " + esc(g.engine) : ""}</div>
         <h1>${esc(g.name)}</h1>
         <p>${esc(t ? t.description : "")}</p>
         ${g.warning ? `<div class="note small">${esc(g.warning)}</div>` : ""}
@@ -206,24 +206,24 @@ function renderLibrary() {
       </div></section>`;
   } else {
     banner = `<section class="banner"><div class="banner-content">
-        <div class="eyebrow">Welcome</div><h1>Pick a main game</h1>
-        <p>Any game can be the main game. Cyberpunk 2077, Schedule I and GTA V have hand-made recipes; for every other game Frankenstein works out its engine and mod loader. If yours isn't found below, add its install folder.</p>
+        <div class="eyebrow">Welcome</div><h1>Pick a Host game</h1>
+        <p>Any game can be the Host game. Cyberpunk 2077, Schedule I and GTA V have hand-made recipes; for every other game Frankenstein works out its engine and mod loader. If yours isn't found below, add its install folder.</p>
         <div class="row"><button class="btn primary" id="addFolder2">Add game folder</button></div>
       </div></section>`;
   }
   const partner = t?.source_key ?? null;
   const tiles = state.games.map((x) => `
       <button class="tile ${x.base ? "base" : ""} ${x.key === state.selected ? "selected picked" : ""} ${x.key === partner ? "partner picked" : ""}" data-key="${x.key}" data-cover="${x.key}" aria-pressed="${x.key === state.selected}">
-        ${x.key === state.selected ? `<span class="pick-badge host">Host</span>` : x.key === partner ? `<span class="pick-badge">Merging in</span>` : ""}
+        ${x.key === state.selected ? `<span class="pick-badge host">Host</span>` : x.key === partner ? `<span class="pick-badge">Extension</span>` : ""}
         ${caseHtml(x.name, state.covers[x.key])}
         ${x.key === state.selected ? "" : x.base ? `<span class="make-host" data-host="${x.key}">Make host</span>` : `<span class="make-host off" title="Frankenstein couldn't read this game's folder">Can't host</span>`}
         <div class="tile-name">${esc(x.name)}</div>
-        <div class="tile-sub">${esc(x.source)} · ${x.key === state.selected ? "main game" : x.moddable === "no" ? "no mod support" : x.moddable === "limited" ? "limited mods" : "moddable"}${x.creative ? ` · <span class="creative-tag" title="Has a creative / sandbox mode">creative</span>` : ""}</div>
+        <div class="tile-sub">${esc(x.source)} · ${x.key === state.selected ? "Host game" : x.moddable === "no" ? "no mod support" : x.moddable === "limited" ? "limited mods" : "moddable"}${x.creative ? ` · <span class="creative-tag" title="Has a creative / sandbox mode">creative</span>` : ""}</div>
       </button>`).join("");
   el.innerHTML = `${banner}
     <section class="shelf">
       <div class="shelf-head"><h2>Your games</h2>
-        <div class="row"><span class="muted small">Make host picks the main game · the glowing pair is this merge</span>
+        <div class="row"><span class="muted small">Make host picks the Host game · the glowing pair is this merge</span>
           <button class="btn ghost" id="rescan">Rescan</button><button class="btn" id="addFolder">Add game folder</button></div></div>
       ${state.games.length ? `<div class="grid">${tiles}</div>` : `<div class="empty">No games found yet.</div>`}
     </section>
@@ -268,7 +268,7 @@ function mergePairHtml(g, t) {
       <div class="pair-label"><span class="muted small">${label}</span><strong>${esc(name)}</strong></div></div>`;
   return `<aside class="merge-pair" aria-label="This merge">
     <div class="eyebrow">This merge</div>
-    <div class="pair-row">${card(g.name, g.key, "Host")}<div class="pair-fuse" aria-hidden="true">+</div>${card(other ? other.name : t.from_game || t.name, other ? other.key : null, "Merging in")}</div></aside>`;
+    <div class="pair-row">${card(g.name, g.key, "Host")}<div class="pair-fuse" aria-hidden="true">+</div>${card(other ? other.name : t.from_game || t.name, other ? other.key : null, "Extension")}</div></aside>`;
 }
 
 // ---------- merge setup ----------
@@ -334,7 +334,7 @@ function renderSetup() {
       return `<div class="file"><span class="name">${esc(basename(m.path))}</span><span class="info ${c && (c.error || !c.paths.length) ? "bad" : ""}">${esc(info)}</span>
         <button class="icon-btn" data-remove="${j}" aria-label="Remove ${esc(basename(m.path))}"><svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>`;
     }).join("");
-    return `<div class="slot ${sl.hero ? "hero" : ""}"><div class="slot-head"><span class="slot-name">${sl.hero ? `<span class="tag live" title="The other game's most iconic thing: brought over first">★ Hero</span> ` : ""}${esc(sl.name)}</span>
+    return `<div class="slot ${sl.hero ? "hero" : ""}"><div class="slot-head"><span class="slot-name">${sl.hero ? `<span class="tag live" title="The Extension game's most iconic thing: brought over first">★ Hero</span> ` : ""}${esc(sl.name)}</span>
         ${files ? `<span class="tag">Your pick</span>` : `<span class="tag live" title="Frankenstein finds and installs the best mod for this when you press Merge it">Auto</span>`}
         <span class="muted small">or pick yourself:</span>
         <button class="btn ghost" data-find="${i}">Find mods</button><button class="btn ghost" data-add="${i}">Add file</button></div>${files}</div>`;
@@ -358,7 +358,10 @@ function renderSetup() {
     <div class="card"><div class="section-title"><span class="step">1</span><h2>What it brings over</h2></div>
       <p class="muted" style="margin-top:-6px">You don't need to pick anything. When you press <strong>Merge it</strong>, Frankenstein searches ${esc((s.options.sources || ["Nexus Mods"]).join(", "))} and installs the best mod for each part below by itself, plus its own built-in mod where it has one. Afterwards "What it adds" shows what it got and anything it couldn't get on its own. Only want a specific mod? Use Find mods or Add file for that part.</p>
       ${slots}${clashes}</div>
-    <div class="card"><div class="section-title"><span class="step">2</span><h2>Merge it</h2></div>
+    <div class="card" id="planCard"><div class="section-title"><span class="step">2</span><h2>Merge plan</h2></div>
+      <p class="muted" style="margin-top:-6px">What ${esc(g.name)} becomes once ${esc((t.from_game || t.name).split(" /")[0])} is coded onto it, on ${esc(g.name)}'s own engine. Each line says how it's done.</p>
+      <div id="planBody" class="muted">Writing the plan…</div></div>
+    <div class="card"><div class="section-title"><span class="step">3</span><h2>Merge it</h2></div>
       <p class="muted" style="margin-top:-6px">Everything else is handled: mod loaders download automatically, the merge goes into its own safe copy, and it gets its own save games.</p>
       <div class="row" style="justify-content:flex-end"><button class="btn primary big" id="go">Merge it</button></div></div>
     <details class="card advanced" ${s.advancedOpen ? "open" : ""}>
@@ -376,6 +379,8 @@ function renderSetup() {
   </div>`;
 
   const v = $("#view-setup");
+  if (s.planHtml) { $("#planBody").innerHTML = s.planHtml; $("#planBody").classList.remove("muted"); }
+  else loadPlan(() => call("merge_plan", g.key, t.id), $("#planBody"), 0, (h) => (s.planHtml = h));
   $("#back").onclick = () => show("library");
   v.querySelector(".advanced").ontoggle = (e) => (s.advancedOpen = e.target.open);
   v.querySelectorAll("[data-fw]").forEach((c) => (c.onchange = () => { c.checked ? s.frameworks.add(c.dataset.fw) : s.frameworks.delete(c.dataset.fw); }));
@@ -790,7 +795,26 @@ async function followJob(id, title) {
   }
 }
 
-// what a merge brings over from the other game, and what it couldn't
+// ---------- Merge plan: the Host converted into the Extension, honest per engine ----------
+const PLAN_LEVEL = { built: ["Built by Frankenstein", "built"], mod: ["Mod", "mod"], "stand-in": ["Stand-in", "stand"], "can't": ["Not possible yet", "cant"] };
+function planHtml(p) {
+  return `<p class="plan-sum">${esc(p.summary)}${p.by === "ai" ? ` <span class="muted small">(worded by AI)</span>` : ""}</p>
+    ${p.sections.map((sec) => `<div class="plan-sec"><h3>${esc(sec.name)}</h3>${sec.rows.map((r) => `<div class="plan-row">
+      <span class="plan-lv ${PLAN_LEVEL[r.level][1]}">${PLAN_LEVEL[r.level][0]}</span>
+      <div><strong>${esc(r.part)}:</strong> ${esc(r.plan)}<div class="muted small">${esc(r.how)}</div></div></div>`).join("")}</div>`).join("")}`;
+}
+async function loadPlan(get, el, tries = 0, keep = null) {
+  try {
+    const r = await get();
+    if (!el.isConnected) return;
+    el.classList.remove("muted");
+    el.innerHTML = planHtml(r.plan) + (r.ready ? "" : `<p class="muted small">The AI is writing a fuller plan; it shows up here in a moment.</p>`);
+    if (r.ready && keep) keep(el.innerHTML);
+    if (!r.ready && tries < 6) setTimeout(() => el.isConnected && loadPlan(get, el, tries + 1, keep), 5000);
+  } catch (e) { el.textContent = errText(e); }
+}
+
+// what a merge brings over from the Extension game, and what it couldn't
 function addsHtml(a) {
   const heroFirst = [...a.adds].sort((x, y) => (y.hero ? 1 : 0) - (x.hero ? 1 : 0));
   const real = heroFirst.filter((x) => x.ok && !x.standin), own = heroFirst.filter((x) => x.ok && x.standin), miss = heroFirst.filter((x) => !x.ok);
@@ -805,7 +829,7 @@ function addsHtml(a) {
     ${(a.arsenal || []).length ? `<p class="muted">${esc(a.source)}'s guns, in this game:</p><table class="small" style="width:100%">${a.arsenal.map((g) => `<tr><td><strong>${esc(g.gun)}</strong></td><td>${esc(g.as)}</td><td><span class="tag">${g.match === "close" ? "close match" : "rough stand-in"}</span></td></tr>`).join("")}</table><p class="muted small">They're in your starter kit (renamed to ${esc(a.source)}'s names), in the item menu, and for sale at Handy Hank's hardware store. Not checked in game yet.</p>` : ""}
     ${miss.length ? `<p class="muted">Still to fill:</p><ul>${miss.map((x) => `<li><strong>${esc(x.slot)}</strong>: ${esc(x.why)}.${picks(x)}</li>`).join("")}</ul>` : ""}
     ${!a.adds.length && !a.builtin.length ? `<p class="muted">Nothing added yet. Press Auto-fill on the merge.</p>` : ""}
-    <p class="muted small">Only mods made for the main game are installed. Nothing is copied out of the other game.</p></div>`;
+    <p class="muted small">Only mods made for the Host game are installed. Nothing is copied out of the Extension game.</p></div>`;
 }
 
 // links to web pages anywhere in the app open in the normal browser
@@ -831,15 +855,16 @@ async function loadMerges() {
       <div class="merge-actions">
         <button class="btn primary play-big" data-act="play">▶ Play</button>
         <div class="merge-row">
-          <button class="btn" data-act="adds" title="What this merge brings over from the other game">What it adds${m.adds ? ` (${m.adds})` : ""}</button>
+          <button class="btn" data-act="adds" title="What this merge brings over from the Extension game">What it adds${m.adds ? ` (${m.adds})` : ""}</button>
           <button class="btn" data-act="share">Share</button>
           ${m.ingame ? "" : `<button class="btn creative" data-act="creative" title="Sandbox: every item, spawners, free camera. Own saves, offline.">✦ Creative</button>`}
           <div class="more"><button class="btn ghost" data-more aria-haspopup="true" aria-expanded="false">⋯ More</button>
             <div class="more-menu" role="menu" hidden>
               ${m.ingame ? `<button data-act="creative" title="Also in the game itself">✦ Creative (own saves)</button>` : ""}
+              <button data-act="plan">Merge plan</button>
               <button data-act="rundown">Rundown</button>
               <button data-act="spawner" title="Send items and cars into the game while you play (works from a second screen)">Spawner</button>
-              <button data-act="autofill" title="Frankenstein finds and installs the mods that bring the other game's features over">Auto-fill</button>
+              <button data-act="autofill" title="Frankenstein finds and installs the mods that bring the Extension game's features over">Auto-fill</button>
               <button data-act="mods">Mods &amp; profiles</button>
               <button data-act="add">Add mods</button>
               <button data-act="fix">Fix crash</button>
@@ -880,6 +905,22 @@ function closeMore() {
 }
 document.addEventListener("click", (e) => { if (!(e.target.closest && e.target.closest(".more"))) closeMore(); });
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeMore(); });
+
+// Frankenstein's merged loading screen: both games fused, while the Host game starts
+async function loadingScreen(m, creative) {
+  let art;
+  try { art = await call("fusion_art", m.id); } catch (e) { return; }
+  const el = document.createElement("div");
+  el.className = "load-screen";
+  el.innerHTML = `<div class="ls-art" style="background-image:url('${esc(art.merged || art.base || "")}')"></div><div class="pv-grade"></div>
+    <div class="ls-text"><div class="ls-kicker">${esc(art.base_name)} × ${esc(art.source_name)}${creative ? " · Creative" : ""}</div>
+    <div class="ls-title">${esc(art.name)}</div>${art.tagline ? `<div class="ls-tag">${esc(art.tagline)}</div>` : ""}
+    <div class="ls-bar"><div></div></div><div class="ls-hint">Starting ${esc(art.base_name)} with ${esc(art.source_name)} coded onto it… click to close</div></div>`;
+  document.body.appendChild(el);
+  const close = () => { el.classList.add("out"); setTimeout(() => el.remove(), 600); };
+  el.onclick = close;
+  setTimeout(close, 9000);
+}
 
 // ---------- Spawner: items and cars straight into the running game ----------
 const CAT_HUE = (c) => [...(c || "x")].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) % 360, 7);
@@ -1215,12 +1256,18 @@ async function mergeAction(id, act) {
       const creative = act === "creative";
       if (creative && !(await creativeSetup(m))) return;
       toast(creative ? "Starting creative mode…" : "Starting " + m.name + "…");
+      loadingScreen(m, creative);
       const r = await call("play", id, creative);
       if (r && r.note) toast(r.note, 6000); else watchPlaying();
       loadMerges();
       showRundown(m, creative, true);
     }
     else if (act === "rundown") showRundown(m, false, false);
+    else if (act === "plan") {
+      const done = modal("Merge plan: " + m.name, `<div id="planM" class="muted">Writing the plan…</div>`);
+      loadPlan(() => call("merge_plan_of", id), $("#planM"));
+      await done;
+    }
     else if (act === "adds") await modal("What " + m.name + " adds", addsHtml(await call("merge_adds", id)));
     else if (act === "autofill") {
       const r = await followJob(await call("merge_autofill", id), "Filling in " + m.name);
@@ -1413,14 +1460,14 @@ async function loadBackups() {
 
 // ---------- how fun each pairing would be (a colour on every game) ----------
 const FUN_WORDS = { green: "Great pairing", yellow: "OK pairing", red: "Doable, not as great" };
-const ALONE_WORDS = { green: "Fully moddable as a main game", yellow: "Some mod support", red: "No real mod support" };
-const SELF_WORDS = { green: "Main game, fully moddable", yellow: "Main game, limited mod support", red: "Main game, no real mod support" };
+const ALONE_WORDS = { green: "Fully moddable as a Host game", yellow: "Some mod support", red: "No real mod support" };
+const SELF_WORDS = { green: "Host game, fully moddable", yellow: "Host game, limited mod support", red: "Host game, no real mod support" };
 
 // Ratings are made in the background; this keeps asking until every game has one.
 async function loadFun() {
   const base = game(state.selected);
   const all = [...state.games.map((g) => g.name), ...(state.owned?.games || []).map((g) => g.name)];
-  const key = base ? base.name : "";  // no main game picked yet: each game's own colour
+  const key = base ? base.name : "";  // no Host game picked yet: each game's own colour
   if (state.fun?.base !== key) state.fun = { base: key, scores: {}, self: null, pending: true };
   const fun = state.fun;
   applyFun();
@@ -1498,14 +1545,14 @@ async function previewMerge(key, themeId) {
     const clip = (c) => `<figure class="pv-clip">
         ${c.url ? `<video src="${esc(c.url)}" poster="${esc(c.poster)}" muted loop autoplay playsinline preload="metadata" controls></video>`
           : `<a href="#" data-url="${esc(c.page)}"><img src="${esc(c.poster)}" alt=""></a>`}
-        <figcaption>${c.label === g.name ? "Your game" : "Bringing in"}: <strong>${esc(c.label)}</strong></figcaption></figure>`;
+        <figcaption>${c.label === g.name ? "Host game" : "Extension game"}: <strong>${esc(c.label)}</strong></figcaption></figure>`;
     const other = t.source_key != null ? game(t.source_key) : null;
     const left = p.base_art || state.covers[key] || genCover(g.name);
     const right = p.source_art || (other && state.covers[other.key]) || genCover(t.from_game);
     // slide 0: both games fused into one picture; then one slide per thing you can do in the merge
     // Every slide is ONE picture of the merged game, never two side by side:
-    // - a screenshot from a mod for the main game (the two games really merged), shown as a moving gallery, or
-    // - a single blended frame: the main game's trailer as the world, the other game's trailer melted into its
+    // - a screenshot from a mod for the Host game (the two games really merged), shown as a moving gallery, or
+    // - a single blended frame: the Host game's trailer as the world, the Extension game's trailer melted into its
     //   middle with soft edges, both under one colour grade and light sweep.
     const src = t.from_game.split(" /")[0];
     const hero = (p.slides || []).find((x) => x.real && x.tag === "★ Hero") || (p.slides || []).find((x) => x.real);
@@ -1573,7 +1620,7 @@ async function loadOwned(refresh = false, quiet = false) {
   try { r = await call("library_owned", refresh); } catch (e) { if (!quiet) toast(errText(e)); return; }
   state.owned = r;
   if (!quiet) for (const err of r.errors || []) toast(err, 7000);
-  if (r.styles_changed) {  // owned games are styles for every main game too
+  if (r.styles_changed) {  // owned games are styles for every Host game too
     try { state.games = await call("library"); } catch (e) { /* keep the old list */ }
     if (state.view === "library") renderLibrary();
   }
@@ -1699,7 +1746,7 @@ async function loadSettings() {
         <div class="row" style="flex-wrap:nowrap"><input class="input" type="password" id="cfKey" placeholder="${s.has_curseforge ? "Paste a new key to replace it" : "Paste your CurseForge API key"}" autocomplete="off"><button class="btn primary" id="saveCf">Save</button>${s.has_curseforge ? `<button class="btn ghost danger" id="clearCf">Remove</button>` : ""}</div></div>
     </div>
     <div class="card"><h2>Library</h2>
-      <p class="muted">Every game gets a colour for how fun it would be to merge into your main game: green is a great pairing, yellow is OK, red is doable but not as great. Hover a game to see why.</p>
+      <p class="muted">Every game gets a colour for how fun it would be to merge into your Host game: green is a great pairing, yellow is OK, red is doable but not as great. Hover a game to see why.</p>
       <div class="field"><label for="funStyle">Show it as</label>
         <select class="input" id="funStyle">${[["dot", "A dot in the corner"], ["halo", "A glow around the box"], ["off", "Off"]].map(([v, n]) => `<option value="${v}" ${(s.fun_style || "dot") === v ? "selected" : ""}>${n}</option>`).join("")}</select></div>
     </div>

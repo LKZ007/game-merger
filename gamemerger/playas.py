@@ -1,8 +1,8 @@
-"""Play as: the other game's character inside the main game.
+"""Play as: the Extension game's character inside the Host game.
 
-Nothing is copied out of the other game. The character comes from a character or model replacer mod made for
-the main game where one can be downloaded, and from Frankenstein's own mod where it has one for that game:
-it picks the main game's closest character and gives them the other game's way of moving. Failing both, the
+Nothing is copied out of the Extension game. The character comes from a character or model replacer mod made for
+the Host game where one can be downloaded, and from Frankenstein's own mod where it has one for that game:
+it picks the Host game's closest character and gives them the Extension game's way of moving. Failing both, the
 part is a stand-in (the name, plus a quest in the story) with one-click picks for character mods only a person
 can download. Each game says honestly how close it gets.
 """
@@ -10,7 +10,7 @@ import re
 
 from . import recipes
 
-# the other game's kind of character: (match on its name, style, who you play as, how they move)
+# the Extension game's kind of character: (match on its name, style, who you play as, how they move)
 STYLES = [
     (r"gang beasts|human fall flat|totally accurate|party animals|fall guys|wobbly",
      "wobbly", "a Gang Beasts style brawler", "wobbly walk, flops over when hit, grabs and throws"),
@@ -29,11 +29,11 @@ STYLES = [
 # games built around their characters: there, Play as is the hero part of the merge
 CHARACTER_FIRST = {"wobbly", "stick", "superhero", "knight"}
 
-# how close each main game gets, and what Frankenstein's own mod does there
+# how close each Host game gets, and what Frankenstein's own mod does there
 HOSTS = {
     "gta5": {"how": "Frankenstein's GTA V script swaps you into the closest GTA V character (%s) and gives them the "
-                    "other game's moves: %s. F11 switches back to your own character (story missions want them).",
-             "close": "real swap: a GTA V character with the other game's moves, not its exact model"},
+                    "Extension game's moves: %s. F11 switches back to your own character (story missions want them).",
+             "close": "real swap: a GTA V character with the Extension game's moves, not its exact model"},
     "cyberpunk2077": {"how": "Frankenstein's sandbox menu (press ~, This merge tab): plays as %s with the moves it can "
                              "give V: %s. V's body stays V's unless a character mod is added.",
                       "close": "stand-in: V keeps their body, the moves and name change"},
@@ -47,16 +47,16 @@ GTA_LOOK = {"wobbly": "Pogo the Monkey", "stick": "a street runner", "superhero"
 
 
 def style(source_name):
-    """(style, who, moves) for the other game, or a plain one named after it."""
+    """(style, who, moves) for the Extension game, or a plain one named after it."""
     name = (source_name or "").lower()
     for pattern, key, who, moves in STYLES:
         if re.search(pattern, name):
             return key, who, moves
-    return "", "%s's hero" % (source_name or "the other game"), "the moves it can give"
+    return "", "%s's hero" % (source_name or "the Extension game"), "the moves it can give"
 
 
 def slot_name(source_name):
-    return "Play as %s's character" % (source_name or "the other game")
+    return "Play as %s's character" % (source_name or "the Extension game")
 
 
 def source_of(name):
@@ -65,7 +65,7 @@ def source_of(name):
 
 
 def must_match(name):
-    """Only character mods that name the other game (or its style) count for Play as, never a random hit."""
+    """Only character mods that name the Extension game (or its style) count for Play as, never a random hit."""
     src = source_of(name)
     words = [w for w in re.findall(r"[a-z0-9]+", src.lower()) if len(w) > 2 and w not in ("the", "and", "game")]
     key = style(src)[0]
@@ -114,7 +114,7 @@ def slot(recipe, theme):
 
 
 def add_to(recipe):
-    """Give every style of this game a Play as part. When the other game is all about its characters it becomes the
+    """Give every style of this game a Play as part. When the Extension game is all about its characters it becomes the
     hero part (first, and the only hero)."""
     for t in recipe.themes:
         if any(is_play_as(s.name) for s in t.slots):

@@ -1,4 +1,4 @@
-"""Minecraft: Java Edition as a main game.
+"""Minecraft: Java Edition as a Host game.
 
 A Minecraft merge is its own instance: a folder with its own mods, config and worlds, plus a profile
 in the Minecraft Launcher that points at it and uses the mod loader the merge picked. Your normal
