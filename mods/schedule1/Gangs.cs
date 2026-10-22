@@ -61,6 +61,23 @@ namespace Frankenstein
 
         public static bool On => _gangs.Count > 0;
 
+        // ---------- for the gangs' own people (Crew.cs) ----------
+        public static string MemberOf => _member;
+        public static int HeatOf(string id) { int h; return _heat.TryGetValue(id, out h) ? h : 0; }
+        public static bool HqOf(string id, out Vector3 at) => _hq.TryGetValue(id, out at);
+        public static string RegionOf(string id) => G(id)?.Region ?? "";
+        public static string NameOf(string id) => G(id)?.Name ?? id;
+        public static string RivalOf(string id) => G(id)?.Rival ?? "";
+        public static string WeaponOf(string id) => G(id)?.Weapon ?? "";
+        public static Color ColorOf(string id) => G(id)?.Color ?? Color.gray;
+        public static bool Runs(string id) => G(id) != null && !_turf.Contains(G(id).Region);
+        public static void Reward(int rep, float cash, string why)
+        {
+            if (cash > 0) Cash(cash);
+            if (rep > 0 && _member.Length > 0) Rep(rep, "");
+            Say(why);
+        }
+
         public static void Read(object list)
         {
             foreach (var o in J.L(new Dictionary<string, object> { { "g", list } }, "g"))

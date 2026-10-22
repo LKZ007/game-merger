@@ -56,7 +56,7 @@ BUILTIN = {
                   "catalog": "UserData/Frankenstein/world.json",
                   "what": "Item menu: press F6 (or Back + Y) in game for every item, mods' items included.",
                   "ingame": "On the main menu: Creative under New Game (its own saves). While you play: F6 (or Back + Y) for "
-                            "every item, F8 for Frankenstein's menu, F9 for the gangs (Hood Warfare merges)."},
+                            "every item, F8 for Frankenstein's menu, F9 for the gangs and F10 for who's who on the streets (Hood Warfare merges), T to throw a grenade."},
     "cyberpunk2077": {"label": "Frankenstein sandbox menu", "dest": "bin/x64/plugins/cyber_engine_tweaks/mods",
                       "settings": "bin/x64/plugins/cyber_engine_tweaks/mods/frankenstein_items/settings.json",
                       "bridge": "bin/x64/plugins/cyber_engine_tweaks/mods/frankenstein_items/commands.json",
@@ -181,6 +181,7 @@ LOADING_TIPS = {
                     "Police shoot back here. Lose them before you go home.",
                     "F9: the gangs. Join one and climb the ranks, or start your own and take their districts.",
                     "Rival dealers work their gang's corners. Knock one out and press G to rob them.",
+                    "F10: who's who. Every gang's boss, lieutenant, enforcer and dealer, and what they're doing right now.",
                     "Creative: press F6 for every item, every gun included."],
 }
 

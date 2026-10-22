@@ -1,11 +1,21 @@
-## Frankenstein 3.30.0
+## Frankenstein 3.31.0
 
-- **Merges take up far less space.** After you close a merged game, Frankenstein packs it away:
-  - It keeps only the files the merge changed or added (mods, their settings, anything the game wrote into its folder) in one zip.
-  - It zips the merge's saves (normal and Creative).
-  - Then it deletes the copy.
-  - Your original game is only ever read, and nothing is deleted until the zip has been checked.
-- **Play rebuilds it first.** Frankenstein makes a fresh full copy of your own installed game, puts the merge's files and saves back, then starts it. That takes about as long as copying the game: seconds for small games like Schedule I, several minutes for big ones like Cyberpunk. The card says how long, and after the first time it's the measured time.
-- **On each merge card:** a 📦 Packed tag with the space saved, plus **Pack away to save space** and **Unpack now** under More. Adding mods, fixing crashes and the other buttons unpack first.
-- **Settings > Save space** turns automatic packing off.
-- If a Steam update changes the game, the rebuilt copy uses the updated game, with the merge's own files on top. If you uninstall the original game, a packed merge can't be rebuilt until you reinstall it.
+- **Schedule I: Creative is now an entry in the game's own main menu,** between New Game and Settings, in the same font and style as the rest of the list. In Creative it reads "Back to normal game". The 3.27 version never appeared on your PC: copying the New Game row worked, but hooking up its click failed on this build of the game, and one failure made it give up. Now:
+  - The copy has every button and script taken off, so it can never start a new game.
+  - Frankenstein watches for the click itself.
+  - It keeps trying for 30 seconds instead of stopping at the first error.
+  - Every reason it can't add the entry is written to the MelonLoader log.
+- **The Frankenstein panel no longer covers the Schedule I title.** If the menu entry can't be added, a small panel shows in the top right corner instead.
+- **Schedule I: the gangs have their own people now, 24 of them, who are always in the world.** They're real characters of the game (not the cartel's goons, so the cartel doesn't need to be active). Each gang has a boss, a lieutenant, an enforcer and a dealer or gun runner, all named, in the gang's colour and carrying its gun. For example, the Crips have Darnell "Big Loc" Hayes, the Mafia have Vincent "Don Vinnie" Moretti and the Yakuza have Kenji "Oyabun" Moriyama.
+  - **What they do:**
+    - Bosses hold their HQ.
+    - Lieutenants and enforcers patrol their district.
+    - Dealers and gun runners walk up to the town's people and do business, and the gang's money grows.
+    - Rival crews fight when they meet.
+    - Every few minutes one gang raids its rival's turf.
+    - A crew you've robbed comes for you on its turf.
+    - Anyone knocked down is back on the street a few minutes later.
+  - **A story for every gang:** five parts, told by text from its lieutenant and boss. They introduce themselves when you walk onto their turf, send you to rob their rival's dealer, then send you after the rival's enforcer. Each part pays cash and rep.
+  - **F10 shows who's who:** every gang, its people, what each one is doing right now, the gang's money and how far its story has got.
+  - Patrol routes start at each district's own buildings and grow from where you walk there.
+- Not tested in the game yet.

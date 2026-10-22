@@ -203,6 +203,9 @@ class FeatureChecklist(unittest.TestCase):
         menu = read(ROOT, "mods", "schedule1", "MainMenu.cs")
         self.assertIn("Inject", menu)
         self.assertIn("new game", menu)
+        self.assertNotIn("ButtonClick", menu, "the copied row never keeps a button that could start a new game")
+        self.assertIn("GetMouseButtonDown", menu)  # Frankenstein sees the click itself, on both builds
+        self.assertIn("Screen.width - w - 24", menu)  # the fallback panel sits in the corner, off the title
         self.assertNotIn("FindObjectsOfType<", read(ROOT, "mods", "schedule1", "World.cs"))  # both builds of the game
         dll = open(os.path.join(PKG, "mods", "schedule1", "Frankenstein.dll"), "rb").read()
         for word in ("HOOD TIP", "Equippable_RangedWeapon", "Creative"):
@@ -249,6 +252,16 @@ class FeatureChecklist(unittest.TestCase):
             self.assertTrue(0.85 <= g.get("size", 1) <= 1.15)
         for gun in ("ak47", "smg", "sniper", "minigun", "rpg", "pumpshotgun", "m1911", "revolver"):
             self.assertTrue(any(g["match"] == gun for g in REPLICAS["hoodwarfare"]), gun)
+
+    def test_331_living_gangs_and_menu_creative(self):
+        dll = open(os.path.join(PKG, "mods", "schedule1", "Frankenstein.dll"), "rb").read()
+        for word in ("frankenstein_", "Avatar/Layers/Top/T-Shirt", "patrolling ", "THE STREETS", "_gameBuilding", "gave up after 30 seconds"):
+            self.assertIn(word.encode("utf-16-le"), dll, word)
+        people = read(ROOT, "mods", "schedule1", "CrewPeople.cs")
+        for gang in ("crips", "bloods", "london", "yakuza", "mafia", "eastlondon"):
+            for role in ("boss", "lieutenant", "enforcer"):
+                self.assertIn("class Crew_%s_%s" % (gang, role), people)
+        self.assertIn("SetAndAttackTarget", read(ROOT, "mods", "schedule1", "Crew.cs"))  # real fights, not the cartel's
 
 if __name__ == "__main__":
     unittest.main()

@@ -50,6 +50,7 @@ namespace Frankenstein
             if (_inTown) _hintUntil = Time.unscaledTime + 25f;
             Carry.Scene(_inTown);
             Gangs.Scene(_inTown);
+            Crew.Scene(_inTown);
             Creative.Forget();
             if (!_inTown || Style.Length == 0) return;
             _cardUntil = Time.unscaledTime + 6f;  // the merged title card
