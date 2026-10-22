@@ -13,11 +13,10 @@ LIST = {
     "imported": ("Gift received", "Open a merge a friend shared."),
     "party_host": ("Party starter", "Host a Play together party."),
     "party_join": ("Plus one", "Join a friend's party."),
-    "crash_fixed": ("Doctor Franklin", "Let Franklin fix a crash."),
+    "crash_fixed": ("Doctor Frankenstein", "Fix a crash with one click."),
     "chaos": ("Agent of chaos", "Switch a merge to a chaos mod profile."),
     "photographer": ("Photographer", "Take 10 screenshots with Ctrl+Alt+S."),
     "collector": ("Collector", "Connect two or more game launchers."),
-    "talker": ("Hey Franklin", "Talk to Franklin with push-to-talk."),
     "quest_done": ("Questgiver", "Finish a questline."),
     "controller": ("Couch mode", "Drive Frankenstein with a controller."),
 }

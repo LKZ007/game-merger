@@ -1,6 +1,6 @@
 "use strict";
 // Controller support (Xbox, PlayStation and most others): D-pad or left stick moves around,
-// A picks, B goes back, LB / RB switch pages, Start opens Franklin, hold Y to talk to him.
+// A picks, B goes back, LB / RB switch pages.
 (() => {
   const VIEWS = () => [...document.querySelectorAll(".nav-item[data-view]")].map((b) => b.dataset.view);
   const FOCUSABLE = "button:not([disabled]), a[href], input:not([disabled]):not([type=hidden]), select:not([disabled]), textarea, [tabindex]:not([tabindex='-1'])";
@@ -56,7 +56,6 @@
       return cancel ? cancel.click() : null;
     }
     if (state.view === "setup") return show("library");
-    if (!document.querySelector(".app").classList.contains("no-franklin") && $("#franklin").contains(document.activeElement)) return $("#franklinClose").click();
   }
 
   function page(step) {
@@ -67,7 +66,6 @@
   }
 
   function pressed(i, pad) { return pad.buttons[i] && pad.buttons[i].pressed && !prev[i]; }
-  function released(i, pad) { return pad.buttons[i] && !pad.buttons[i].pressed && prev[i]; }
 
   function tick() {
     const pad = [...(navigator.getGamepads ? navigator.getGamepads() : [])].find((p) => p && p.connected);
@@ -87,15 +85,12 @@
       if (pressed(1, pad)) back();
       if (pressed(4, pad)) page(-1);
       if (pressed(5, pad)) page(1);
-      if (pressed(9, pad)) $("#franklinToggle").click();
-      if (pressed(3, pad)) ptt.down();
-      if (released(3, pad)) ptt.up();
       if (pressed(8, pad)) key("F11");
       prev = pad.buttons.map((b) => b.pressed);
     }
     requestAnimationFrame(tick);
   }
-  window.addEventListener("gamepadconnected", () => toast("Controller connected. D-pad moves, A picks, B goes back, LB/RB switch pages, hold Y to talk to Franklin."));
+  window.addEventListener("gamepadconnected", () => toast("Controller connected. D-pad moves, A picks, B goes back, LB/RB switch pages."));
   document.addEventListener("mousemove", () => document.body.classList.remove("pad"));
   requestAnimationFrame(tick);
 })();

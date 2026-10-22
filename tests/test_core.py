@@ -194,8 +194,8 @@ class AssistantAndCheckTests(unittest.TestCase):
         rels, unknown = installer.preview(z, RECIPES["cyberpunk2077"].layout)
         self.assertEqual(rels, ["archive/pc/mod/car.archive"])
 
-    def test_logs_and_context_for_franklin(self):
-        from gamemerger import franklin
+    def test_logs_and_context_for_the_ai(self):
+        from gamemerger import ai as franklin
         d = tempfile.mkdtemp(dir=TMP)
         write(os.path.join(d, "MelonLoader", "Latest.log"), "\n".join("line %d" % i for i in range(400)))
         logs = franklin.read_logs(d, RECIPES["schedule1"].logs)
@@ -209,10 +209,10 @@ class AssistantAndCheckTests(unittest.TestCase):
         self.assertIn("guns.zip", ctx)
         self.assertIn("line 399", ctx)
 
-    def test_franklin_needs_a_key(self):
-        from gamemerger import franklin
-        with self.assertRaises(franklin.FranklinError):
-            franklin.Franklin("")
+    def test_ai_needs_a_key(self):
+        from gamemerger import ai
+        with self.assertRaises(ai.AIError):
+            ai.AI("")
 
 
 class SavesTests(unittest.TestCase):
@@ -320,11 +320,11 @@ class ProfileTests(unittest.TestCase):
 
 class CrashRepairTests(unittest.TestCase):
     def test_diagnose_picks_a_listed_mod_only(self):
-        from gamemerger import franklin
-        bot = franklin.Franklin.__new__(franklin.Franklin)
-        bot.stream_reply = lambda h: iter(['Here: {"culprit": "Car pack", "why": "Fuck, the car pack broke the tweaks."}'])
+        from gamemerger import ai
+        bot = ai.AI.__new__(ai.AI)
+        bot.ask = lambda text, *a: 'Here: {"culprit": "Car pack", "why": "The car pack broke the tweaks."}'
         self.assertEqual(bot.diagnose("logs", ["Car pack", "HUD"])["culprit"], "Car pack")
-        bot.stream_reply = lambda h: iter(['{"culprit": "Something else", "why": "?"}'])
+        bot.ask = lambda text, *a: '{"culprit": "Something else", "why": "?"}'
         self.assertIsNone(bot.diagnose("logs", ["Car pack"])["culprit"])
 
 
@@ -447,28 +447,104 @@ class AccountsTests(unittest.TestCase):
 
     def test_admin_keeps_settings_and_accounts_are_separate(self):
         from gamemerger import paths, profiles
-        paths.save_settings({"claude_api_key": "k", "franklin_memory": ["likes cars"], "explicit": True})
+        paths.save_settings({"claude_api_key": "k", "achievements": {"first_merge": 1}})
         data = profiles.ensure_admin(paths.load_settings(), "levy")
         admin = data["profiles"][0]
         self.assertTrue(admin["admin"])
         mine = profiles.Settings(paths.load_settings(), admin["id"])
-        self.assertEqual((mine["claude_api_key"], mine["franklin_memory"]), ("k", ["likes cars"]))
-        kid = profiles.add("Sam", "1234", {"explicit": False})
+        self.assertEqual((mine["claude_api_key"], mine["achievements"]), ("k", {"first_merge": 1}))
+        kid = profiles.add("Sam", "1234", {"online": False})
         theirs = profiles.Settings(paths.load_settings(), kid["id"])
         self.assertEqual(theirs.get("claude_api_key"), "k")  # shared
-        self.assertIsNone(theirs.get("franklin_memory"))  # personal
-        theirs["franklin_memory"] = ["likes farming"]
+        self.assertIsNone(theirs.get("achievements"))  # personal
+        theirs["achievements"] = {"shared": 2}
         theirs["mode"] = "copy"
         paths.save_settings(theirs)
-        self.assertEqual(profiles.Settings(paths.load_settings(), admin["id"])["franklin_memory"], ["likes cars"])
+        self.assertEqual(profiles.Settings(paths.load_settings(), admin["id"])["achievements"], {"first_merge": 1})
         self.assertEqual(paths.load_settings()["mode"], "copy")
         self.assertTrue(profiles.check_pin(profiles.find(kid["id"]), "1234"))
         self.assertFalse(profiles.check_pin(profiles.find(kid["id"]), "0000"))
-        self.assertFalse(profiles.public(profiles.find(kid["id"]))["perms"]["explicit"])
+        self.assertFalse(profiles.public(profiles.find(kid["id"]))["perms"]["online"])
         with self.assertRaises(profiles.ProfileError):
             profiles.remove(admin["id"])
         with self.assertRaises(profiles.ProfileError):
             profiles.add("Bob", "12")
+
+
+
+class AnyGameTests(unittest.TestCase):
+    def setUp(self):
+        os.environ["GAMEMERGER_HOME"] = tempfile.mkdtemp()
+
+    def test_engines_are_told_apart(self):
+        from gamemerger import autorecipe
+        d = tempfile.mkdtemp(dir=TMP)
+        mono = os.path.join(d, "Valheim")
+        write(os.path.join(mono, "valheim.exe"), "x" * 100)
+        write(os.path.join(mono, "UnityCrashHandler64.exe"), "x" * 500)
+        write(os.path.join(mono, "UnityPlayer.dll"))
+        write(os.path.join(mono, "valheim_Data", "app.info"), "IronGate\nValheim")
+        eng = autorecipe.detect(mono)
+        self.assertEqual((eng["engine"], eng["frameworks"][0]["id"]), ("unity-mono", "bepinex"))
+        self.assertEqual(autorecipe.main_exe(mono)[0], "valheim.exe")  # the crash handler is bigger but skipped
+        self.assertEqual(autorecipe.guess_saves(mono, eng), ["{LocalLow}/IronGate/Valheim"])
+        il2 = os.path.join(d, "Il2")
+        write(os.path.join(il2, "GameAssembly.dll"))
+        write(os.path.join(il2, "UnityPlayer.dll"))
+        os.makedirs(os.path.join(il2, "Il2_Data"))
+        self.assertEqual(autorecipe.detect(il2)["frameworks"][0]["id"], "melonloader")
+        ue = os.path.join(d, "Ue")
+        os.makedirs(os.path.join(ue, "Pal", "Content", "Paks"))
+        eng = autorecipe.detect(ue)
+        self.assertEqual(eng["engine"], "unreal")
+        self.assertEqual(eng["layout"]["loose_rules"][0]["dest"], "Pal/Content/Paks/~mods")
+        beth = os.path.join(d, "Skyrim")
+        write(os.path.join(beth, "Data", "Skyrim.esm"))
+        self.assertEqual(autorecipe.detect(beth)["engine"], "bethesda")
+        self.assertEqual(autorecipe.detect(tempfile.mkdtemp(dir=TMP))["moddable"], "no")
+
+    def test_bethesda_mods_land_in_data(self):
+        from gamemerger import autorecipe
+        d = tempfile.mkdtemp(dir=TMP)
+        beth = os.path.join(d, "Skyrim")
+        write(os.path.join(beth, "Data", "Skyrim.esm"))
+        layout = autorecipe.detect(beth)["layout"]
+        loose = make_zip(os.path.join(d, "a.zip"), {"Cool Armor/meshes/armor.nif": "m", "Cool Armor/CoolArmor.esp": "p"})
+        rels, _ = installer.preview(loose, layout)
+        self.assertEqual(sorted(rels), ["Data/CoolArmor.esp", "Data/meshes/armor.nif"])
+        wrapped = make_zip(os.path.join(d, "b.zip"), {"Data/textures/t.dds": "t"})
+        self.assertEqual(installer.preview(wrapped, layout)[0], ["Data/textures/t.dds"])
+
+    def test_any_game_gets_a_recipe_with_every_other_game_as_a_style(self):
+        from gamemerger import autorecipe, detect
+        d = tempfile.mkdtemp(dir=TMP)
+        ue = os.path.join(d, "Palworld")
+        os.makedirs(os.path.join(ue, "Pal", "Content", "Paks"))
+        write(os.path.join(ue, "Palworld.exe"))
+        g = detect.InstalledGame("Palworld", ue, "Steam", appid="1623730")
+        r = autorecipe.build(g, ["Palworld", "Forza Horizon 5", "Schedule I"])
+        self.assertEqual([t.from_game for t in r.themes], ["Forza Horizon 5", "Schedule I"])
+        self.assertEqual(r.auto["engine"], "Unreal Engine")
+        self.assertFalse(r.themes[0].filled)
+        autorecipe.set_theme(r.id, r.themes[0].id, "Cars in Palpagos.", [{"name": "Cars", "search": "car"}])
+        again = {x.id: x for x in autorecipe.load_all(["Forza Horizon 5"])}[r.id]
+        self.assertEqual((again.themes[0].description, again.themes[0].slots[0].search, again.themes[0].filled),
+                         ("Cars in Palpagos.", "car", True))
+        hand = RECIPES["cyberpunk2077"]
+        autorecipe.extend(hand, ["Forza Horizon 5", "Valheim", "Cyberpunk 2077"])
+        ids = [t.id for t in hand.themes]
+        self.assertIn("style-valheim", ids)
+        self.assertNotIn("style-forza-horizon-5", ids)  # already a hand-made style
+        self.assertNotIn("style-cyberpunk-2077", ids)
+
+    def test_fun_guess_from_genres(self):
+        from gamemerger import storeinfo
+        self.assertEqual(storeinfo.guess_fun({"genres": ["Action", "Racing", "Indie"]}, {"genres": ["Racing", "Action"]})["rating"], "green")
+        self.assertEqual(storeinfo.guess_fun({"genres": ["Action", "RPG"]}, {"genres": ["Action", "Sports"]})["rating"], "yellow")
+        self.assertEqual(storeinfo.guess_fun({"genres": ["Strategy"]}, {"genres": ["Racing"]})["rating"], "red")
+        self.assertEqual(storeinfo.guess_fun(None, {"genres": ["Racing"]})["rating"], "yellow")
+        raw = {"5": {"success": True, "data": {"name": "X", "genres": [{"description": "Action"}], "categories": [{"id": 18}]}}}
+        self.assertEqual(storeinfo.parse("5", raw)["controller"], "partial")
 
 
 if __name__ == "__main__":

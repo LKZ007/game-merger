@@ -44,7 +44,7 @@ VIAddVersionKey "LegalCopyright" "Frankenstein"
 !define MUI_ABORTWARNING
 
 !define MUI_WELCOMEPAGE_TITLE "Alright! Let's get Frankenstein on your PC"
-!define MUI_WELCOMEPAGE_TEXT "This installs Frankenstein ${VER} with Franklin, your merge assistant.$\r$\n$\r$\nYou'll get a desktop shortcut and a Start menu entry. Right-click either one and choose Pin to taskbar to keep it there.$\r$\n$\r$\nClick Install to carry on."
+!define MUI_WELCOMEPAGE_TEXT "This installs Frankenstein ${VER}, the launcher that stitches your games together.$\r$\n$\r$\nYou'll get a desktop shortcut and a Start menu entry. Right-click either one and choose Pin to taskbar to keep it there.$\r$\n$\r$\nClick Install to carry on."
 !define MUI_FINISHPAGE_TITLE "Sorted. Frankenstein is installed"
 !define MUI_FINISHPAGE_TEXT "Open it from your desktop or the Start menu. Updates install themselves from now on."
 !define MUI_FINISHPAGE_RUN "$INSTDIR\${EXE}"

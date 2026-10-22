@@ -20,11 +20,11 @@ body{margin:0;background:transparent;font-family:'DejaVu Sans',sans-serif}
 #hdr canvas{position:absolute;left:96px;top:3px;width:50px;height:51px}
 </style></head><body>
 <div id=icon><canvas data-b=1></canvas></div>
-<div id=wel><canvas data-b=2></canvas><div class=t>FRANKEN<span>STEIN</span></div><div class=s>with Franklin, your merge assistant</div></div>
+<div id=wel><canvas data-b=2></canvas><div class=t>FRANKEN<span>STEIN</span></div><div class=s>stitch your games together</div></div>
 <div id=small><canvas data-b=1></canvas></div>
 <div id=hdr><canvas data-b=3></canvas></div>
 <script>JSHERE</script>
-<script>document.querySelectorAll('canvas').forEach(c=>FranklinBrain.mount(c,{dense:c.dataset.b==1?1100:700,angle:1.25,speed:0}));</script>
+<script>document.querySelectorAll('canvas').forEach(c=>LogoBrain.mount(c,{dense:c.dataset.b==1?1100:700,angle:1.25,speed:0}));</script>
 </body></html>""".replace("JSHERE", js)
 with sync_playwright() as p:
     b = p.chromium.launch(executable_path="/opt/pw-browsers/chromium")

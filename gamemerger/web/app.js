@@ -77,7 +77,6 @@ function modal(title, bodyHtml, actions) {
       box.appendChild(b);
     });
     $("#modal").classList.remove("hidden");
-    $("#modalBody").querySelectorAll("canvas[data-brain]").forEach((cv) => window.FranklinBrain.mount(cv, { dense: 520, speed: 0.4 }));
     box.lastChild?.focus();
   });
 }
@@ -108,7 +107,6 @@ function show(view) {
     b.classList.toggle("active", b.dataset.view === view || (view === "setup" && b.dataset.view === "library")));
   $("#main").scrollTop = 0;
   ({ library: renderLibrary, setup: renderSetup, merges: loadMerges, party: loadParty, gallery: loadGallery, quests: renderQuests, awards: loadAwards, backups: loadBackups, settings: loadSettings }[view])();
-  renderFranklinCard();
 }
 document.querySelectorAll(".nav-item[data-view]").forEach((b) => (b.onclick = () => show(b.dataset.view)));
 
@@ -144,7 +142,6 @@ async function scan() {
   if (!game(state.selected) || !game(state.selected).base) state.selected = base[0]?.key ?? null;
   state.themeId = game(state.selected)?.themes[0]?.id ?? null;
   if (state.view === "library") renderLibrary();
-  renderFranklinCard();
   for (const g of state.games) {
     loadCover(g.key).then((c) => {
       if (!c) return;
@@ -168,7 +165,7 @@ function renderLibrary() {
       <div class="banner-art" style="${state.covers[g.key] ? `background-image:url('${state.covers[g.key]}')` : ""}"></div>
       <div class="banner-shade"></div>
       <div class="banner-content">
-        <div class="eyebrow">Base game</div>
+        <div class="eyebrow">Main game${g.engine ? " · " + esc(g.engine) : ""}</div>
         <h1>${esc(g.name)}</h1>
         <p>${esc(t ? t.description : "")}</p>
         ${g.warning ? `<div class="note small">${esc(g.warning)}</div>` : ""}
@@ -181,8 +178,8 @@ function renderLibrary() {
       </div></section>`;
   } else {
     banner = `<section class="banner"><div class="banner-content">
-        <div class="eyebrow">Welcome</div><h1>Pick a base game</h1>
-        <p>Frankenstein supports Cyberpunk 2077, Schedule I and GTA V as base games. If yours isn't found below, add its install folder.</p>
+        <div class="eyebrow">Welcome</div><h1>Pick a main game</h1>
+        <p>Any game can be the main game. Cyberpunk 2077, Schedule I and GTA V have hand-made recipes; for every other game Frankenstein works out its engine and mod loader. If yours isn't found below, add its install folder.</p>
         <div class="row"><button class="btn primary" id="addFolder2">Add game folder</button></div>
       </div></section>`;
   }
@@ -190,12 +187,12 @@ function renderLibrary() {
       <button class="tile ${x.base ? "base" : ""} ${x.key === state.selected ? "selected" : ""}" data-key="${x.key}" data-cover="${x.key}" aria-pressed="${x.key === state.selected}">
         ${caseHtml(x.name, state.covers[x.key])}
         <div class="tile-name">${esc(x.name)}</div>
-        <div class="tile-sub">${esc(x.source)} · ${x.base ? (x.key === state.selected ? "selected" : "can be base") : "style source"}</div>
+        <div class="tile-sub">${esc(x.source)} · ${x.key === state.selected ? "main game" : x.moddable === "no" ? "no mod support" : x.moddable === "limited" ? "limited mods" : "moddable"}</div>
       </button>`).join("");
   el.innerHTML = `${banner}
     <section class="shelf">
       <div class="shelf-head"><h2>Your games</h2>
-        <div class="row"><span class="muted small">Glowing edge = can be a base game</span>
+        <div class="row"><span class="muted small">Click any game to make it the main game</span>
           <button class="btn ghost" id="rescan">Rescan</button><button class="btn" id="addFolder">Add game folder</button></div></div>
       ${state.games.length ? `<div class="grid">${tiles}</div>` : `<div class="empty">No games found yet.</div>`}
     </section>
@@ -203,12 +200,10 @@ function renderLibrary() {
   renderOwnedShelf();
   el.querySelectorAll(".tile").forEach((b) => (b.onclick = () => {
     const x = game(b.dataset.key);
-    if (!x.base) return toast(`${x.name} can't be a base game yet, but it can be a style you merge in.`);
-    if (state.selected !== x.key) franklinSays("goodGame", { game: x.name });
+    if (!x.base) return toast(`Frankenstein couldn't read ${x.name}'s folder. Try Rescan.`);
     state.selected = x.key;
     state.themeId = x.themes[0]?.id;
     renderLibrary();
-    renderFranklinCard();
   }));
   $("#rescan").onclick = scan;
   loadFun();
@@ -217,7 +212,7 @@ function renderLibrary() {
   };
   $("#addFolder").onclick = add;
   if ($("#addFolder2")) $("#addFolder2").onclick = add;
-  if ($("#themePick")) $("#themePick").onchange = (e) => { state.themeId = e.target.value; renderLibrary(); renderFranklinCard(); };
+  if ($("#themePick")) $("#themePick").onchange = (e) => { state.themeId = e.target.value; renderLibrary(); };
   if ($("#mergeBtn")) $("#mergeBtn").onclick = startSetup;
   if ($("#previewBtn")) $("#previewBtn").onclick = () => previewMerge(state.selected, state.themeId);
 }
@@ -238,7 +233,7 @@ async function startSetup() {
   } catch (e) { toast(errText(e)); }
 }
 
-// Every merge is its own new game: Franklin names it and gives it a tagline (the player can change it).
+// Every merge is its own new game: the AI names it and gives it a tagline (the player can change it).
 async function nameMerge(s) {
   const btn = $("#mReroll");
   if (btn) { btn.disabled = true; btn.textContent = "Thinking…"; }
@@ -280,7 +275,7 @@ function renderSetup() {
         <button class="btn ghost" data-find="${i}">Find mods</button><button class="btn" data-add="${i}">Add file</button></div>${files}</div>`;
   }).join("");
   const clashes = s.check.clashes.length
-    ? `<div class="note"><strong>Heads up:</strong> these mods change the same files, so the one added last wins.<ul>${s.check.clashes.map((c) => `<li>${esc(c)}</li>`).join("")}</ul>Ask Franklin which to keep.</div>` : "";
+    ? `<div class="note"><strong>Heads up:</strong> these mods change the same files, so the one added last wins.<ul>${s.check.clashes.map((c) => `<li>${esc(c)}</li>`).join("")}</ul>Switch one off later in Mods &amp; profiles if it causes trouble.</div>` : "";
   const modes = MODES.map(([id, name, text]) => `<button class="mode ${s.mode === id ? "on" : ""}" data-mode="${id}" aria-pressed="${s.mode === id}"><strong>${name}</strong><span>${text}</span></button>`).join("");
 
   $("#view-setup").innerHTML = `<div class="page">
@@ -292,7 +287,7 @@ function renderSetup() {
     </div>
     ${g.warning ? `<div class="note">${esc(g.warning)}</div>` : ""}
     <div class="card"><div class="section-title"><span class="step">1</span><h2>Pick your mods</h2></div>
-      <p class="muted" style="margin-top:-6px">Click <strong>Find mods</strong>, then download the ones you like from Nexus Mods. I'll spot each download and add it here for you. You can also skip this and add mods later.</p>
+      <p class="muted" style="margin-top:-6px">Click <strong>Find mods</strong>, then download the ones you like from Nexus Mods. Frankenstein spots each download and adds it here for you. You can also skip this and add mods later.</p>
       ${slots}${clashes}</div>
     <div class="card"><div class="section-title"><span class="step">2</span><h2>Merge it</h2></div>
       <p class="muted" style="margin-top:-6px">Everything else is handled: mod loaders download automatically, the merge goes into its own safe copy, and it gets its own save games.</p>
@@ -304,7 +299,7 @@ function renderSetup() {
       <div class="modes">${modes}</div>
       <div class="two" style="margin-top:14px">
         <div class="field"><label for="mName">Your new game's name</label>
-          <div class="row" style="flex-wrap:nowrap"><input class="input" id="mName" value="${esc(s.name)}"><button class="btn" id="mReroll" title="Franklin makes up another one">New name</button></div>
+          <div class="row" style="flex-wrap:nowrap"><input class="input" id="mName" value="${esc(s.name)}"><button class="btn" id="mReroll" title="Make up another one">New name</button></div>
           ${s.tagline ? `<div class="muted small" style="margin-top:6px">“${esc(s.tagline)}”</div>` : ""}</div>
         <div class="field"><label for="mDest">Folder</label><div class="row" style="flex-wrap:nowrap"><input class="input" id="mDest" value="${esc(s.mode === "inplace" ? g.path : s.destination)}" ${s.mode === "inplace" ? "disabled" : ""}>
           <button class="btn" id="mBrowse" ${s.mode === "inplace" ? "disabled" : ""}>Browse</button></div></div>
@@ -331,7 +326,6 @@ function renderSetup() {
     const files = await call("pick_mod_files");
     if (!files || !files.length) return;
     files.forEach((p) => s.mods.push({ slot: s.options.slots[+b.dataset.add].name, path: p }));
-    franklinSays("goodMod");
     renderSetup();
     checkMods();
   }));
@@ -350,7 +344,6 @@ function addToSetup(path, name) {
   if (s && state.view === "setup") {
     const slot = watcher.slot || s.options.slots[0]?.name || "Mods";
     s.mods.push({ slot, path });
-    franklinSays("goodMod");
     renderSetup(); checkMods();
     toast(`Added ${name} to “${slot}”.`);
   } else {
@@ -459,7 +452,7 @@ async function renderAccountsCard() {
   const perms = (p) => Object.entries(st.permissions).map(([k, label]) =>
     `<label class="switch small"><input type="checkbox" data-perm="${k}" ${p.perms[k] ? "checked" : ""} ${me.admin && !p.admin ? "" : "disabled"}> ${esc(label)}</label>`).join("");
   el.innerHTML = `<h2>Accounts</h2>
-    <p class="muted">Everyone gets their own merges, saves, Franklin memory, achievements and voice settings. ${me.admin ? "You're the admin: you add accounts, choose what each one is allowed to do, and manage the shared keys." : "The admin manages accounts and shared keys."} A PIN keeps your account to you on this PC.</p>
+    <p class="muted">Everyone gets their own merges, saves, achievements and settings. ${me.admin ? "You're the admin: you add accounts, choose what each one is allowed to do, and manage the shared keys." : "The admin manages accounts and shared keys."} A PIN keeps your account to you on this PC.</p>
     ${st.profiles.map((p) => `<div class="acct" data-id="${esc(p.id)}">
       <div class="row" style="flex-wrap:nowrap"><div class="who-avatar tiny" style="--c:${esc(p.color)}">${esc(initials(p.name))}</div>
         <div class="grow"><strong>${esc(p.name)}</strong> <span class="muted small">${p.admin ? "Admin" : ""}${p.id === me.id ? " · you" : ""}${p.has_pin ? " · PIN set" : ""}</span></div>
@@ -479,7 +472,7 @@ async function renderAccountsCard() {
       try {
         if (b.dataset.act === "rename") { const n = await ask("Rename account", "Name"); if (n) await call("profile_update", id, n, null, null); }
         else if (b.dataset.act === "pin") { const pin = await ask("PIN", "4 to 8 numbers, or leave empty for no PIN", "password"); if (pin !== null) await call("profile_update", id, null, pin, null); }
-        else if (b.dataset.act === "remove" && (await confirmBox("Remove this account?", "Its settings and Franklin memory go. Merges it made stay on the PC.", "Remove", true))) await call("profile_remove", id);
+        else if (b.dataset.act === "remove" && (await confirmBox("Remove this account?", "Its settings go. Merges it made stay on the PC.", "Remove", true))) await call("profile_remove", id);
       } catch (e) { toast(errText(e)); }
       renderAccountsCard(); renderMe();
     }));
@@ -530,7 +523,6 @@ async function checkAwards() {
   const fresh = await call("achievements_new").catch(() => []);
   for (const a of fresh) {
     toast(`🏆 Achievement unlocked: ${a.title}`, 5000);
-    speak(line("award").replace("{a}", a.title));
     if (state.view === "awards") loadAwards();
   }
 }
@@ -557,7 +549,7 @@ async function watchDownloads(slotName) {
     watcher.since = await call("now").catch(() => Date.now() / 1000);
     watcher.timer = setInterval(checkDownloads, 3000);
   }
-  toast("Download any mod you like. I'll add it to “" + slotName + "” automatically.", 4500);
+  toast("Download any mod you like. It's added to “" + slotName + "” automatically.", 4500);
 }
 async function checkDownloads() {
   const s = state.setup;
@@ -572,7 +564,7 @@ async function checkDownloads() {
     toast(`Added ${d.name} to “${watcher.slot}”.`);
     added++;
   }
-  if (added) { franklinSays("goodMod"); renderSetup(); checkMods(); }
+  if (added) { renderSetup(); checkMods(); }
 }
 
 async function checkMods() {
@@ -580,7 +572,6 @@ async function checkMods() {
   const g = game(s.key);
   try { s.check = await call("check_mods", g.recipe_id, s.mods); } catch (e) { toast(errText(e)); }
   if (state.view === "setup") renderSetup();
-  renderFranklinCard();
 }
 
 async function runMerge() {
@@ -600,7 +591,7 @@ async function runMerge() {
     await playFusion(res.result.merge_id);
     const p = res.result.problems;
     const body = `<p>“${esc(res.result.name)}” is ready. Press Play in My merges.</p>` +
-      (p.length ? `<div class="note">Some parts didn't install:<ul>${p.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>Franklin can help with these.</div>` : "");
+      (p.length ? `<div class="note">Some parts didn't install:<ul>${p.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>Add them later with Add mods on the merge.</div>` : "");
     const go = await modal("Merge complete", body, [{ label: "Stay here", value: false }, { label: "Go to My merges", value: true, primary: true }]);
     state.setup = null;
     show(go ? "merges" : "library");
@@ -625,7 +616,6 @@ async function playFusion(mergeId) {
   const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
   if (reduce) el.classList.add("fz-instant");
   sparks(el.querySelector(".fz-sparks"), reduce ? 0 : 1500);
-  if (!reduce) setTimeout(() => speak(line("goodMod")), 1500);
   await new Promise((resolve) => {
     let t;
     const end = () => { clearTimeout(t); document.removeEventListener("keydown", key, true); el.classList.add("fz-out"); setTimeout(() => el.remove(), 350); resolve(); };
@@ -708,7 +698,7 @@ async function loadMerges() {
         <button class="btn" data-act="add">Add mods</button>
         <button class="btn" data-act="share">Share</button>
         <button class="btn" data-act="fix">Fix crash</button>
-        <button class="btn" data-act="crash">Why did it crash?</button>
+        ${m.needs_upgrade ? `<button class="btn" data-act="upgrade" title="Give this merge everything new merges get. Mods and saves stay as they are.">Upgrade</button>` : ""}
         <button class="btn ghost" data-act="folder">Open folder</button>
         <button class="btn ghost" data-act="undo">Undo all mods</button>
         <button class="btn ghost danger" data-act="delete">Delete</button>
@@ -731,7 +721,7 @@ async function loadMerges() {
 // ---------- updates ----------
 async function offerUpdate(u, asked = false) {
   if (!u) { if (asked) toast("You're on the newest version."); return; }
-  const go = await modal(line("updateTitle"), `
+  const go = await modal("Update available", `
     <p>Frankenstein <strong>${esc(u.version)}</strong> is out. It takes a few seconds: the app closes, updates and opens again. Your merges and saves aren't touched.</p>
     ${u.notes ? `<div class="log">${esc(u.notes)}</div>` : ""}`,
     [{ label: "Later", value: false }, { label: "Update now", value: true, primary: true }]);
@@ -792,7 +782,7 @@ async function importMerge(path) {
     [{ label: "Cancel", value: false }, { label: "Add it", value: true, primary: true }]);
   if (!go) return;
   const r = (await followJob(await call("import_merge", path), "Adding " + info.name))?.result;
-  if (r) { toast(line("importDone").replace("{name}", r.name)); show("merges"); }
+  if (r) { toast(`“${r.name}” is ready.`); show("merges"); }
 }
 
 // Refresh My merges when the game closes and the normal saves are put back.
@@ -819,12 +809,11 @@ async function mergeAction(id, act) {
     else if (act === "fix") {
       const r = (await followJob(await call("fix_crash", id), "Fixing " + m.name))?.result;
       if (r) {
-        modal(r.fixed ? "Fixed it" : "Couldn't pin it down", `<p>${esc(r.why)}</p>${r.fixed ? `<p class="muted">I switched off <strong>${esc(r.culprit)}</strong> and started the game again. Switch it back on any time in Mods &amp; profiles.</p>` : `<p class="muted">Ask me in the chat and I'll dig deeper.</p>`}`);
-        if (r.fixed) speak(r.why);
+        modal(r.fixed ? "Fixed it" : "Couldn't pin it down", `<p>${esc(r.why)}</p>${r.fixed ? `<p class="muted"><strong>${esc(r.culprit)}</strong> is switched off and the game is starting again. Switch it back on any time in Mods &amp; profiles.</p>` : `<p class="muted">Try switching mods off one at a time in Mods &amp; profiles.</p>`}`);
         loadMerges();
       }
     }
-    else if (act === "crash") { openFranklin(); askFranklin("My merged game crashed or a mod isn't working. What went wrong?", { merge: id }); }
+    else if (act === "upgrade") { await call("merge_upgrade", id); toast(`“${m.name}” is upgraded.`); loadMerges(); }
     else if (act === "add") { const job = await call("add_mods", id); if (job) { await followJob(job, "Adding mods"); loadMerges(); } }
     else if (act === "undo") {
       if (await confirmBox("Undo all mods?", `This removes every mod from “${m.name}” and puts the original files back.`, "Undo all mods")) { await followJob(await call("undo", id), "Undoing"); loadMerges(); }
@@ -904,7 +893,7 @@ async function renderQuests() {
   const el = $("#view-quests");
   const merges = await call("merges").catch(() => []);
   if (!merges.length) {
-    el.innerHTML = `<div class="page"><h1>Questlines</h1><p class="lede">Make a merge first, then Franklin writes missions for it here.</p></div>`;
+    el.innerHTML = `<div class="page"><h1>Questlines</h1><p class="lede">Make a merge first, then missions for it get written here.</p></div>`;
     return;
   }
   if (!merges.some((m) => m.id === state.questMerge)) state.questMerge = merges[0].id;
@@ -920,15 +909,15 @@ async function renderQuests() {
     state.questNow = n ? `${active.title}, quest "${active.quests[n[0]].title}", next objective: ${active.quests[n[0]].objectives[n[1]]}` : null;
   } else state.questNow = null;
   el.innerHTML = `<div class="page"><h1>Questlines</h1>
-    <p class="lede">Franklin writes missions for your merged game, using what's really in it. Play them, tick off objectives as you go, and hold F8 mid-game to ask him what's next.</p>
+    <p class="lede">Missions written for your merged game, using what's really in it. Play them and tick off objectives as you go.</p>
     <div class="card">
       <div class="row"><label for="qMerge" class="muted">Merge</label><select class="input" id="qMerge">${merges.map((x) => `<option value="${esc(x.id)}" ${x.id === m.id ? "selected" : ""}>${esc(x.name)}</option>`).join("")}</select></div>
       <div class="row" style="flex-wrap:nowrap;margin-top:10px"><input class="input" id="qIdea" placeholder="Optional: what kind of story? e.g. a street-racing rivalry, take over the block"><button class="btn primary" id="qNew">Write a questline</button></div>
-      <p class="muted small">In-game quest markers need a small quest-loader mod per game. Schedule I is first on the list; until then quests are tracked here and Franklin keeps you on course.</p>
+      <p class="muted small">In-game quest markers need a small quest-loader mod per game. Schedule I is first on the list; until then quests are tracked here.</p>
     </div>
     ${lines.map((q) => `<div class="card quest ${q.finished ? "done" : ""}" data-q="${esc(q.id)}">
       <div class="row" style="flex-wrap:nowrap"><div class="grow"><div class="eyebrow">${q.finished ? "Complete" : "Questline"}</div><h2 style="margin:4px 0">${esc(q.title)}</h2></div>
-        <button class="btn" data-brief>Brief me</button><button class="btn ghost danger" data-del>Delete</button></div>
+        <button class="btn ghost danger" data-del>Delete</button></div>
       <p class="muted">${esc(q.intro)}</p>
       ${q.quests.map((x, i) => `<div class="q-step"><strong>${i + 1}. ${esc(x.title)}</strong><div class="muted small">${esc(x.briefing)}</div>
         ${x.objectives.map((o, j) => `<label class="switch small"><input type="checkbox" data-i="${i}" data-j="${j}" ${q.done[i][j] ? "checked" : ""}> ${esc(o)}</label>`).join("")}
@@ -938,7 +927,7 @@ async function renderQuests() {
   $("#qNew").onclick = async () => {
     try {
       const r = await followJob(await call("questline_new", m.id, $("#qIdea").value), "Writing a questline");
-      if (r && r.result) { speak(`${r.result.title}. ${r.result.intro}`); renderQuests(); }
+      if (r && r.result) renderQuests();
     } catch (e) { toast(errText(e)); }
   };
   el.querySelectorAll(".quest").forEach((card) => {
@@ -946,14 +935,10 @@ async function renderQuests() {
     card.querySelectorAll("input[data-i]").forEach((c) => (c.onchange = async () => {
       try {
         const upd = await call("questline_tick", m.id, q.id, +c.dataset.i, +c.dataset.j, c.checked);
-        if (upd.finished && !q.finished) speak(`Yo, that's ${q.title} done. Respect, bro.`);
+        if (upd.finished && !q.finished) toast(`Questline complete: ${q.title}`);
         renderQuests();
       } catch (e) { toast(errText(e)); }
     }));
-    card.querySelector("[data-brief]").onclick = () => {
-      const n = next(q);
-      speak(n ? `${q.quests[n[0]].title}. ${q.quests[n[0]].briefing} Next up: ${q.quests[n[0]].objectives[n[1]]}.` : `You finished ${q.title}. Time for a new one.`);
-    };
     card.querySelector("[data-del]").onclick = async () => {
       if (await confirmBox("Delete this questline?", "Its progress goes too.", "Delete", true)) { await call("questline_delete", m.id, q.id); renderQuests(); }
     };
@@ -981,31 +966,38 @@ async function loadBackups() {
   }));
 }
 
-// ---------- how fun each pairing would be (Franklin's colour code) ----------
+// ---------- how fun each pairing would be (a colour on every game) ----------
 const FUN_WORDS = { green: "Great pairing", yellow: "OK pairing", red: "Doable, not as great" };
+const SELF_WORDS = { green: "Main game, fully moddable", yellow: "Main game, limited mod support", red: "Main game, no real mod support" };
 
+// Ratings are made in the background; this keeps asking until every game has one.
 async function loadFun() {
   const base = game(state.selected);
   if (!base) return;
   const names = [...state.games.filter((g) => g.key !== base.key).map((g) => g.name), ...(state.owned?.games || []).map((g) => g.name)];
-  if (state.fun?.base === base.name && names.every((n) => n in state.fun.scores || state.fun.asked.has(n))) return applyFun();
-  const fun = state.fun?.base === base.name ? state.fun : { base: base.name, scores: {}, asked: new Set() };
-  state.fun = fun;
-  names.forEach((n) => fun.asked.add(n));
-  try { Object.assign(fun.scores, await call("fun_scores", base.key, names)); } catch (e) { /* no colours this time */ }
+  if (state.fun?.base !== base.name) state.fun = { base: base.name, scores: {}, self: null };
+  const fun = state.fun;
+  clearTimeout(loadFun.timer);
+  let r;
+  try { r = await call("fun_scores", base.key, names); } catch (e) { return; }
+  if (state.fun !== fun) return;
+  Object.assign(fun.scores, r.scores);
+  fun.self = r.self;
   applyFun();
+  if (r.pending) loadFun.timer = setTimeout(loadFun, 4000);
 }
 
 function applyFun() {
   const style = state.settings?.fun_style || "dot";
   document.body.classList.toggle("fun-halo", style === "halo");
-  const scores = state.fun && game(state.selected)?.name === state.fun.base ? state.fun.scores : {};
+  const fun = state.fun && game(state.selected)?.name === state.fun.base ? state.fun : null;
   document.querySelectorAll(".tile").forEach((t) => {
     const name = t.querySelector(".tile-name")?.textContent;
-    const f = style !== "off" && !t.classList.contains("selected") ? scores[name] : null;
+    const mine = t.classList.contains("selected");
+    const f = style === "off" || !fun ? null : mine ? fun.self : fun.scores[name];
     if (f) {
       t.dataset.fun = f.rating;
-      t.title = `${FUN_WORDS[f.rating]}: ${f.why}`;
+      t.title = `${mine ? SELF_WORDS[f.rating] : FUN_WORDS[f.rating]}: ${f.why}`;
     } else {
       delete t.dataset.fun;
       t.removeAttribute("title");
@@ -1020,8 +1012,8 @@ async function previewMerge(key, themeId) {
   if (!g || !t) return;
   const box = $("#modal .modal-box");
   box.classList.add("wide");
-  const done = modal(`Preview: ${g.name} × ${t.from_game}`, `<div class="preview-loading"><canvas class="brain" data-brain="small" style="width:64px;height:64px"></canvas>
-      <p class="muted">Hold up, lemme pull up some clips…</p></div>`,
+  const done = modal(`Preview: ${g.name} × ${t.from_game}`, `<div class="preview-loading"><div class="bar indeterminate"><div></div></div>
+      <p class="muted">Pulling up some clips…</p></div>`,
     [{ label: "Close", value: false }, { label: "Merge it", value: true, primary: true }]);
   let p;
   try { p = await call("merge_preview", key, themeId); } catch (e) { $("#modalBody").innerHTML = `<p class="muted">${esc(errText(e))}</p>`; }
@@ -1032,14 +1024,12 @@ async function previewMerge(key, themeId) {
         <figcaption>${c.label === g.name ? "Your game" : "Bringing in"}: <strong>${esc(c.label)}</strong></figcaption></figure>`;
     $("#modalBody").innerHTML = `
       <div class="pv-label">Preview · trailers and mod pictures, not your merged game</div>
-      <div class="pv-pitch"><canvas class="brain" data-brain="tiny" aria-hidden="true"></canvas><p>${esc(p.summary)}</p></div>
+      <div class="pv-pitch"><p>${esc(p.summary)}</p></div>
       ${p.clips.length ? `<div class="pv-clips">${p.clips.map(clip).join("")}</div>` : ""}
       ${p.pictures.length ? `<h3 class="pv-h">What the mods look like</h3><div class="pv-pics">${p.pictures.map((x) => `<figure><img src="${esc(x.url)}" alt="" loading="lazy"><figcaption><strong>${esc(x.slot)}</strong><span>${esc(x.name)}</span></figcaption></figure>`).join("")}</div>` : ""}
       <p class="muted small">Clips stream straight from Steam and pictures from Nexus Mods at low quality, so nothing is saved to your PC. Your merge will be ${esc(g.name)} with these mods layered on. <a href="#" id="pvVideos">Watch mod showcase videos</a></p>`;
     $("#pvVideos").onclick = (e) => { e.preventDefault(); call("open_url", p.videos_url); };
     $("#modalBody").querySelectorAll("[data-url]").forEach((a) => (a.onclick = (e) => { e.preventDefault(); call("open_url", a.dataset.url); }));
-    $("#modalBody").querySelectorAll("canvas[data-brain]").forEach((cv) => window.FranklinBrain.mount(cv, { dense: 300, speed: 0.4 }));
-    speak(p.summary);
   }
   const go = await done;
   box.classList.remove("wide");
@@ -1053,6 +1043,10 @@ async function loadOwned(refresh = false, quiet = false) {
   try { r = await call("library_owned", refresh); } catch (e) { if (!quiet) toast(errText(e)); return; }
   state.owned = r;
   if (!quiet) for (const err of r.errors || []) toast(err, 7000);
+  if (r.styles_changed) {  // owned games are styles for every main game too
+    try { state.games = await call("library"); } catch (e) { /* keep the old list */ }
+    if (state.view === "library") renderLibrary();
+  }
   if (state.view === "library") renderOwnedShelf();
   for (const g of r.games) {
     if (g.key in state.covers) continue;
@@ -1155,32 +1149,20 @@ async function loadSettings() {
   const s = state.settings;
   el.innerHTML = `<div class="page"><h1>Settings</h1>
     <div class="card" id="profilesCard"></div>
-    <div class="card"><h2>Franklin</h2>
-      <p class="muted">Franklin runs on Claude using your own Anthropic API key. Get one at <a href="#" id="consoleLink">console.anthropic.com</a>. Each question usually costs a few cents. Franklin only sees game names, mod file names and log files, never your game files.</p>
+    <div class="card"><h2>AI features</h2>
+      <p class="muted">An optional Claude API key from <a href="#" id="consoleLink">console.anthropic.com</a> switches on the AI that works in the background: fun ratings for every pairing, mod searches for games without a built-in recipe, merge names and taglines, one-click crash repair and questlines. It usually costs a few cents a day. It only ever sees game names, mod file names and log files, never your game files. Without a key everything still works, with simpler guesses.</p>
       <div class="field"><label for="apiKey">Claude API key ${s.has_key ? `<span class="tag">Saved ${esc(s.key_hint)}</span>` : ""}</label>
         <div class="row" style="flex-wrap:nowrap"><input class="input" type="password" id="apiKey" placeholder="${s.has_key ? "Paste a new key to replace it" : "sk-ant-…"}" autocomplete="off">
           <button class="btn primary" id="saveKey">Save key</button>${s.has_key ? `<button class="btn ghost danger" id="clearKey">Remove</button>` : ""}</div></div>
       <p class="muted small">Saved only on this PC, in ${esc(s.data_folder)}.</p>
-      <div class="row"><div class="grow muted small">Franklin remembers your favourite merges, mods and playstyle between sessions.</div><button class="btn ghost" id="forget">Forget all that</button></div>
-    </div>
-    <div class="card"><h2>Franklin's voice</h2>
-      <label class="switch"><input type="checkbox" id="voiceOn" ${s.voice_on ? "checked" : ""}> Franklin talks out loud</label>
-      <label class="switch" style="margin-top:10px"><input type="checkbox" id="explicit" ${s.explicit ? "checked" : ""}> 18+ mode: Franklin cusses now and then</label>
-      <div class="field" style="margin-top:12px"><label for="voiceStyle">Voice</label>
-        <div class="row" style="flex-wrap:nowrap"><select class="input" id="voiceStyle">${(s.voice_styles || []).map(([id, name]) => `<option value="${id}" ${s.voice_style === id ? "selected" : ""}>${esc(name)}</option>`).join("")}</select>
-          <button class="btn" id="testVoice">Hear Franklin</button></div></div>
-      <p class="muted">These are free, natural-sounding voices, no key needed. If you're offline he falls back to the voice built into Windows. For an even more lifelike voice, paste an <a href="#" id="elevenLink">ElevenLabs</a> key (it has a free tier).</p>
-      <div class="field"><label for="elevenKey">ElevenLabs key (optional) ${s.has_eleven ? `<span class="tag">Saved${s.voice_name ? " · " + esc(s.voice_name) : ""}</span>` : ""}</label>
-        <div class="row" style="flex-wrap:nowrap"><input class="input" type="password" id="elevenKey" placeholder="${s.has_eleven ? "Paste a new key to replace it" : "Paste your ElevenLabs key"}" autocomplete="off">
-          <button class="btn primary" id="saveEleven">Save</button>${s.has_eleven ? `<button class="btn ghost danger" id="clearEleven">Remove</button>` : ""}</div></div>
     </div>
     <div class="card"><h2>Nexus Mods</h2>
-      <p class="muted">Add your Nexus Mods API key and Franklin finds and downloads mods right here, no browsing. Get it at <a href="#" id="nexusLink">nexusmods.com → Settings → API keys</a>. Premium accounts download in one click; free accounts click "Mod Manager Download" once and the file comes straight back.</p>
+      <p class="muted">Add your Nexus Mods API key to find and download mods right here, no browsing. Get it at <a href="#" id="nexusLink">nexusmods.com → Settings → API keys</a>. Premium accounts download in one click; free accounts click "Mod Manager Download" once and the file comes straight back.</p>
       <div class="field"><label for="nexusKey">API key <span id="nexusTag"></span></label>
         <div class="row" style="flex-wrap:nowrap"><input class="input" type="password" id="nexusKey" placeholder="Paste your Nexus API key" autocomplete="off"><button class="btn primary" id="saveNexus">Save</button></div></div>
     </div>
     <div class="card"><h2>Library</h2>
-      <p class="muted">When you pick a base game, Franklin colour-codes your other games by how fun they'd be to merge in: green is a great pairing, yellow is OK, red is doable but not as great. Hover a game to see why.</p>
+      <p class="muted">Every game gets a colour for how fun it would be to merge with your main game by how fun they'd be to merge in: green is a great pairing, yellow is OK, red is doable but not as great. Hover a game to see why.</p>
       <div class="field"><label for="funStyle">Show it as</label>
         <select class="input" id="funStyle">${[["dot", "A dot in the corner"], ["halo", "A glow around the box"], ["off", "Off"]].map(([v, n]) => `<option value="${v}" ${(s.fun_style || "dot") === v ? "selected" : ""}>${n}</option>`).join("")}</select></div>
     </div>
@@ -1201,24 +1183,22 @@ async function loadSettings() {
         <div class="row" style="flex-wrap:nowrap"><input class="input" id="defDest" value="${esc(s.destination)}" placeholder="Same drive as the game, in a Frankenstein folder"><button class="btn" id="defBrowse">Browse</button></div></div>
       <div class="row" style="margin-top:14px;justify-content:flex-end"><button class="btn primary" id="saveMerging">Save</button></div>
     </div></div>`;
-  if ($("#forget")) $("#forget").onclick = async () => { await call("franklin_forget"); toast("Franklin's memory is wiped."); };
   $("#consoleLink").onclick = (e) => { e.preventDefault(); call("open_url", "https://console.anthropic.com/"); };
   $("#saveKey").onclick = async () => {
     const v = $("#apiKey").value.trim();
     if (!v) return toast("Paste your API key first.");
-    await call("save_settings", { claude_api_key: v }); toast("Saved. Franklin is ready."); loadSettings(); renderFranklinCard();
+    await call("save_settings", { claude_api_key: v }); toast("Saved. AI features are on."); state.fun = null; loadSettings();
   };
-  if ($("#clearKey")) $("#clearKey").onclick = async () => { await call("save_settings", { claude_api_key: "" }); loadSettings(); renderFranklinCard(); };
+  if ($("#clearKey")) $("#clearKey").onclick = async () => { await call("save_settings", { claude_api_key: "" }); loadSettings(); };
   $("#nexusLink").onclick = (e) => { e.preventDefault(); call("open_url", "https://next.nexusmods.com/settings/api-keys"); };
   renderAccounts();
   renderAccountsCard();
   renderDiscord();
   if (!s.admin) {
-    ["#apiKey", "#saveKey", "#clearKey", "#elevenKey", "#saveEleven", "#clearEleven", "#nexusKey", "#saveNexus", "#defDest", "#defBrowse"]
+    ["#apiKey", "#saveKey", "#clearKey", "#nexusKey", "#saveNexus", "#defDest", "#defBrowse"]
       .forEach((q) => { const x = $(q); if (x) { x.disabled = true; x.title = "Set by the admin account"; } });
     if ($("#defMode")) $("#defMode").disabled = true;
   }
-  if (!s.admin && !s.perms.explicit) { $("#explicit").checked = false; $("#explicit").disabled = true; $("#explicit").parentElement.title = "The admin has switched 18+ mode off for your account"; }
   call("nexus_status").then((n) => { if (n.has_key) $("#nexusTag").innerHTML = `<span class="tag">Saved · ${esc(n.name)}${n.premium ? " · Premium" : ""}</span>`; }).catch(() => {});
   $("#saveNexus").onclick = async () => {
     try { const n = await call("nexus_set_key", $("#nexusKey").value); toast(n.has_key ? "Nexus is hooked up." : "Nexus key removed."); loadSettings(); }
@@ -1226,263 +1206,12 @@ async function loadSettings() {
   };
   $("#cloudPick").onchange = async () => { state.settings = await call("save_settings", { cloud_folder: $("#cloudPick").value }); toast($("#cloudPick").value ? "Cloud backup is on." : "Cloud backup is off."); };
   $("#checkUpdate").onclick = async () => offerUpdate(await call("check_update").catch(() => null), true);
-  $("#elevenLink").onclick = (e) => { e.preventDefault(); call("open_url", "https://elevenlabs.io/"); };
-  $("#voiceStyle").onchange = async () => {
-    state.settings = await call("save_settings", { voice_style: $("#voiceStyle").value });
-    if (state.settings.voice_style === "own") {
-      call("franklin_voice_warm", lineSet("voiceTest")).catch(() => {});
-      toast("Loading your own voice. It takes a minute or two the first time, Andrew covers till then.", 6000);
-    }
-    speak(line("voiceTest"), true);
-  };
-  $("#funStyle").onchange = async () => { state.settings = await call("save_settings", { fun_style: $("#funStyle").value }); };
-  $("#explicit").onchange = async () => {
-    state.settings = await call("save_settings", { explicit: $("#explicit").checked });
-    toast($("#explicit").checked ? "18+ mode on." : "Clean mode on. No cussing.");
-  };
-  $("#voiceOn").onchange = async () => { await setVoice($("#voiceOn").checked); };
-  $("#saveEleven").onclick = async () => {
-    const v = $("#elevenKey").value.trim();
-    if (!v) return toast("Paste your ElevenLabs key first.");
-    await call("save_settings", { elevenlabs_key: v }); toast("Saved. Finding Franklin a voice…"); await loadSettings();
-    speak(line("voiceSaved"));
-  };
-  if ($("#clearEleven")) $("#clearEleven").onclick = async () => { await call("save_settings", { elevenlabs_key: "" }); loadSettings(); };
-  $("#testVoice").onclick = () => speak(line("hello"), true);
+  $("#funStyle").onchange = async () => { state.settings = await call("save_settings", { fun_style: $("#funStyle").value }); applyFun(); };
   $("#defBrowse").onclick = async () => { const p = await call("pick_folder"); if (p) $("#defDest").value = p; };
   $("#saveMerging").onclick = async () => { await call("save_settings", { mode: $("#defMode").value, destination: $("#defDest").value.trim() }); toast("Saved."); };
 }
 
-// ---------- Franklin ----------
-const app = $(".app");
-function openFranklin() { app.classList.remove("no-franklin"); }
-$("#franklinToggle").onclick = () => app.classList.toggle("no-franklin");
-$("#franklinClose").onclick = () => app.classList.add("no-franklin");
-$("#franklinMute").onclick = () => setVoice(!voiceOn());
-
-$("#franklinNew").onclick = async () => { await call("franklin_reset"); $("#franklinMessages").innerHTML = ""; renderFranklinCard(); };
-
-function franklinContext() {
-  const ctx = { screen: { library: "Library", setup: "Merge setup", merges: "My merges", party: "Play together", gallery: "Gallery", quests: "Questlines", backups: "Backups", settings: "Settings" }[state.view] };
-  ctx.installed_games = state.games.map((g) => `${g.name} (${g.source}${g.base ? ", can be base" : ""})`);
-  const s = state.setup && state.view === "setup" ? state.setup : null;
-  const g = game(s ? s.key : state.selected);
-  if (g) {
-    ctx.base_game = g.name;
-    const t = g.themes.find((x) => x.id === (s ? s.themeId : state.themeId));
-    if (t) { ctx.theme = t.name + " (from " + t.from_game + ")"; ctx.theme_description = t.description; }
-  }
-  if (state.questNow) ctx.quest = state.questNow;
-  if (s) {
-    ctx.frameworks = s.options.frameworks.filter((f) => s.frameworks.has(f.id)).map((f) => f.name);
-    ctx.mods = s.check.mods;
-    ctx.clashes = s.check.clashes;
-  }
-  return ctx;
-}
-
-function renderFranklinCard() {
-  const card = $("#franklinCard");
-  const hasKey = state.settings ? state.settings.has_key : null;
-  const g = game(state.setup && state.view === "setup" ? state.setup.key : state.selected);
-  const t = g && g.themes.find((x) => x.id === (state.setup && state.view === "setup" ? state.setup.themeId : state.themeId));
-  let html = g && t
-    ? `<div class="eyebrow">This merge</div>${esc(g.name)} stays the game you play. ${esc(t.name)} gets layered on with mods. Your original install isn't touched unless you choose to mod it directly.`
-    : `<div class="eyebrow">Hi, I'm Franklin</div>Pick a base game and I'll explain what a merge will do, check your mods, and help when something crashes.`;
-  if (state.setup && state.view === "setup" && state.setup.check.clashes.length)
-    html += `<div class="note small" style="margin-top:8px">${state.setup.check.clashes.length} mod clash${state.setup.check.clashes.length > 1 ? "es" : ""} found. Ask me which to keep.</div>`;
-  if (hasKey === false) html += `<div class="note small" style="margin-top:8px">Add your Claude API key in <a href="#" id="toSettings">Settings</a> to chat with me.</div>`;
-  card.innerHTML = html;
-  if ($("#toSettings")) $("#toSettings").onclick = (e) => { e.preventDefault(); show("settings"); };
-}
-
-// Minimal, safe formatting for Franklin's replies: paragraphs, bullet lists and **bold**.
-const hideNotes = (t) => t.replace(/\[remember:[^\]]*\]?/gi, "").trim();
-function formatReply(text) {
-  const blocks = esc(hideNotes(text)).split(/\n{2,}/);
-  return blocks.map((b) => {
-    const lines = b.split("\n");
-    if (lines.every((l) => /^\s*([-*•]|\d+\.)\s+/.test(l)))
-      return "<ul>" + lines.map((l) => "<li>" + l.replace(/^\s*([-*•]|\d+\.)\s+/, "") + "</li>").join("") + "</ul>";
-    return "<p>" + lines.join("<br>") + "</p>";
-  }).join("").replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
-}
-
-function addMsg(cls, html) {
-  const d = document.createElement("div");
-  d.className = "msg " + cls;
-  d.innerHTML = html;
-  $("#franklinMessages").appendChild(d);
-  $("#franklinBody").scrollTop = $("#franklinBody").scrollHeight;
-  return d;
-}
-
-let franklinBusy = false;
-async function askFranklin(text, opts = {}) {
-  if (franklinBusy || !text.trim()) return;
-  franklinBusy = true;
-  addMsg("me", esc(text));
-  const out = addMsg("typing", "");
-  let sid;
-  let logsFor = opts.merge || null;
-  if (opts.crashLogs && !logsFor) logsFor = state.selected != null ? "game:" + state.selected : null;
-  try {
-    sid = await call("franklin_send", text, franklinContext(), logsFor);
-  } catch (e) {
-    out.className = "msg err"; out.textContent = errText(e); franklinBusy = false; return;
-  }
-  let full = "", since = 0;
-  window.FranklinBrain.talking(true);
-  while (true) {
-    let r;
-    try { r = await call("franklin_poll", sid, since); } catch (e) { r = { text: "", done: true, error: errText(e) }; }
-    since = r.next ?? since;
-    if (r.text) { full += r.text; out.innerHTML = formatReply(full); $("#franklinBody").scrollTop = $("#franklinBody").scrollHeight; }
-    if (r.done) {
-      out.classList.remove("typing");
-      if (r.error) {
-        out.className = "msg err";
-        out.innerHTML = esc(r.error) + (/Settings/.test(r.error) ? ` <a href="#" class="goSettings">Open Settings</a>` : "");
-        out.querySelector(".goSettings")?.addEventListener("click", (e) => { e.preventDefault(); show("settings"); });
-      }
-      break;
-    }
-    await sleep(120);
-  }
-  window.FranklinBrain.talking(false);
-  franklinBusy = false;
-  if (full) speak(hideNotes(full));
-}
-
-const CHIPS = {
-  explain: ["What will this merge actually do, and what won't it be able to do?", {}],
-  suggest: ["Which kinds of mods should I look for to get the most out of this merge? Tell me what to search for.", {}],
-  check: ["Check the mods I've added. Do any clash, need something that's missing, or look like they're for a different game?", {}],
-  crash: ["My game crashed or a mod isn't working. Check the logs and tell me what went wrong.", { crashLogs: true }],
-  online: ["Is it safe to play this merged game online?", {}],
-  ideas: ["Give me some merge ideas from the games I've got installed.", {}],
-  perf: ["Will my PC run this merge well? If not, which lighter mods should I go for?", {}],
-};
-document.querySelectorAll("#franklinChips [data-ask]").forEach((b) => (b.onclick = () => { const [t, o] = CHIPS[b.dataset.ask]; askFranklin(t, o); }));
-$("#franklinForm").onsubmit = (e) => { e.preventDefault(); const v = $("#franklinText").value; $("#franklinText").value = ""; askFranklin(v); };
 $("#modal").addEventListener("keydown", (e) => { if (e.key === "Escape" && $("#modalActions").children.length) { e.stopPropagation(); closeModal(); } });
-
-// ---------- push-to-talk: hold F8 (anywhere) or the mic button, talk, let go ----------
-const ptt = {
-  down: () => { call("ptt_start").catch(() => {}); setListening(true); },
-  up: () => { call("ptt_stop").catch(() => {}); },
-};
-function setListening(on) {
-  $("#franklin").classList.toggle("listening", on);
-  $("#franklinText").placeholder = on ? "Listening… let go when you're done" : "Ask Franklin… or hold F8 to talk";
-}
-$("#franklinMic").onpointerdown = (e) => { e.preventDefault(); $("#franklinMic").setPointerCapture(e.pointerId); ptt.down(); };
-$("#franklinMic").onpointerup = $("#franklinMic").onpointercancel = () => ptt.up();
-async function pollPtt() {
-  const r = await call("ptt_poll").catch(() => null);
-  if (r) {
-    setListening(r.listening);
-    for (const h of r.heard) {
-      if (h.error) toast(h.error, 8000);
-      else if (h.text) { openFranklin(); askFranklin(h.text); }
-      else toast("Didn't catch that. Hold F8 and try again.");
-    }
-  }
-  setTimeout(pollPtt, r && r.listening ? 200 : 450);
-}
-ready.then(() => setTimeout(pollPtt, 1500));
-
-// ---------- Franklin's voice ----------
-// Your own cloned voice or ElevenLabs if set up, otherwise a free natural voice, and offline the Windows one.
-const voiceOn = () => !state.settings || state.settings.voice_on !== false;
-let speaking = null;
-
-function stopSpeaking() {
-  speechRun++;
-  if (speaking) { speaking.pause(); speaking = null; }
-  if (window.speechSynthesis) speechSynthesis.cancel();
-  window.FranklinBrain.talking(false);
-}
-
-async function setVoice(on) {
-  if (!on) stopSpeaking();
-  try { state.settings = { ...(state.settings || {}), ...(await call("save_settings", { voice_on: on })) }; } catch (e) { toast(errText(e)); }
-  renderMute();
-  if ($("#voiceOn")) $("#voiceOn").checked = on;
-  toast(on ? "Franklin's voice is on." : "Franklin's muted.");
-}
-
-function renderMute() {
-  const b = $("#franklinMute"), on = voiceOn();
-  b.classList.toggle("muted", !on);
-  b.title = on ? "Mute Franklin's voice" : "Unmute Franklin's voice";
-  b.setAttribute("aria-label", b.title);
-}
-
-function fallbackVoice() {
-  const voices = window.speechSynthesis ? speechSynthesis.getVoices() : [];
-  const en = voices.filter((v) => /en[-_]US/i.test(v.lang));
-  const male = /Andrew|Brian|Christopher|Roger|Guy|Eric|Davis|Mark|David|Male/i;
-  return en.find((v) => male.test(v.name) && /Natural|Online/i.test(v.name)) || en.find((v) => male.test(v.name)) || en[0] || null;
-}
-if (window.speechSynthesis) speechSynthesis.onvoiceschanged = () => {};
-
-function speakable(text) {
-  return text.replace(/\*\*/g, "").replace(/^\s*([-*•]|\d+\.)\s+/gm, "").replace(/https?:\/\/\S+/g, "the link").replace(/\s+/g, " ").trim().slice(0, 1200);
-}
-
-// Long replies are spoken a sentence or two at a time, making the next clip while one plays,
-// so Franklin starts talking quickly even with the slower voices.
-function chunks(text, max = 220) {
-  const out = [];
-  let cur = "";
-  for (const s of text.match(/[^.!?]+[.!?]*\s*/g) || [text]) {
-    if (cur && (cur + s).length > max) { out.push(cur.trim()); cur = ""; }
-    cur += s;
-  }
-  if (cur.trim()) out.push(cur.trim());
-  return out;
-}
-
-let speechRun = 0;
-async function speak(text, force = false) {
-  if ((!voiceOn() && !force) || !text) return;
-  stopSpeaking();
-  const run = ++speechRun;
-  const parts = chunks(speakable(text));
-  const fetchPart = (i) => (i < parts.length ? call("franklin_voice", parts[i], force).catch(() => null) : Promise.resolve(null));
-  let next = fetchPart(0);
-  window.FranklinBrain.talking(true);
-  for (let i = 0; i < parts.length && run === speechRun; i++) {
-    const uri = await next;
-    if (run !== speechRun) return;
-    next = fetchPart(i + 1);
-    await (uri ? playUri(uri) : sayBuiltIn(parts[i]));
-  }
-  if (run === speechRun) window.FranklinBrain.talking(false);
-}
-
-function playUri(uri) {
-  return new Promise((done) => {
-    speaking = new Audio(uri);
-    speaking.onended = speaking.onerror = done;
-    speaking.onpause = done;
-    speaking.play().catch(done);
-  });
-}
-
-function sayBuiltIn(line) {
-  return new Promise((done) => {
-    if (!window.speechSynthesis) return done();
-    const u = new SpeechSynthesisUtterance(line);
-    const v = fallbackVoice();
-    if (v) u.voice = v;
-    u.lang = "en-US";
-    u.pitch = 0.9;
-    u.onend = u.onerror = done;
-    speechSynthesis.speak(u);
-  });
-}
 
 // ---------- first run: ask Windows for permission once ----------
 async function firstRun() {
@@ -1491,109 +1220,39 @@ async function firstRun() {
   if (st.done) return;
   if (!st.needs.length) { call("run_setup").catch(() => {}); return; }
   const list = st.needs.map((f) => `<li>${esc(f)}</li>`).join("");
-  const go = await modal(line("permTitle"), `
-    <canvas class="welcome-brain brain" data-brain="welcome" aria-hidden="true"></canvas>
+  const go = await modal("One quick thing first", `
     <p>Your games live in protected folders, so Windows needs to say it's OK for Frankenstein to make copies and add mods there.</p>
     <p class="muted">Windows will pop up <strong>once</strong>. Press Yes and you'll never be asked again, even for games you install later in the same library.</p>
     <details class="advanced"><summary>Which folders?</summary><ul class="muted small">${list}</ul></details>`,
     [{ label: "Later", value: false }, { label: "Sort it", value: true, primary: true }]);
-  const cv = document.querySelector('canvas[data-brain="welcome"]');
-  if (cv) cv.remove();
-  if (!go) return toast("No worries. I'll ask again when you first merge.");
+  if (!go) return toast("No problem. Frankenstein asks again when you first merge.");
   const ok = await call("run_setup").catch(() => false);
-  if (ok) { toast(line("permDone") + " You won't be asked again."); speak(line("permDone")); }
-  else modal("Windows said no", `<p class="muted">That's fine, nothing changed. I'll ask again when you start your first merge.</p>`);
+  if (ok) toast("All set. You won't be asked again.");
+  else modal("Windows said no", `<p class="muted">That's fine, nothing changed. Frankenstein asks again when you start your first merge.</p>`);
 }
 
-// ---------- Franklin's brain avatar ----------
+// ---------- the logo: a head with a brain of dots ----------
 document.querySelectorAll("canvas[data-brain]").forEach((cv) => {
   const size = cv.dataset.brain;
-  window.FranklinBrain.mount(cv, { dense: size === "big" ? 1400 : size === "small" ? 420 : 180, speed: size === "big" ? 0.45 : 0.3 });
+  window.LogoBrain.mount(cv, { dense: size === "big" ? 1400 : size === "small" ? 420 : 180, speed: size === "big" ? 0.45 : 0.3 });
 });
 
 // ---------- start ----------
-// Franklin's fixed lines. Each has several versions, picked at random without saying the same
-// one twice in a row. "explicit" is used in 18+ mode, "clean" when it's off.
-const LINES = {
-  explicit: {
-    splash: ["It's alive! Hold up, lemme find your games…", "Yo, what's up bro. Hold up, lemme find your games…", "What's up, man. Lemme find your games…", "What's up bro. Lemme pull up your games…",
-      "Aight brudda, lemme see what you got installed…", "Checking Steam, Epic, GOG and the Xbox app…",
-      "Hold up, grabbing your box art…", "Damn bro, you got a collection. Sorting it out…", "Hold up, lemme find all your shit…"],
-    found: ["Bet, got 'em. {n} games ready, bro.", "Found {n} games. Aight, let's mix some shit up.", "{n} games, bro. Pick one and we'll get into it.",
-      "Got {n} games ready, brudda. Your move.", "{n} games. Time to make some wild shit.", "Fuck yeah, {n} games. Let's mix some shit up."],
-    foundOne: ["Found 1 game, bro. We can work with that.", "Just the one game bro, but damn, that's enough to start."],
-    none: ["Damn bro, no games showing up yet. Point me at a folder.", "Where the fuck are your games, bro? Point me at a folder.", "Couldn't spot any games, brudda. Add one and we're good."],
-    updateTitle: ["New update's out, bro", "Got an update for you, brudda", "Yo, there's an update"],
-    importDone: ["Aight, “{name}” is ready, bro.", "“{name}” is in, bro. Go have fun.", "Done brudda, “{name}” is set up."],
-    voiceTest: ["Yo bro, how's this sound?", "This is me now, bro. Smooth as hell, right?", "Check it brudda. That's the voice."],
-    voiceSaved: ["Aight, voice is locked in.", "That's my voice sorted, brudda."],
-    hello: ["Yo, welcome to Frankenstein, bro. Let's stitch some games together.", "What's up, man. It's Franklin. What we merging?", "Yo, what's up bro. Pick a game and let's mix some shit up.", "What's up bro, it's Franklin. What we merging?",
-      "Yo, what's up brudda. Franklin here.", "What's up bro. Ready when you are."],
-    goodGame: ["Good choice, bro.", "Good choice. {game} is a solid base.", "Ohh, good choice, brudda.", "{game}? Good choice, bro.",
-      "Damn, good choice.", "Solid pick, bro.", "Aight, {game} it is."],
-    award: ["Yo, look at you. Achievement unlocked: {a}.", "Hold up, you just got {a}. Damn, bro.", "Bet. {a}, unlocked.", "Aight brudda, {a}. Got 'em."],
-    goodMod: ["Good choice, brudda.", "Bet, got 'em.", "Good choice on that one, bro.", "Good pick, brudda.", "Bet, that's going in.",
-      "Damn, good choice.", "Fuck yeah, good choice."],
-    permTitle: ["Quick thing first, bro", "One sec before we get into it, bro", "Real quick, brudda"],
-    permDone: ["Bet, all sorted.", "Done, bro. Easy.", "Sorted bro, no stress."],
-  },
-  clean: {
-    splash: ["It's alive! Hold up, lemme find your games…", "Yo, what's up bro. Hold up, lemme find your games…", "What's up, man. Lemme find your games…", "What's up bro. Lemme pull up your games…",
-      "Aight brudda, lemme see what you got installed…", "Checking Steam, Epic, GOG and the Xbox app…", "Grabbing your box art, hold up…"],
-    found: ["Aight, got 'em. {n} games ready, bro.", "Found {n} games. Let's mix some stuff up.", "{n} games, bro. Pick one and we'll get into it.",
-      "Got {n} games ready, brudda. Your move."],
-    foundOne: ["Found 1 game, bro. We can work with that.", "Just the one game bro, but that's enough to start."],
-    none: ["No games showing up yet, bro. Point me at a folder.", "Couldn't spot any games, brudda. Add one and we're good."],
-    updateTitle: ["New update's out, bro", "Got an update for you, brudda", "Yo, there's an update"],
-    importDone: ["Aight, “{name}” is ready, bro.", "“{name}” is in, bro. Go have fun."],
-    voiceTest: ["Yo bro, how's this sound?", "Check it brudda. That's the voice."],
-    voiceSaved: ["Aight, voice is locked in.", "That's my voice sorted, brudda."],
-    hello: ["Yo, welcome to Frankenstein, bro. Let's stitch some games together.", "What's up, man. It's Franklin. What we merging?", "Yo, what's up bro. Pick a game and let's mix some stuff up.", "What's up bro, it's Franklin. What we merging?",
-      "What's up bro. Ready when you are."],
-    goodGame: ["Good choice, bro.", "Good choice. {game} is a solid base.", "Ooh, good choice.", "Solid pick, brudda.", "Aight, {game} it is."],
-    award: ["Yo, look at you. Achievement unlocked: {a}.", "Hold up, you just got {a}. Nice, bro.", "Bet. {a}, unlocked.", "Aight brudda, {a}. Got 'em."],
-    goodMod: ["Good choice, brudda.", "Aight, got 'em.", "Good choice on that one, bro.", "Good pick, brudda."],
-    permTitle: ["Quick thing first, bro", "One sec before we get into it, bro"],
-    permDone: ["Aight, all sorted.", "Done, bro. Easy."],
-  },
-};
-const lastLine = {};
-const lineSet = (k) => LINES[state.settings && state.settings.explicit === false ? "clean" : "explicit"][k];
-function line(k) {
-  const opts = lineSet(k);
-  let pick;
-  do { pick = opts[Math.floor(Math.random() * opts.length)]; } while (opts.length > 1 && pick === lastLine[k]);
-  lastLine[k] = pick;
-  return pick;
-}
-
-// A quick spoken reaction plus a toast, e.g. "Good choice" when a game or mod is picked.
-function franklinSays(k, vars = {}) {
-  let t = line(k);
-  for (const [a, b] of Object.entries(vars)) t = t.replace("{" + a + "}", b);
-  toast("Franklin: " + t);
-  speak(t);
-}
+const SPLASH = ["It's alive! Finding your games…", "Checking Steam, Epic, GOG and the Xbox app…", "Grabbing your box art…", "Working out how each game is modded…"];
 
 (async () => {
   await whoIsPlaying();
   const started = Date.now();
   let i = 0;
-  const rotate = setInterval(() => { $("#splashLine").textContent = line("splash"); }, 1600);
+  const rotate = setInterval(() => { $("#splashLine").textContent = SPLASH[++i % SPLASH.length]; }, 1600);
   renderLibrary();
-  renderFranklinCard();
   try { state.settings = await call("get_settings"); } catch (e) { /* shown when needed */ }
-  renderFranklinCard();
-  renderMute();
-  call("franklin_voice_warm", ["splash", "found", "foundOne", "permDone", "voiceTest", "hello", "goodGame", "goodMod"].flatMap(lineSet)
-    .filter((t) => !t.includes("{"))).catch(() => {});
   await scan();
   loadOwned(false, true).then(() => state.owned?.sources.length && loadOwned(true, true));
   await sleep(Math.max(0, 2200 - (Date.now() - started)));
   clearInterval(rotate);
   const n = state.games.length;
-  $("#splashLine").textContent = n > 1 ? line("found").replace("{n}", n) : n ? line("foundOne") : line("none");
-  speak($("#splashLine").textContent);
+  $("#splashLine").textContent = n > 1 ? `Found ${n} games.` : n ? "Found 1 game." : "No games found yet. Add a game folder in the Library.";
   await sleep(1100);
   $("#splash").classList.add("gone");
   setTimeout(() => $("#splash").remove(), 700);

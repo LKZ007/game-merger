@@ -1,6 +1,6 @@
 "use strict";
 
-// Franklin's avatar: a blacked-out head in side profile with a slowly turning 3D brain of
+// Frankenstein's logo: a blacked-out head in side profile with a slowly turning 3D brain of
 // dots inside it. The dots pulse grey to white and sparks run across it like thoughts.
 // Drawn on a <canvas>, no images needed.
 (function () {
@@ -95,7 +95,7 @@
 
     frame(now) {
       if (!this.c.isConnected) { // canvas gone (splash or dialog closed): stop drawing
-        window.FranklinBrain.all = window.FranklinBrain.all.filter((b) => b !== this);
+        window.LogoBrain.all = window.LogoBrain.all.filter((b) => b !== this);
         return;
       }
       const dt = Math.min(0.05, (now - this.last) / 1000);
@@ -177,7 +177,7 @@
     }
   }
 
-  window.FranklinBrain = {
+  window.LogoBrain = {
     all: [],
     mount(canvas, opts) { const b = new Brain(canvas, opts); this.all.push(b); return b; },
     talking(on) { this.all.forEach((b) => (b.talking = on)); },

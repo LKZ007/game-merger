@@ -1,4 +1,4 @@
-"""Accounts on this PC. Each one has its own merges, saves, Franklin memory, achievements and
+"""Accounts on this PC. Each one has its own merges, saves, achievements and
 personal settings; the admin also manages the shared settings (API keys, where copies go, cloud
 backup) and what each account is allowed to do.
 
@@ -15,15 +15,14 @@ import time
 from . import paths
 
 # Settings each account keeps for itself. Everything else is shared by the whole PC (admin's call).
-PERSONAL = {"voice_on", "voice_style", "explicit", "fun_style", "franklin_memory", "about_player", "achievements",
+PERSONAL = {"fun_style", "achievements",
             "counters", "party", "cloud_folder", "steam_on", "steam_id", "steam_error", "gog_on", "fullscreen", "discord_on"}
 # What the admin can allow or block per account
 PERMISSIONS = {
-    "explicit": "Franklin's 18+ mode (cussing)",
     "online": "Play together (online parties) and sharing merges",
     "mods": "Making merges and installing or switching mods",
 }
-DEFAULT_PERMS = {"explicit": True, "online": True, "mods": True}
+DEFAULT_PERMS = {"online": True, "mods": True}
 
 
 class ProfileError(Exception):
@@ -57,7 +56,7 @@ def _hash(pin, salt):
 
 def public(p):
     return {"id": p["id"], "name": p["name"], "admin": p.get("admin", False), "has_pin": bool(p.get("pin")),
-            "perms": dict(DEFAULT_PERMS, **p.get("perms", {})), "color": p.get("color", "#8b5cf6")}
+            "perms": {k: v for k, v in dict(DEFAULT_PERMS, **p.get("perms", {})).items() if k in PERMISSIONS}, "color": p.get("color", "#8b5cf6")}
 
 
 def ensure_admin(shared, name):

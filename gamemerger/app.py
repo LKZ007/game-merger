@@ -91,12 +91,11 @@ def main():
         import webview
     except ImportError:
         return run_browser()
-    # Let Franklin say hello on the startup screen without waiting for a click first.
+    # merge previews autoplay their (muted) trailers
     os.environ.setdefault("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", "--autoplay-policy=no-user-gesture-required")
     api = Api()
     api._handoffs = [arg] if arg else []
     api._register_nxm = register_nxm
-    api._ptt.watch_key()  # hold F8 to talk to Franklin, even mid-game
     # borderless like a game launcher: the page draws its own minimise / full screen / close buttons
     window = webview.create_window("Frankenstein", os.path.join(WEB, "index.html"), js_api=api,
                                    width=1360, height=860, min_size=(1100, 700), background_color="#0c0912",
@@ -109,9 +108,4 @@ def main():
             api._handoffs.append(msg)
         bring_to_front(window)
     instance.listen(on_handoff)
-    try:
-        webview.start()
-    finally:
-        own = getattr(api, "_own", None)
-        if own:
-            own.stop()  # don't leave Franklin's voice model using memory after the app closes
+    webview.start()

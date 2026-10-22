@@ -56,10 +56,9 @@ jobs:
           python installer/version_info.py &&
           pyinstaller --noconfirm --onedir --windowed --noupx --name Frankenstein
           --version-file installer\version_info.txt
-          --icon installer\Frankenstein.ico --collect-data edge_tts
+          --icon installer\Frankenstein.ico
           --add-data "gamemerger\recipes;gamemerger\recipes"
-          --add-data "gamemerger\web;gamemerger\web"
-          --add-data "gamemerger\xtts_server.py;gamemerger" Frankenstein.pyw
+          --add-data "gamemerger\web;gamemerger\web" Frankenstein.pyw
 
       - name: Build installer
         shell: pwsh

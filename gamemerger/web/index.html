@@ -10,9 +10,9 @@
 </head>
 <body>
 <div class="splash" id="splash" role="status" aria-live="polite">
-  <div class="splash-avatar"><canvas class="brain" data-brain="big" aria-label="Franklin" role="img"></canvas></div>
+  <div class="splash-avatar"><canvas class="brain" data-brain="big" aria-label="Frankenstein" role="img"></canvas></div>
   <div class="logo splash-logo">FRANKEN<span>STEIN</span></div>
-  <div class="splash-line" id="splashLine">Yo, what's up bro. Hold up, lemme find your games…</div>
+  <div class="splash-line" id="splashLine">It's alive! Finding your games…</div>
   <div class="bar indeterminate splash-bar"><div></div></div>
 </div>
 <div class="winbar hidden" id="winbar">
@@ -23,7 +23,7 @@
 </div>
 <div class="app">
   <nav class="nav" aria-label="Main">
-    <div class="logo">FRANKEN<span>STEIN</span></div>
+    <div class="logo"><canvas class="logo-brain brain" data-brain="tiny" aria-hidden="true"></canvas>FRANKEN<span>STEIN</span></div>
     <button class="nav-item active" data-view="library"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>Library</button>
     <button class="nav-item" data-view="merges"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3v6a4 4 0 0 0 8 0V3"/><path d="M12 13v8"/></svg>My merges</button>
     <button class="nav-item" data-view="party"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="8" cy="8" r="3"/><circle cx="17" cy="9" r="2.5"/><path d="M2 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><path d="M14.5 14.5c.8-.3 1.6-.5 2.5-.5 2.8 0 5 2.2 5 5"/></svg>Play together</button>
@@ -33,7 +33,6 @@
     <button class="nav-item" data-view="backups"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>Backups</button>
     <button class="nav-item" data-view="settings"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg>Settings</button>
     <div class="grow"></div>
-    <button class="nav-item franklin-toggle" id="franklinToggle"><canvas class="nav-avatar brain" data-brain="tiny" aria-hidden="true"></canvas>Franklin</button>
     <button class="me-chip" id="meChip"></button>
     <div class="nav-foot" id="navFoot">Looking for games…</div>
   </nav>
@@ -50,34 +49,6 @@
     <section class="view hidden" id="view-settings"></section>
   </main>
 
-  <aside class="franklin" id="franklin" aria-label="Franklin assistant">
-    <header class="f-head">
-      <canvas class="f-avatar brain" data-brain="small" aria-hidden="true"></canvas>
-      <div class="grow"><div class="f-name">Franklin</div><div class="f-sub">Your merge assistant · powered by Claude</div></div>
-      <button class="icon-btn" id="franklinMute" aria-label="Mute Franklin" title="Mute Franklin's voice"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4z"/><path class="wave" d="M16 9a4 4 0 0 1 0 6M18.5 6.5a7.5 7.5 0 0 1 0 11"/><path class="cross" d="M16 9l6 6M22 9l-6 6"/></svg></button>
-      <button class="icon-btn" id="franklinNew" aria-label="New conversation" title="New conversation"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
-      <button class="icon-btn" id="franklinClose" aria-label="Hide Franklin" title="Hide"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
-    </header>
-    <div class="f-body" id="franklinBody">
-      <div class="f-card" id="franklinCard"></div>
-      <div id="franklinMessages" class="f-messages" aria-live="polite"></div>
-    </div>
-    <div class="f-chips" id="franklinChips">
-      <button data-ask="explain">Explain this merge</button>
-      <button data-ask="suggest">Suggest mods</button>
-      <button data-ask="check">Check my mods</button>
-      <button data-ask="crash">Why did it crash?</button>
-      <button data-ask="online">Is this safe online?</button>
-      <button data-ask="ideas">Merge ideas</button>
-      <button data-ask="perf">Will my PC run it?</button>
-    </div>
-    <form class="f-input" id="franklinForm">
-      <label for="franklinText" class="sr-only">Ask Franklin</label>
-      <input id="franklinText" placeholder="Ask Franklin… or hold F8 to talk" autocomplete="off">
-      <button type="button" class="mic" id="franklinMic" aria-label="Hold to talk to Franklin" title="Hold to talk (or hold F8, even in a game)"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button>
-      <button class="send" aria-label="Send"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
-    </form>
-  </aside>
 </div>
 
 <div class="modal hidden" id="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">

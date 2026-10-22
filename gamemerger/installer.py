@@ -132,13 +132,17 @@ def plan_files(extracted, layout, flat_root=False, subdir=""):
     mod_root = root if flat_root else _find_mod_root(root, markers)
     plan, unknown = [], []
     if mod_root:
+        # e.g. Bethesda: a mod with meshes/ and textures/ at its top belongs inside Data/
+        prefix = layout.get("root_prefix", "")
+        if prefix and any(c.lower() == prefix.lower() for c in os.listdir(mod_root)):
+            prefix = ""
         for dirpath, _dirs, files in os.walk(mod_root):
             for f in files:
                 s = os.path.join(dirpath, f)
                 rel = os.path.relpath(s, mod_root)
                 if dirpath == mod_root and os.path.splitext(f)[1].lower() in IGNORED_EXT:
                     continue
-                plan.append((s, safe_rel(rel)))
+                plan.append((s, safe_rel(os.path.join(prefix, rel) if prefix else rel)))
         return plan, unknown
     rules = layout.get("loose_rules", [])
     for dirpath, _dirs, files in os.walk(root):

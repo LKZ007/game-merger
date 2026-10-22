@@ -14,9 +14,10 @@ import urllib.parse
 import uuid
 import webbrowser
 
-from . import accounts, achievements, covers, discord, profiles, ptt, detect, downloader, franklin, gallery, network, nexus, paths, permissions, saves, scan, sharing, specs, updater, voice
+from . import accounts, achievements, ai, autorecipe, covers, storeinfo, discord, profiles, detect, downloader, gallery, network, nexus, paths, permissions, saves, scan, sharing, updater
 from .version import VERSION
 from .installer import MODE_COPY, MODE_HARDLINK, MODE_INPLACE, Merge, MergeError, find_clashes, preview
+from . import recipes
 from .recipes import load_recipes, resource_dir
 
 SHARE_TYPES = ("Shared merges (*.gmerge)", "All files (*.*)")
@@ -48,26 +49,18 @@ class Api:
         self._settings = profiles.Settings(paths.load_settings(), last["id"])
         # one account without a PIN opens straight in; otherwise the page shows who's playing first
         self._locked = len(data["profiles"]) > 1 or bool(last.get("pin"))
-        if not self._settings.get("voice_defaults_v2"):
-            # Andrew is Franklin's voice now; the cloned XTTS voice is opt-in from Settings
-            if self._settings.get("voice_style") == "own":
-                self._settings["voice_style"] = voice.DEFAULT_VOICE
-            self._settings["voice_defaults_v2"] = True
-            paths.save_settings(self._settings)
-        if self._settings.get("voice_style") != "own":
-            threading.Thread(target=voice.LocalVoice.stop_leftover, daemon=True).start()
-        self._recipes = load_recipes([resource_dir(), paths.user_recipes_dir()])
+        self._hand = load_recipes([resource_dir(), paths.user_recipes_dir()])
+        self._recipes = self._hand + autorecipe.load_all()
         self._games = []
+        self._owned = {}
         self._jobs = {}
-        self._chat_history = []
-        self._chat_streams = {}
+        self._fun_busy = set()
         self._lock = threading.Lock()
         self._playing = None
         self._recover_saves()
         self._start_hotkey()
         self._presence = discord.Presence()
-        self._heard = []
-        self._ptt = ptt.PushToTalk(self._heard.append)
+        threading.Thread(target=self._upgrade_all, daemon=True).start()
 
     # ---------- accounts ----------
 
@@ -104,9 +97,6 @@ class Api:
             raise MergeError("Wrong PIN.")
         with self._lock:
             self._settings = profiles.Settings(paths.load_settings(), pid)
-            self._chat_history = []
-        if not dict(profiles.DEFAULT_PERMS, **p.get("perms", {})).get("explicit", True) and not p.get("admin"):
-            self._settings["explicit"] = False
         profiles.set_last(pid)
         self._locked = False
         return self.profiles_state()
@@ -144,10 +134,63 @@ class Api:
             raise MergeError(str(e))
         return self.profiles_state()
 
+    # ---------- upgrading merges made by older versions ----------
+
+    UPGRADE = 2  # bump when a release adds something old merges should get
+
+    def _upgrade_all(self):
+        """Once per release: give merges made by older versions everything new ones get."""
+        if self._settings.get("merges_upgraded", 0) >= self.UPGRADE:
+            return
+        for m in Merge.all():
+            try:
+                self._upgrade(m)
+            except Exception:
+                pass  # left for the Upgrade button
+        self._settings["merges_upgraded"] = self.UPGRADE
+        paths.save_settings(self._settings)
+
+    def _upgrade(self, m):
+        """Back up the merge's record, then fill in what's missing. Mods, files and saves aren't touched."""
+        if m.data.get("upgraded", 0) >= self.UPGRADE:
+            return False
+        shutil.copy2(os.path.join(Merge.record_dir(m.id), "manifest.json"),
+                     os.path.join(Merge.record_dir(m.id), "manifest.v%d.bak.json" % m.data.get("upgraded", 1)))
+        if not self._recipe(m.data.get("recipe_id")) and os.path.isdir(m.base_path):
+            # recipe gone (or never had one): make one from the base game's files
+            g = detect.InstalledGame(m.data.get("game_name") or os.path.basename(m.base_path), m.base_path, "Merge")
+            r = autorecipe.build(g, [])
+            self._recipes.append(r)
+            m.data["recipe_id"] = r.id
+        if not m.data.get("source_name"):
+            m.data["source_name"] = (m.data.get("theme_name") or "").split(" style")[0]
+        if not m.data.get("tagline") and self._settings.get("claude_api_key"):
+            try:
+                got = self._ai().game_identity(m.data.get("game_name", ""), m.data.get("source_name", ""),
+                                               [i["label"] for i in m.data.get("installs", [])][:8], [])
+                if got:
+                    m.data["tagline"] = got["tagline"]
+            except Exception:
+                pass
+        m.data.setdefault("owner", None)
+        m.data["upgraded"] = self.UPGRADE
+        m.save()
+        return True
+
+    def merge_upgrade(self, merge_id):
+        """The Upgrade button: run the upgrade for one merge again."""
+        m = Merge.load(merge_id)
+        m.data["upgraded"] = min(m.data.get("upgraded", 1), self.UPGRADE - 1)
+        self._upgrade(m)
+        return True
+
     # ---------- helpers ----------
 
     def _recipe(self, rid):
         return next((r for r in self._recipes if r.id == rid), None)
+
+    def _ai(self):
+        return ai.AI(self._settings.get("claude_api_key", ""))
 
     def _game(self, key):
         return self._games[int(key)]
@@ -233,19 +276,44 @@ class Api:
     # ---------- library ----------
 
     def scan(self):
-        self._games = detect.scan(self._recipes, self._settings.get("manual_folders", []))
-        names = [g.name.lower() for g in self._games]
+        self._games = detect.scan(self._hand, self._settings.get("manual_folders", []))
+        self._build_recipes()
+        return self.library()
+
+    def _style_names(self):
+        names = [g.name for g in self._games] + [g["name"] for g in self._owned.values()]
+        return list(dict.fromkeys(names))
+
+    def _build_recipes(self):
+        """Every game can be the base: games without a built-in recipe get one made from their files,
+        and every other game you have (installed or owned) is offered as a style."""
+        styles = self._style_names()
+        for r in self._hand:
+            autorecipe.extend(r, styles)
+        for g in self._games:
+            if g.recipe is None or getattr(g.recipe, "auto", None):
+                try:
+                    g.recipe = autorecipe.build(g, styles)
+                except OSError:
+                    g.recipe = None
+        built = {g.recipe.id: g.recipe for g in self._games if g.recipe and getattr(g.recipe, "auto", None)}
+        self._recipes = self._hand + list(built.values()) + [r for r in autorecipe.load_all(styles) if r.id not in built]
+
+    def library(self):
+        installed = {g.name.lower() for g in self._games}
         out = []
         for i, g in enumerate(self._games):
+            r = g.recipe
             themes = []
-            if g.recipe:
-                for t in g.recipe.themes:
-                    found = next((n for n in names if any(m in n for m in t.source_match)), None)
-                    themes.append({"id": t.id, "name": t.name, "from_game": t.from_game,
-                                   "description": t.description, "found": bool(found)})
-            out.append({"key": str(i), "name": g.name, "source": g.source, "path": g.path,
-                        "base": g.recipe is not None, "recipe_id": g.recipe.id if g.recipe else None,
-                        "warning": g.recipe.warning if g.recipe else "", "themes": themes})
+            for t in (r.themes if r else []):
+                themes.append({"id": t.id, "name": t.name, "from_game": t.from_game, "description": t.description,
+                               "found": any(any(m in n for m in t.source_match) for n in installed)})
+            themes.sort(key=lambda t: (t["id"].startswith("style-"), not t["found"], t["from_game"].lower()))
+            auto = getattr(r, "auto", None) or {}
+            out.append({"key": str(i), "name": g.name, "source": g.source, "path": g.path, "base": r is not None,
+                        "recipe_id": r.id if r else None, "warning": r.warning if r else "", "themes": themes,
+                        "engine": auto.get("engine", ""), "moddable": auto.get("moddable", "yes" if r else "no"),
+                        "mod_note": auto.get("note", "")})
         return out
 
     # ---------- every game you own (all launchers, any PC) ----------
@@ -391,48 +459,114 @@ class Api:
         except OSError:
             pass
         games = accounts.merge_lists(self._installed_here(), owned, accounts.other_devices(cloud))
+        before = set(self._style_names())
         self._owned = {g["key"]: g for g in games}
-        return {"games": games, "errors": errors, "sources": sources}
+        if set(self._style_names()) != before:
+            self._build_recipes()  # newly seen owned games become styles for every base game
+        return {"games": games, "errors": errors, "sources": sources, "styles_changed": set(self._style_names()) != before}
 
     def fun_scores(self, base_key, names):
-        """Franklin's fun rating for merging each named game into the base game. Cached per base game,
-        so each pairing is only asked once. Without a Claude key, only the styles Frankenstein has
-        recipes for get rated."""
+        """How fun merging each named game into the base game would be: {"scores": {name: {rating, why}},
+        "self": rating of the base game itself, "pending": still working}. Every pairing gets a rating:
+        built-in pairings are green, the AI rates the rest in the background (cached, asked once), and
+        without an AI key a rough guess from the games' Steam genres is used. A base game with limited or
+        no mod support caps every rating, since there's less you can actually do."""
         g = self._game(base_key)
-        path = os.path.join(paths.sub("library"), "fun-scores.json")
-        try:
-            with open(path, encoding="utf-8") as f:
-                cache = json.load(f)
-        except (OSError, ValueError):
-            cache = {}
-        mine = cache.setdefault(g.name, {})
-        if g.recipe:  # the styles we have recipes for are hand-picked pairings
+        cache = self._fun_cache()
+        mine = cache.get(g.name, {})
+        if g.recipe:
             for t in g.recipe.themes:
-                for n in names:
-                    if n not in mine and any(m in n.lower() for m in t.source_match):
-                        mine[n] = {"rating": "green", "why": "Ready-made merge: " + t.name}
-        todo = [n for n in names if n not in mine and n != g.name][:150]
-        if todo and self._settings.get("claude_api_key"):
-            try:
-                bot = franklin.Franklin(self._settings["claude_api_key"], self._settings.get("explicit", True))
-                for i in range(0, len(todo), 50):
-                    mine.update(bot.fun_scores(g.name, todo[i:i + 50]))
-            except Exception:  # offline, bad key, odd answer: show what we have, ask again next time
-                pass
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(cache, f)
-        return {n: mine[n] for n in names if n in mine}
+                if getattr(t, "filled", True) and not t.id.startswith("style-"):
+                    for n in names:
+                        if any(m in n.lower() for m in t.source_match):
+                            mine.setdefault(n, {"rating": "green", "why": "Ready-made merge: " + t.name, "src": "recipe"})
+        has_key = bool(self._settings.get("claude_api_key"))
+        todo = [n for n in names if n != g.name and (n not in mine or (has_key and mine[n].get("src") == "guess"))]
+        pending = bool(todo)
+        if todo and g.name not in self._fun_busy:
+            self._fun_busy.add(g.name)
+            threading.Thread(target=self._rate, args=(g, todo, has_key), daemon=True).start()
+        moddable = (getattr(g.recipe, "auto", None) or {}).get("moddable", "yes") if g.recipe else "no"
+        cap = {"yes": None, "limited": "yellow", "no": "red"}[moddable]
+        order = ["green", "yellow", "red"]
+        out = {}
+        for n in names:
+            if n in mine:
+                v = dict(mine[n])
+                if cap and order.index(v["rating"]) < order.index(cap):
+                    v["rating"] = cap
+                    v["why"] = (v["why"] + " (capped: %s has %s mod support)" % (g.name, "limited" if cap == "yellow" else "no real"))
+                out[n] = v
+        mine_self = {"yes": ("green", "Moddable: %s" % ((getattr(g.recipe, "auto", None) or {}).get("note") or "built-in recipe")),
+                     "limited": ("yellow", "Limited mod support"), "no": ("red", "No real mod support")}[moddable]
+        return {"scores": out, "self": {"rating": mine_self[0], "why": mine_self[1]}, "pending": pending}
+
+    def _fun_file(self):
+        return os.path.join(paths.sub("library"), "fun-scores.json")
+
+    def _fun_cache(self):
+        try:
+            with open(self._fun_file(), encoding="utf-8") as f:
+                return json.load(f)
+        except (OSError, ValueError):
+            return {}
+
+    def _rate(self, g, todo, has_key):
+        """Background: rate every pairing not rated yet, saving as it goes."""
+        try:
+            got = {}
+            if has_key:
+                try:
+                    bot = self._ai()
+                    for i in range(0, len(todo), 50):
+                        part = bot.fun_scores(g.name, todo[i:i + 50])
+                        got.update({n: dict(v, src="ai") for n, v in part.items()})
+                        self._save_fun(g.name, got)
+                except Exception:
+                    pass  # offline or bad key: fall back to a guess for now, ask again next time
+            base_info = self._store_info(g.name, g.appid)
+            for n in todo:
+                if n not in got:
+                    got[n] = dict(storeinfo.guess_fun(base_info, self._store_info(n, self._appid_for_name(n))), src="guess")
+                    if len(got) % 10 == 0:
+                        self._save_fun(g.name, got)
+            self._save_fun(g.name, got)
+        finally:
+            self._fun_busy.discard(g.name)
+
+    def _save_fun(self, base, got):
+        with self._lock:
+            cache = self._fun_cache()
+            cache.setdefault(base, {}).update(got)
+            with open(self._fun_file(), "w", encoding="utf-8") as f:
+                json.dump(cache, f)
+
+    def _appid_for_name(self, name):
+        for g in self._games:
+            if g.name == name and g.appid:
+                return g.appid
+        for g in self._owned.values():
+            if g["name"] == name and g.get("appid"):
+                return g["appid"]
+        return None
+
+    def _store_info(self, name, appid=None):
+        try:
+            appid = appid or covers.search_appid(name)
+            return storeinfo.details(appid) if appid else None
+        except Exception:
+            return None
 
     def merge_identity(self, base_key, theme_id, avoid=None):
-        """A new-game name and tagline for this merge. Franklin makes one up; without his key it's a
-        simple name from the two games."""
+        """A new-game name and tagline for this merge, made up by the AI; without a key it's a simple
+        name from the two games."""
         g = self._game(base_key)
         t = next((x for x in (g.recipe.themes if g.recipe else []) if x.id == theme_id), None)
         if not t:
             raise MergeError("Pick a style to merge in first.")
         if self._settings.get("claude_api_key"):
             try:
-                bot = franklin.Franklin(self._settings["claude_api_key"], self._settings.get("explicit", True))
+                bot = self._ai()
                 got = bot.game_identity(g.name, t.from_game, [s.name for s in t.slots], avoid or [])
                 if got:
                     return got
@@ -444,7 +578,7 @@ class Api:
     def merge_preview(self, base_key, theme_id):
         """What a merge could look like, before anything is downloaded: low-res trailers streamed from
         Steam (the base game and the game whose style comes in), pictures of popular mods for each part
-        of the merge from Nexus Mods, and Franklin's quick pitch. It's a preview of the parts, not a render
+        of the merge from Nexus Mods, and a short AI-written pitch. It's a preview of the parts, not a render
         of your merged game."""
         g = self._game(base_key)
         r = g.recipe
@@ -478,7 +612,7 @@ class Api:
             if not self._settings.get("claude_api_key"):
                 return
             try:
-                bot = franklin.Franklin(self._settings["claude_api_key"], self._settings.get("explicit", True))
+                bot = self._ai()
                 out["summary"] = bot.preview_pitch(g.name, t.from_game, [s.name for s in t.slots]) or out["summary"]
             except Exception:
                 pass
@@ -534,6 +668,7 @@ class Api:
         g = self._game(key)
         r = g.recipe
         t = r.theme(theme_id)
+        self._fill_style(r, t)
         return {
             "frameworks": [{"id": fid, "name": r.framework(fid).name, "manual_url": r.framework(fid).manual_url}
                            for fid in t.frameworks],
@@ -542,6 +677,22 @@ class Api:
             "destination": self._settings.get("destination") or default_destination(g.path),
             "mode": self._settings.get("mode", MODE_HARDLINK),
         }
+
+    def _fill_style(self, r, t):
+        """A style that's only a placeholder gets real mod categories and searches from the AI (once,
+        then kept). Without a key the placeholder stays: one slot searching for the other game's name."""
+        if getattr(t, "filled", True) or not self._settings.get("claude_api_key"):
+            return
+        auto = getattr(r, "auto", None) or {}
+        try:
+            got = self._ai().style_recipe(r.name, auto.get("engine", "its own engine"), auto.get("moddable", "yes"), t.from_game)
+        except Exception:
+            return
+        if got:
+            autorecipe.set_theme(r.id, t.id, got["description"] or t.description, got["slots"])
+            t.description = got["description"] or t.description
+            t.slots = [recipes.Slot(**x) for x in got["slots"]]
+            t.filled = True
 
     def find_mods(self, key, query):
         r = self._game(key).recipe
@@ -890,22 +1041,6 @@ class Api:
         keys, self._new_awards = getattr(self, "_new_awards", []), []
         return [{"id": k, "title": achievements.LIST[k][0], "how": achievements.LIST[k][1]} for k in keys]
 
-    # ---------- push-to-talk ----------
-
-    def ptt_start(self):
-        return self._ptt.start()
-
-    def ptt_stop(self):
-        self._ptt.stop()
-        return True
-
-    def ptt_poll(self):
-        """{"listening", "heard": [{"text"} or {"error"}]}; what was heard is handed over once."""
-        heard, self._heard[:] = list(self._heard), []
-        if any(h.get("text") for h in heard):
-            self._award("talker")
-        return {"listening": self._ptt.listening, "heard": heard, "key": ptt.KEY_NAME}
-
     def controller_used(self):
         self._award("controller")
 
@@ -915,10 +1050,20 @@ class Api:
         del getattr(self, "_handoffs", [])[:]
         return items
 
+    def _base_for(self, info):
+        """The installed game a shared merge is built on. Recipes made on the fly have a different id on
+        each PC, so those are matched by the game's name."""
+        rid = info.get("recipe_id") or ""
+        for x in self._games:
+            if x.recipe and (x.recipe.id == rid or (rid.startswith("auto-") and getattr(x.recipe, "auto", None)
+                                                    and x.recipe.name.lower() == (info.get("game_name") or "").lower())):
+                return x
+        return None
+
     def import_info(self, path):
         info = sharing.read(path)
-        r = self._recipe(info.get("recipe_id"))
-        g = next((x for x in self._games if x.recipe and x.recipe.id == info.get("recipe_id")), None)
+        g = self._base_for(info)
+        r = g.recipe if g else self._recipe(info.get("recipe_id"))
         return {"path": path, "name": info["name"], "game_name": info.get("game_name", ""),
                 "theme_name": info.get("theme_name", ""), "mods": [i["label"] for i in info["installs"]],
                 "size": info["size"], "have_game": bool(g), "known_recipe": bool(r),
@@ -927,13 +1072,19 @@ class Api:
     def import_merge(self, path):
         self._perm("mods", "add merges from friends")
         info = sharing.read(path)
-        g = next((x for x in self._games if x.recipe and x.recipe.id == info.get("recipe_id")), None)
+        g = self._base_for(info)
         if not g:
             raise MergeError("You need %s installed to play this merge." % info.get("game_name", "the base game"))
         r = g.recipe
         try:
             t = r.theme(info.get("theme_id"))
-        except Exception:
+        except KeyError:
+            t = None
+        if t is None and (info.get("theme_id") or "").startswith("style-"):
+            # a style from a game this PC doesn't have: the mods come in the file anyway
+            t = autorecipe.style_themes(r.id, r.name, [(info.get("theme_name") or "Other game").rsplit(" style", 1)[0]],
+                                        list(r.frameworks))[0]
+        if t is None:
             raise MergeError("This merge uses a style this version of Frankenstein doesn't know. Update the app.")
         mode = self._settings.get("mode", MODE_HARDLINK)
         mode = MODE_HARDLINK if mode == MODE_INPLACE else mode  # never change a friend's original install
@@ -989,7 +1140,7 @@ class Api:
                         "has_saves": os.path.isdir(saves.slot_root(m.id)),
                         "offline_lock": bool(self._recipe(m.data.get("recipe_id")) and
                                              self._recipe(m.data.get("recipe_id")).launch_args and m.mode != MODE_INPLACE),
-                        "playing": self._playing == m.id})
+                        "playing": self._playing == m.id, "needs_upgrade": m.data.get("upgraded", 1) < self.UPGRADE})
         return out
 
     def _cover_parts(self, m):
@@ -1054,16 +1205,16 @@ class Api:
         return Merge.load(merge_id).data.get("questlines", [])
 
     def questline_new(self, merge_id, idea=""):
-        """Franklin writes a questline for this merge (runs as a job)."""
+        """The AI writes a questline for this merge (runs as a job)."""
         m = Merge.load(merge_id)
-        bot = franklin.Franklin(self._settings.get("claude_api_key", ""), self._settings.get("explicit", True))
+        bot = self._ai()
 
         def work(job):
-            job.write("Franklin is writing your questline …")
+            job.write("Writing your questline …")
             try:
                 q = bot.questline(m.data.get("game_name", ""), m.data.get("source_name") or m.data.get("theme_name", ""),
                                   m.name, [i["label"] for i in m.data.get("installs", [])], (idea or "").strip()[:300])
-            except franklin.FranklinError as e:
+            except ai.AIError as e:
                 raise MergeError(str(e))
             q["id"] = uuid.uuid4().hex[:8]
             q["done"] = [[False] * len(x["objectives"]) for x in q["quests"]]
@@ -1188,24 +1339,24 @@ class Api:
         return self.merge_mods(merge_id)
 
     def fix_crash(self, merge_id):
-        """One-click crash repair: Franklin reads the logs, turns off the mod causing it, and restarts the game."""
+        """One-click crash repair: the AI reads the logs, the mod causing it is turned off, and the game restarts."""
         m = Merge.load(merge_id)
         r = self._recipe(m.data.get("recipe_id"))
         if self._playing == merge_id and saves.running(r.processes if r else []):
             raise MergeError("The game is still running. Close it first.")
-        bot = franklin.Franklin(self._settings.get("claude_api_key", ""), self._settings.get("explicit", True))
+        bot = self._ai()
 
         def work(job):
-            job.write("Franklin is reading the crash logs …")
-            logs = franklin.read_logs(m.target_path, r.logs if r else [])
+            job.write("Reading the crash logs …")
+            logs = ai.read_logs(m.target_path, r.logs if r else [])
             if not logs:
                 raise MergeError("There are no log files yet. Play until it crashes, then press Fix it again.")
             on = [x["label"] for x in m.all_mods() if x["on"]]
-            ctx = franklin.build_context({"base_game": m.data.get("game_name"), "theme": m.data.get("theme_name"),
+            ctx = ai.build_context({"base_game": m.data.get("game_name"), "theme": m.data.get("theme_name"),
                                           "logs": logs})
             try:
                 verdict = bot.diagnose(ctx, on)
-            except franklin.FranklinError as e:
+            except ai.AIError as e:
                 raise MergeError(str(e))
             job.write(verdict["why"])
             if not verdict["culprit"]:
@@ -1240,7 +1391,7 @@ class Api:
 
     def setup_status(self):
         """Folders Frankenstein still needs permission for (asked once, on first run)."""
-        bases = [g.path for g in self._games if g.recipe]
+        bases = [g.path for g in self._games if g.recipe and not getattr(g.recipe, "auto", None)]
         dest = self._settings.get("destination") or (default_destination(bases[0]) if bases else None)
         needs = permissions.folders_needing_access(bases, [dest] if dest else [])
         return {"done": bool(self._settings.get("setup_done")) and not needs, "needs": needs}
@@ -1306,188 +1457,19 @@ class Api:
                 "mode": self._settings.get("mode", MODE_HARDLINK),
                 "destination": self._settings.get("destination", ""),
                 "data_folder": paths.data_dir(),
-                "voice_on": self._settings.get("voice_on", True),
-                "has_eleven": bool(self._settings.get("elevenlabs_key")),
-                "voice_name": self._settings.get("voice_name", ""),
-                "voice_style": self._settings.get("voice_style", voice.DEFAULT_VOICE),
                 "version": VERSION,
-                "explicit": self._settings.get("explicit", True),
                 "fun_style": self._settings.get("fun_style", "dot"),
                 "cloud_folder": self._settings.get("cloud_folder", ""),
-                "cloud_options": saves.cloud_folders(),
-                "voice_styles": ([["own", "Your own cloned voice (slow to load)"]] if self._own_voice_folder() else [])
-                + [[k, v[1]] for k, v in voice.NEURAL_VOICES.items()]}
+                "cloud_options": saves.cloud_folders()}
 
     def save_settings(self, values):
-        shared = {"mode", "destination", "elevenlabs_key", "claude_api_key"}
+        shared = {"mode", "destination", "claude_api_key"}
         if shared & {k for k, v in values.items() if v is not None} and not self._me().get("admin"):
             raise MergeError("Only the admin account can change keys and where copies go.")
-        if values.get("explicit"):
-            self._perm("explicit", "switch on Franklin's 18+ mode")
-        for k in ("mode", "destination", "voice_on", "voice_style", "explicit", "cloud_folder", "fun_style"):
+        for k in ("mode", "destination", "cloud_folder", "fun_style"):
             if k in values:
                 self._settings[k] = values[k]
-        if self._settings.get("voice_style") != "own":
-            self._stop_own_voice()
-        if values.get("elevenlabs_key") is not None:
-            self._settings["elevenlabs_key"] = values["elevenlabs_key"].strip()
-            self._settings.pop("voice_id", None)
-            self._settings.pop("voice_name", None)
         if values.get("claude_api_key") is not None:
             self._settings["claude_api_key"] = values["claude_api_key"].strip()
         paths.save_settings(self._settings)
         return self.get_settings()
-
-    # ---------- Franklin ----------
-
-    def franklin_send(self, text, context, include_logs_for=None):
-        """Start a Franklin reply. include_logs_for: a merge id or "game:<key>" whose logs to attach."""
-        ctx = dict(context or {})
-        ctx["about_player"] = self._about_player()
-        ctx["pc"] = specs.summary()
-        if include_logs_for:
-            if include_logs_for.startswith("game:"):
-                g = self._game(include_logs_for[5:])
-                folder, r = g.path, g.recipe
-                # The player most likely ran their newest merge of this game, so read its logs.
-                latest = next((m for m in Merge.all() if os.path.normcase(m.base_path) == os.path.normcase(g.path)), None)
-                if latest and os.path.isdir(latest.target_path):
-                    folder = latest.target_path
-            else:
-                m = Merge.load(include_logs_for)
-                folder, r = m.target_path, self._recipe(m.data.get("recipe_id"))
-            ctx["logs"] = franklin.read_logs(folder, r.logs if r else [])
-            if not ctx["logs"]:
-                ctx["logs"] = [("(none)", "No log files were found. The game may not have been started yet.")]
-        sid = uuid.uuid4().hex[:10]
-        stream = {"text": "", "done": False, "error": None}
-        self._chat_streams[sid] = stream
-        with self._lock:
-            self._chat_history.append({"role": "user",
-                                      "content": franklin.build_context(ctx) + "\n\n[Player's message]\n" + text})
-            history = list(self._chat_history)
-
-        def run():
-            try:
-                bot = franklin.Franklin(self._settings.get("claude_api_key", ""), self._settings.get("explicit", True))
-                for chunk in bot.stream_reply(history):
-                    stream["text"] += chunk
-                self._remember(stream["text"])
-                with self._lock:
-                    self._chat_history.append({"role": "assistant", "content": stream["text"]})
-            except franklin.FranklinError as e:
-                stream["error"] = str(e)
-            except Exception as e:
-                stream["error"] = "Franklin hit a problem: %s" % e
-            finally:
-                if stream["error"]:
-                    with self._lock:  # keep the history alternating user/assistant
-                        if self._chat_history and self._chat_history[-1]["role"] == "user":
-                            self._chat_history.pop()
-                stream["done"] = True
-        threading.Thread(target=run, daemon=True).start()
-        return sid
-
-    def _about_player(self):
-        """What Franklin remembers between sessions: notes he saved, and the merges played most."""
-        out = list(self._settings.get("franklin_memory", []))
-        played = sorted((m for m in Merge.all() if m.data.get("plays")), key=lambda m: -m.data["plays"])[:3]
-        for m in played:
-            out.append("Plays \"%s\" (%s with %s style) a lot: %d times." % (m.name, m.data.get("game_name"),
-                                                                      m.data.get("theme_name"), m.data["plays"]))
-        return out
-
-    def _remember(self, reply):
-        notes = [n.strip() for n in re.findall(r"\[remember:\s*([^\]]+)\]", reply) if n.strip()]
-        if notes:
-            mem = [n for n in self._settings.get("franklin_memory", []) if n not in notes] + notes
-            self._settings["franklin_memory"] = mem[-30:]
-            paths.save_settings(self._settings)
-
-    def franklin_forget(self):
-        self._settings["franklin_memory"] = []
-        paths.save_settings(self._settings)
-        return True
-
-    def franklin_poll(self, sid, since=0):
-        s = self._chat_streams[sid]
-        return {"text": s["text"][since:], "next": len(s["text"]), "done": s["done"], "error": s["error"]}
-
-    def franklin_reset(self):
-        with self._lock:
-            self._chat_history = []
-        return True
-
-    def _own_voice_folder(self):
-        """Where the XTTS cloned voice is set up on this PC, or None. Only looks, never starts it."""
-        if sys.platform != "win32":
-            return None
-        if not hasattr(self, "_own_folder"):
-            self._own_folder = voice.LocalVoice.find(self._settings.get("xtts_folder"))
-        return self._own_folder
-
-    def _own_voice(self):
-        """Franklin's own XTTS voice, or None. It's slow to load (a minute or two of CPU), so it only
-        starts when the player has picked it in Settings."""
-        if self._settings.get("voice_style") != "own":
-            return None
-        if not getattr(self, "_own", None):
-            folder = self._own_voice_folder()
-            if not folder:
-                return None
-            self._own = voice.LocalVoice(folder, os.path.join(os.path.dirname(resource_dir()), "xtts_server.py"),
-                                         paths.sub("voice-cache"))
-            self._own.start()
-        return self._own
-
-    def _stop_own_voice(self):
-        own, self._own = getattr(self, "_own", None), None
-        if own:
-            own.stop()
-
-    def franklin_voice_warm(self, lines):
-        """Make the clips for lines Franklin says a lot, in the background, once his voice is loaded."""
-        own = self._own_voice()
-        if not own:
-            return False
-
-        def run():
-            for _ in range(120):  # the model can take a minute or two to load on a laptop CPU
-                if own.ready():
-                    break
-                time.sleep(2)
-            for line in lines:
-                try:
-                    own.wav(line)
-                except voice.VoiceError:
-                    return
-        threading.Thread(target=run, daemon=True).start()
-        return True
-
-    def franklin_voice(self, text, force=False):
-        """Franklin's voice as mp3: your cloned voice or ElevenLabs if set up, otherwise the free Andrew
-        voice (or whichever free voice is picked). None means use the voice built into Windows."""
-        if not force and not self._settings.get("voice_on", True):
-            return None
-        text = text[:1200]
-        own = self._own_voice()
-        if own:
-            try:
-                return own.wav(text)
-            except voice.VoiceError:
-                pass  # still loading: use the next voice for now
-        key = self._settings.get("elevenlabs_key")
-        if key:
-            try:
-                if not self._settings.get("voice_id"):
-                    vid, name = voice.find_manchester_voice(key)
-                    self._settings.update(voice_id=vid, voice_name=name)
-                    paths.save_settings(self._settings)
-                return voice.speak(key, self._settings["voice_id"], text)
-            except voice.VoiceError:
-                pass
-        try:
-            style = self._settings.get("voice_style", voice.DEFAULT_VOICE)
-            return voice.neural(text, voice.DEFAULT_VOICE if style == "own" else style)
-        except voice.VoiceError:
-            return None
