@@ -73,7 +73,8 @@
         {
           "name": "Hood Warfare guns (AK, SMG, sniper, RPG, minigun)",
           "search": "more guns",
-          "prefer": "More Guns Forked"
+          "prefer": "More Guns Forked",
+          "hero": true
         },
         {
           "name": "Police that shoot back",
@@ -110,7 +111,8 @@
       "slots": [
         {
           "name": "Vehicles",
-          "search": "vehicle"
+          "search": "vehicle",
+          "hero": true
         },
         {
           "name": "Police and wanted level",

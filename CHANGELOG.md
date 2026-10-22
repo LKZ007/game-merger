@@ -3,6 +3,12 @@
 Every release, newest first. Downloads are on the [releases page](https://github.com/LKZ007/game-merger/releases).
 The app was called Game Merger before 3.8.0.
 
+## v3.19.0 (2026-10-22)
+- **A self-check after every update.** When Frankenstein opens it checks its own files, its mods for each game and every merge. It backs up each merge first, then brings anything older up to date: Frankenstein's own mods and the loaders they need, filling empty parts, splitting off shared files, and putting back mod files that went missing. After an update it tells you "Everything's up to date" or "Fixed N things". You can run it any time from Settings > **Check everything**. If Frankenstein's own install is damaged, it offers **Repair**.
+- **Nothing from an earlier update goes missing.** Every release now runs a feature checklist covering everything Frankenstein has shipped, and the release won't build if anything is gone.
+- **In-game stories for GTA V and Cyberpunk.** A questline you make for a GTA V or Cyberpunk merge now plays inside the game. In GTA V, quests arrive as texts from the merge's characters, the objective shows on screen (F9 repeats it), and you get cash and weapon rewards. In Cyberpunk the objective shows on the speedometer HUD, and there's a Story tab (press ~) with an "I did it" button for steps the game can't detect.
+- **Hero item first.** Every merge brings the other game's most iconic thing over first, like Forza's cars, Hood Warfare's guns or Minecraft's skins. It's marked ★ Hero on the merge step and in What it adds. New styles that the AI writes start with the hero too.
+
 ## v3.18.0 (2026-10-22)
 - **No part of a merge is left empty, for every merge.** "What it adds" never says "couldn't bring over" again. For each part, Frankenstein downloads a mod when it can. If it can't, its own mod for that game covers it. If no mod exists at all, the part becomes a quest in the merge's story, marked "story stand-in". Mods that only Nexus Premium can download show as one-click picks next to the stand-in. Merges you already have are filled in the first time this version opens.
 - **Spawner, inside Frankenstein.** Press **Spawner** on a merge and click any item or car: it appears in the running game within a second. You can keep it open on a second screen. Right-click gives 10. It works for Schedule I (every item, mods' items too), Cyberpunk 2077 (every item and car) and GTA V (cars, aircraft and weapons). The Schedule I and Cyberpunk lists fill in after you play the merge once.

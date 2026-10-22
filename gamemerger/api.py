@@ -281,8 +281,99 @@ class Api:
 
     UPGRADE = 5  # bump when a release adds something old merges should get
 
+    # ---------- self-check: nothing from an earlier version goes missing ----------
+
+    # files every install of Frankenstein must have (the app's own pages and its mods for each game)
+    REQUIRED = ["web/index.html", "web/app.js", "web/app.css", "recipes/cyberpunk2077.json", "recipes/schedule1.json",
+                "recipes/gta5.json", "mods/schedule1/Frankenstein.dll", "mods/cyberpunk2077/frankenstein_items/init.lua",
+                "mods/gta5/Frankenstein.3.cs"]
+
+    def _self_check(self):
+        """Run at every start (in the background): check Frankenstein's own files and every merge, and repair what
+        it can. Each merge's record is backed up before anything changes. The result is shown after an update,
+        or whenever something was fixed or needs you."""
+        here = os.path.dirname(os.path.abspath(__file__))
+        fixed, problems = [], []
+        missing = [f for f in self.REQUIRED if not os.path.isfile(os.path.join(here, *f.split("/")))]
+        if missing:
+            problems.append("Frankenstein's install is missing %s. Press Repair to download a fresh copy." % ", ".join(missing))
+        for m in Merge.all():
+            try:
+                fixed += ["%s: %s" % (m.name, x) for x in self._check_merge(m)]
+            except Exception as e:
+                problems.append("%s: couldn't check it (%s)" % (m.name, e))
+        res = {"version": VERSION, "time": time.time(), "fixed": fixed, "problems": problems,
+               "repair_install": bool(missing), "after_update": self._settings.get("checked_version") != VERSION}
+        self._check = res
+        self._settings["checked_version"] = VERSION
+        paths.save_settings(self._settings)
+        return res
+
+    def _check_merge(self, m):
+        """Bring one merge up to date with this version. Returns what was fixed, in plain words."""
+        if m.data.get("status") == "creating" or not os.path.isdir(m.target_path or ""):
+            return []
+        r = self._recipe(m.data.get("recipe_id"))
+        rec = os.path.join(Merge.record_dir(m.id), "manifest.json")
+        backup = os.path.join(Merge.record_dir(m.id), "manifest.check.bak.json")
+        if os.path.isfile(rec):
+            shutil.copy2(rec, backup)
+        out = []
+        if m.data.get("upgraded", 1) < self.UPGRADE and self._upgrade(m):
+            out.append("brought up to this version's merge standard")
+        b = BUILTIN.get(r.id if r else "")
+        if b and r:
+            src = os.path.join(os.path.dirname(os.path.abspath(__file__)), "mods", r.id)
+            had = any(i["label"] == b["label"] for i in m.data.get("installs", []))
+            old = m.data.get("builtin_stamp")
+            self._install_builtin(m, r, lambda *_: None)
+            if not had and any(i["label"] == b["label"] for i in m.data.get("installs", [])):
+                out.append("added %s" % b["label"])
+            elif had and os.path.isdir(src) and old != m.data.get("builtin_stamp"):
+                out.append("updated %s" % b["label"])
+        if self._fill_gaps(m, r):
+            out.append("filled empty parts of What it adds")
+        heroes = {sl.name for t in (r.themes if r else []) for sl in t.slots if sl.hero}
+        marked = False
+        for a in m.data.get("adds", []):
+            if a.get("slot") in heroes and not a.get("hero"):
+                a["hero"] = marked = True
+        if marked:
+            m.save()
+            out.append("marked the other game's hero item")
+        if m.mode == MODE_HARDLINK and installer.harden(m.target_path):
+            out.append("gave shared files their own copy (originals stay untouched)")
+        # mod files that went missing from the merge's folder: put back from the files the merge kept
+        gone = [rel for rel in m.data.get("files", {}) if not os.path.lexists(os.path.join(m.target_path, rel))]
+        if gone and r and self._playing != m.id and m.data.get("rebuilt_for") != VERSION:
+            m.data["rebuilt_for"] = VERSION  # once per version, in case the game itself removes a file
+            on = [x["label"] for x in m.all_mods() if x["on"]]
+            try:
+                m.rebuild(r.layout, on)
+                out.append("put back %d missing mod file%s" % (len(gone), "" if len(gone) == 1 else "s"))
+            except MergeError:
+                pass  # files it can't restore: Auto-fill or Add mods gets them again
+        if not out and os.path.isfile(backup):
+            os.remove(backup)
+        return out
+
+    def self_check_result(self, run=False):
+        """The last self-check (or a new one with run=True, from Settings)."""
+        if run:
+            return self._self_check()
+        return getattr(self, "_check", None) or {"pending": True}
+
+    def repair_install(self):
+        """Download and reinstall this version of Frankenstein (when its own files went missing)."""
+        self._update = updater.latest(force=True)
+        return self.install_update()
+
     def _upgrade_all(self):
         """Once per release: give merges made by older versions everything new ones get."""
+        try:
+            self._self_check()
+        except Exception:
+            pass
         if self._settings.get("merges_upgraded", 0) >= self.UPGRADE:
             return
         for m in Merge.all():
@@ -906,7 +997,7 @@ class Api:
         return {
             "frameworks": [{"id": fid, "name": r.framework(fid).name, "manual_url": r.framework(fid).manual_url}
                            for fid in t.frameworks],
-            "slots": [{"name": s.name, "search": s.search} for s in t.slots] + (
+            "slots": [{"name": s.name, "search": s.search, "hero": s.hero} for s in t.slots] + (
                 [{"name": "Controller support (optional)", "search": "controller"}]
                 if self._pad_status(g.name, g.appid) in ("partial", "none") and not self._is_mc(r) else []),
             "default_name": "%s - %s" % (r.name.split(" (")[0], t.from_game.split(" /")[0]),
@@ -1388,6 +1479,7 @@ class Api:
         picks += [x for x in locked if x["url"] not in {p["url"] for p in picks}]
         return {"slot": slot.name, "ok": True, "mod": text, "source": "Built in" if kind == "builtin" else "Stand-in",
                 "standin": kind, "page": "", "extra": 0, "creative": bool(prefix), "why": "", "search": slot.search,
+                "hero": bool(getattr(slot, "hero", False)),
                 "picks": picks[:8]}
 
     @staticmethod
@@ -1460,6 +1552,7 @@ class Api:
             if prefix:
                 m.data.setdefault("creative_mods", []).extend(labels)
             adds.append({"slot": slot.name, "ok": bool(labels), "mod": hit["name"], "source": hit["source"],
+                         "hero": bool(getattr(slot, "hero", False)),
                          "page": hit.get("page", ""), "extra": max(0, len(got) - 1), "creative": bool(prefix),
                          "why": "" if labels else "it was found but didn't install"})
             job.write("✔ %s: %s from %s" % (slot.name, hit["name"], hit["source"]))

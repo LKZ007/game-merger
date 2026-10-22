@@ -157,6 +157,94 @@ local function raceTick()
     end
 end
 
+-- ---------- the merge's story: quests from its characters (Frankenstein writes story.json) ----------
+local story = { pack = nil, q = 1, s = 1, base = 0, day = 0, had = false, msg = nil, msgUntil = 0, done = false }
+
+local function readJson(name)
+    local f = io.open(name, "r")
+    if not f then return nil end
+    local ok, v = pcall(json.decode, f:read("*a"))
+    f:close()
+    return ok and v or nil
+end
+
+local function saveStory()
+    local f = io.open("progress.json", "w")
+    if f then f:write(json.encode({ title = story.pack.title, q = story.q, s = story.s, done = story.done })); f:close() end
+end
+
+local function money()
+    local n = 0
+    pcall(function() n = Game.GetTransactionSystem():GetItemQuantity(Game.GetPlayer(), MarketSystem.Money()) end)
+    return n
+end
+
+local function gameDay()
+    local d = 0
+    pcall(function() d = Game.GetTimeSystem():GetGameTime():Days() end)
+    return d
+end
+
+local function heat()
+    local h = 0
+    pcall(function() h = Game.GetScriptableSystemsContainer():Get(CName.new("PreventionSystem")):GetHeatStageAsInt() end)
+    return h
+end
+
+local function who(q)
+    for _, c in ipairs(story.pack.characters or {}) do
+        if c.id == q.giver then return ((c.first or "") .. " " .. (c.last or "")):gsub("%s+$", "") end
+    end
+    return "Unknown"
+end
+
+local function say(from, text)
+    story.msg = from .. ": " .. (text or "")
+    story.msgUntil = menu.now + 12
+end
+
+local function startStep()
+    story.base, story.day, story.had = money(), gameDay(), false
+    saveStory()
+end
+
+local function storyTick()
+    local pk = story.pack
+    if not pk or story.done or not Game.GetPlayer() then return end
+    local q = pk.quests[story.q]
+    if not q then story.done = true; saveStory(); return end
+    if story.s == 0 then say(who(q), q.start_text); story.s = 1; startStep(); return end
+    local st = q.steps[story.s]
+    if not st then
+        local r = q.reward or {}
+        if (r.cash or 0) > 0 then pcall(function() Game.AddToInventory("Items.money", r.cash) end) end
+        say(who(q), (q.done_text or "Nice work.") .. ((r.cash or 0) > 0 and (" (+" .. r.cash .. " eddies)") or ""))
+        story.q, story.s = story.q + 1, 0
+        if not pk.quests[story.q] then story.done = true; say("Frankenstein", "Story complete: " .. (pk.title or "")) end
+        saveStory()
+        return
+    end
+    local amount = math.max(1, st.amount or 1)
+    local ok = false
+    if st.type == "text" then say(who(q), st.text); ok = true
+    elseif st.type == "earn" then ok = money() - story.base >= amount
+    elseif st.type == "cash" then ok = money() >= amount
+    elseif st.type == "wanted" then ok = heat() >= math.min(5, amount)
+    elseif st.type == "escape" then if heat() > 0 then story.had = true end; ok = story.had and heat() == 0
+    elseif st.type == "days" then ok = gameDay() - story.day >= amount
+    end  -- takedown and buy (or if the game can't tell): press "I did it" in the Story tab
+    if ok then story.s = story.s + 1; startStep() end
+end
+
+local function loadStory()
+    local pk = readJson("story.json")
+    if not pk or not pk.quests or #pk.quests == 0 then return end
+    story.pack = pk
+    local pr = readJson("progress.json")
+    if pr and pr.title == pk.title then story.q, story.s, story.done = pr.q or 1, pr.s or 0, pr.done or false
+    else story.q, story.s = 1, 0; say("Frankenstein", (pk.title or "") .. ": " .. (pk.intro or "")) end
+end
+
 -- ---------- Frankenstein's Spawner (the app) sends requests through a file next to this one ----------
 local function catalog()
     local f = io.open("catalog.json", "w")
@@ -198,6 +286,7 @@ registerForEvent("onInit", function()
     load()
     loadCars()
     pcall(catalog)
+    pcall(loadStory)
     -- requests sent before this session started don't count
     pcall(function()
         local f = io.open("commands.json", "r")
@@ -214,6 +303,7 @@ registerForEvent("onUpdate", function(dt)
     menu.clock = 0
     pcall(raceTick)
     pcall(bridge)
+    pcall(storyTick)
 end)
 registerForEvent("onOverlayOpen", function() menu.overlay = true end)
 registerForEvent("onOverlayClose", function() menu.overlay = false end)
@@ -227,11 +317,16 @@ local function drawHud()
         local v = Game.GetMountedVehicle(Game.GetPlayer())
         if v then kmh = math.floor(math.abs(v:GetCurrentSpeed()) * 3.6 + 0.5) end
     end)
-    if not kmh and not menu.race then return end
+    local q = story.pack and not story.done and story.pack.quests[story.q]
+    local line = story.msg and menu.now < story.msgUntil and story.msg or nil
+    local goal = q and story.s > 0 and q.steps[story.s] and (q.title .. ": " .. q.steps[story.s].text) or nil
+    if not kmh and not menu.race and not line and not goal then return end
     ImGui.SetNextWindowPos(30, 30, ImGuiCond.FirstUseEver)
     ImGui.SetNextWindowBgAlpha(0.55)
     if ImGui.Begin("Frankenstein HUD", ImGuiWindowFlags.NoTitleBar + ImGuiWindowFlags.AlwaysAutoResize + ImGuiWindowFlags.NoScrollbar) then
         if kmh then ImGui.Text(string.format("%3d km/h   %3d mph", kmh, math.floor(kmh / 1.609 + 0.5))) end
+        if line then ImGui.TextWrapped(line) end
+        if goal then ImGui.TextWrapped(goal) end
         if menu.race and menu.race.left then
             ImGui.Text(string.format("RACE  %s %4d m   %5.1f s", menu.race.arrow or "", math.floor(menu.race.left), menu.race.time or 0))
         end
@@ -393,6 +488,22 @@ registerForEvent("onDraw", function()
                 ImGui.NewLine()
                 if menu.race and ImGui.Button("Give up this race") then menu.race = nil; menu.note = "Race cancelled" end
                 if menu.best then ImGui.Text(string.format("Best time this session: %.1f s", menu.best)) end
+                ImGui.EndTabItem()
+            end
+            if story.pack and ImGui.BeginTabItem("Story") then
+                ImGui.TextWrapped((story.pack.title or "") .. " - " .. (story.pack.intro or ""))
+                local q = story.pack.quests[story.q]
+                if story.done then ImGui.Text("Story complete.")
+                elseif q then
+                    ImGui.Separator()
+                    ImGui.TextWrapped("Quest " .. story.q .. " of " .. #story.pack.quests .. ": " .. q.title .. " (from " .. who(q) .. ")")
+                    ImGui.TextWrapped(q.briefing or "")
+                    for i, st in ipairs(q.steps) do
+                        ImGui.Text((i < story.s and "[x] " or (i == story.s and "[>] " or "[ ] ")) .. st.text)
+                    end
+                    local st = q.steps[story.s]
+                    if st and st.type ~= "text" and ImGui.Button("I did it") then story.s = story.s + 1; startStep() end
+                end
                 ImGui.EndTabItem()
             end
             if ImGui.BeginTabItem("Fly") then

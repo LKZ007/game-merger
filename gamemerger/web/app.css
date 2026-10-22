@@ -390,3 +390,4 @@ body.pad .tile:focus .face { border: 2px solid var(--accent); box-shadow: 0 0 30
   background: hsla(var(--h), 70%, 55%, .35); }
 .sp-name { font-size: 12px; font-weight: 600; text-align: center; line-height: 1.2; }
 .sp-cat { font-size: 10px; color: var(--muted); }
+.slot.hero { border-left: 3px solid #a855f7; padding-left: 10px; background: rgba(124,58,237,.08); border-radius: 6px; }

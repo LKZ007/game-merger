@@ -24,13 +24,14 @@ def _v(tag):
     return tuple(int(x) for x in re.findall(r"\d+", tag)[:3]) or (0,)
 
 
-def latest(timeout=10):
-    """{"version", "notes", "url", "size"} for the newest release, or None if there's nothing newer."""
+def latest(timeout=10, force=False):
+    """{"version", "notes", "url", "size"} for the newest release, or None if there's nothing newer.
+    force: the newest release even if it's this version (to repair a damaged install)."""
     req = urllib.request.Request("https://api.github.com/repos/%s/releases/latest" % REPO, headers=UA)
     with urllib.request.urlopen(req, timeout=timeout) as r:
         rel = json.load(r)
     tag = rel.get("tag_name", "")
-    if _v(tag) <= _v(VERSION):
+    if _v(tag) <= _v(VERSION) and not force:
         return None
     assets = rel.get("assets", [])
     for a in [a for a in assets if ASSET.search(a["name"])] or [a for a in assets if OLD_ASSET.search(a["name"])]:

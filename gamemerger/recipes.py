@@ -36,7 +36,8 @@ class Slot:
     asset: str = ""
     flat_root: bool = False
     picks: list = field(default_factory=list)  # hand-picked pages ({name, url}) for mods only a person can download
-    builtin: str = ""  # what Frankenstein's own mod does for this slot when no download is found
+    builtin: str = ""
+    hero: bool = False  # the other game's most iconic thing (its car, character, weapon...): brought over first  # what Frankenstein's own mod does for this slot when no download is found
 
 
 @dataclass

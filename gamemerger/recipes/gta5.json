@@ -86,7 +86,8 @@
       "slots": [
         {
           "name": "Player skins (Steve, Alex...)",
-          "search": "minecraft"
+          "search": "minecraft",
+          "hero": true
         },
         {
           "name": "Creatures and mobs",

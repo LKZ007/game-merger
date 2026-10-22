@@ -23,12 +23,14 @@ DEPTH = {
                   "note": "Quests in the game's journal, texts from new characters, rewards and shops, through "
                           "Frankenstein's own Schedule I mod.",
                   "path": "UserData/Frankenstein/story.json", "ready": False},
-    "gta5": {"level": "companion", "label": "Companion story",
-             "note": "Gameplay mods plus a story you follow from Frankenstein; the in-game GTA V loader "
-                     "(Script Hook V .NET) is next.", "path": "", "ready": False},
-    "cyberpunk2077": {"level": "companion", "label": "Companion story",
-                      "note": "Gameplay mods plus a story you follow from Frankenstein; the in-game Cyberpunk loader "
-                              "(Cyber Engine Tweaks) is next.", "path": "", "ready": False},
+    "gta5": {"level": "in-game", "label": "In-game story",
+             "note": "Quests arrive as texts from the merge's characters, the objective shows on screen (F9 repeats it), "
+                     "with cash and weapon rewards, through Frankenstein's own GTA V script.",
+             "path": "scripts/Frankenstein/story.json", "ready": True},
+    "cyberpunk2077": {"level": "in-game", "label": "In-game story",
+                      "note": "Messages from the merge's characters and the objective on screen, a Story tab (press ~) "
+                              "and eddie rewards, through Frankenstein's own Cyberpunk mod.",
+                      "path": "bin/x64/plugins/cyber_engine_tweaks/mods/frankenstein_items/story.json", "ready": True},
 }
 DEFAULT = {"level": "companion", "label": "Companion story",
            "note": "Gameplay mods plus a story you follow from Frankenstein and the rundown.", "path": "", "ready": False}

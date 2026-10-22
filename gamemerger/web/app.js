@@ -308,7 +308,7 @@ function renderSetup() {
       return `<div class="file"><span class="name">${esc(basename(m.path))}</span><span class="info ${c && (c.error || !c.paths.length) ? "bad" : ""}">${esc(info)}</span>
         <button class="icon-btn" data-remove="${j}" aria-label="Remove ${esc(basename(m.path))}"><svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>`;
     }).join("");
-    return `<div class="slot"><div class="slot-head"><span class="slot-name">${esc(sl.name)}</span>
+    return `<div class="slot ${sl.hero ? "hero" : ""}"><div class="slot-head"><span class="slot-name">${sl.hero ? `<span class="tag live" title="The other game's most iconic thing: brought over first">★ Hero</span> ` : ""}${esc(sl.name)}</span>
         ${files ? `<span class="tag">Your pick</span>` : `<span class="tag live" title="Frankenstein finds and installs the best mod for this when you press Merge it">Auto</span>`}
         <span class="muted small">or pick yourself:</span>
         <button class="btn ghost" data-find="${i}">Find mods</button><button class="btn ghost" data-add="${i}">Add file</button></div>${files}</div>`;
@@ -766,10 +766,12 @@ async function followJob(id, title) {
 
 // what a merge brings over from the other game, and what it couldn't
 function addsHtml(a) {
-  const real = a.adds.filter((x) => x.ok && !x.standin), own = a.adds.filter((x) => x.ok && x.standin), miss = a.adds.filter((x) => !x.ok);
+  const heroFirst = [...a.adds].sort((x, y) => (y.hero ? 1 : 0) - (x.hero ? 1 : 0));
+  const real = heroFirst.filter((x) => x.ok && !x.standin), own = heroFirst.filter((x) => x.ok && x.standin), miss = heroFirst.filter((x) => !x.ok);
+  const star = (x) => (x.hero ? `<span class="tag live">★ Hero</span> ` : "");
   const picks = (x) => (x.picks || []).length ? `<div class="small muted">Want the real mod? On Nexus Mods (only Premium lets apps download): ${x.picks.map((k) => `<a href="#" data-ext="${esc(k.url)}">${esc(k.name)}</a>`).join(" · ")}. Press <strong>Mod Manager Download</strong> there and Frankenstein adds it.</div>` : "";
-  const line = (x) => `<li><strong>${esc(x.slot)}</strong>: ${esc(x.mod)} <span class="muted small">from ${esc(x.source)}${x.extra ? `, plus ${x.extra} mod${x.extra > 1 ? "s" : ""} it needs` : ""}${x.creative ? " · creative only" : ""}</span></li>`;
-  const ownLine = (x) => `<li><strong>${esc(x.slot)}</strong>: ${esc(x.mod)} <span class="tag">${x.standin === "story" ? "story stand-in" : "built into Frankenstein"}</span>${x.creative ? ` <span class="muted small">creative only</span>` : ""}${picks(x)}</li>`;
+  const line = (x) => `<li>${star(x)}<strong>${esc(x.slot)}</strong>: ${esc(x.mod)} <span class="muted small">from ${esc(x.source)}${x.extra ? `, plus ${x.extra} mod${x.extra > 1 ? "s" : ""} it needs` : ""}${x.creative ? " · creative only" : ""}</span></li>`;
+  const ownLine = (x) => `<li>${star(x)}<strong>${esc(x.slot)}</strong>: ${esc(x.mod)} <span class="tag">${x.standin === "story" ? "story stand-in" : "built into Frankenstein"}</span>${x.creative ? ` <span class="muted small">creative only</span>` : ""}${picks(x)}</li>`;
   return `<div class="adds">
     ${real.length || a.builtin.length ? `<p class="muted">Mods brought over${a.source ? " from " + esc(a.source) : ""}:</p><ul>${real.map(line).join("")}${a.builtin.map((b) => `<li><strong>Frankenstein</strong>: ${esc(b)}</li>`).join("")}</ul>` : ""}
     ${own.length ? `<p class="muted">Made by Frankenstein itself (no mod for these could be downloaded, so Frankenstein's own mod or the merge's story covers them):</p><ul>${own.map(ownLine).join("")}</ul>` : ""}
@@ -887,6 +889,26 @@ async function checkUpdateNow() {
   toast(`You're on the newest version (${r.current}).`);
 }
 if ($("#navUpdate")) $("#navUpdate").onclick = checkUpdateNow;
+
+// After an update (or when something needed fixing): what the self-check found and fixed.
+function selfCheckHtml(r) {
+  const list = (xs) => `<ul>${xs.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>`;
+  return `${!r.fixed.length && !r.problems.length ? `<p><strong>Everything's up to date.</strong> Every feature, Frankenstein's own mods and your merges were checked for ${esc(r.version)}.</p>` : ""}
+    ${r.fixed.length ? `<p><strong>Fixed ${r.fixed.length} thing${r.fixed.length === 1 ? "" : "s"}</strong> (each merge was backed up first):</p>${list(r.fixed)}` : ""}
+    ${r.problems.length ? `<p><strong>Needs you:</strong></p>${list(r.problems)}` : ""}`;
+}
+async function showSelfCheck(r) {
+  const go = await modal(r.after_update ? `Frankenstein ${r.version}: self-check` : "Self-check", selfCheckHtml(r),
+    r.repair_install ? [{ label: "Later", value: false }, { label: "Repair", value: true, primary: true }] : [{ label: "OK", value: false, primary: true }]);
+  if (go) followJob(await call("repair_install"), "Repairing Frankenstein");
+}
+async function watchSelfCheck(tries = 0) {
+  const r = await call("self_check_result", false).catch(() => null);
+  if (!r) return;
+  if (r.pending) return tries < 60 && setTimeout(() => watchSelfCheck(tries + 1), 3000);
+  if (r.after_update || r.fixed.length || r.problems.length) showSelfCheck(r);
+}
+setTimeout(watchSelfCheck, 4000);
 
 // ---------- the rundown: what's new and what to do, while the game loads ----------
 async function showRundown(m, creative, onPlay) {
@@ -1512,7 +1534,7 @@ async function loadSettings() {
       ${(s.cloud_options || []).length ? "" : `<p class="muted small">No OneDrive or Google Drive folder found on this PC. Install one of them and it shows up here.</p>`}
     </div>
     <div class="card"><h2>Updates</h2>
-      <div class="row"><div class="grow muted">You're on Frankenstein ${esc(s.version)}. It checks for updates every time it opens.</div><button class="btn" id="checkUpdate">Check now</button></div>
+      <div class="row"><div class="grow muted">You're on Frankenstein ${esc(s.version)}. It checks for updates every time it opens.</div><button class="btn" id="checkUpdate">Check now</button><button class="btn ghost" id="selfCheck" title="Check every feature, Frankenstein's own mods and your merges, and fix anything missing">Check everything</button></div>
     </div>
     <div class="card"><h2>Merging</h2>
       <div class="field"><label for="defMode">Default type</label>
@@ -1549,6 +1571,7 @@ async function loadSettings() {
   };
   $("#cloudPick").onchange = async () => { state.settings = await call("save_settings", { cloud_folder: $("#cloudPick").value }); toast($("#cloudPick").value ? "Cloud backup is on." : "Cloud backup is off."); };
   $("#checkUpdate").onclick = async () => offerUpdate(await call("check_update").catch(() => null), true);
+  $("#selfCheck").onclick = async () => { toast("Checking everything…"); try { showSelfCheck(await call("self_check_result", true)); } catch (e) { toast(errText(e)); } };
   $("#itemMenuNormal").onchange = async () => { state.settings = await call("save_settings", { item_menu_normal: $("#itemMenuNormal").checked }); };
   $("#funStyle").onchange = async () => { state.settings = await call("save_settings", { fun_style: $("#funStyle").value }); applyFun(); };
   $("#defBrowse").onclick = async () => { const p = await call("pick_folder"); if (p) $("#defDest").value = p; };

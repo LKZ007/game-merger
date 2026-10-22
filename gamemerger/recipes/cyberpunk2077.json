@@ -144,7 +144,8 @@
               "name": "Audi",
               "url": "https://www.nexusmods.com/games/cyberpunk2077/mods?keyword=audi"
             }
-          ]
+          ],
+          "hero": true
         },
         {
           "name": "Driving / handling overhaul",
@@ -189,12 +190,13 @@
       ],
       "slots": [
         {
-          "name": "Police / wanted system",
-          "search": "police"
+          "name": "Traffic and car theft",
+          "search": "traffic",
+          "hero": true
         },
         {
-          "name": "Traffic and car theft",
-          "search": "traffic"
+          "name": "Police / wanted system",
+          "search": "police"
         },
         {
           "name": "Radio stations",

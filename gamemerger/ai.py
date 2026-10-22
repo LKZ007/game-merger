@@ -226,12 +226,18 @@ class AI:
         ask = ("Base game: %s (%s, mod support: %s). Bring in the style of %s, using only mods made for %s on %s. "
                "Write a two-sentence description of the merge (honest: if mod support is limited or missing, say what "
                "is realistically possible), and 3 to 5 mod categories to look for, each with a short search term "
-               "that works on %s (2 to 3 words, no game name). Answer with only JSON: {\"description\": \"...\", "
+               "that works on %s (2 to 3 words, no game name). The FIRST category is the other game's hero: its single "
+               "most iconic thing that people recognise in merge videos (its signature car, main character or skin, "
+               "signature weapon, creature, blocks or HUD), named like \"Hero: <the thing>\". Answer with only JSON: {\"description\": \"...\", "
                "\"slots\": [{\"name\": \"<category, e.g. Racing cars>\", \"search\": \"<search term>\"}]}"
                % (base, engine, moddable, source, base, site, site))
         data = _json(self.ask(ask, 4000))
         slots = [{"name": str(x.get("name", ""))[:60], "search": str(x.get("search", ""))[:40]}
                  for x in data.get("slots", [])[:6] if x.get("name") and x.get("search")]
+        for x in slots:
+            if x["name"].lower().startswith("hero"):
+                x["hero"] = True
+                x["name"] = x["name"].split(":", 1)[-1].strip() or x["name"]
         if not slots:
             return None
         return {"description": str(data.get("description") or "")[:500], "slots": slots}
