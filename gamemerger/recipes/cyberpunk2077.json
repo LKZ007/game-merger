@@ -164,5 +164,23 @@
       "source_appid": "271590"
     }
   ],
-  "multiplayer": "Cyberpunk 2077 has no working multiplayer yet. Community multiplayer mods are still in development, so for now share your merge and compare runs."
+  "multiplayer": "Cyberpunk 2077 has no working multiplayer yet. Community multiplayer mods are still in development, so for now share your merge and compare runs.",
+  "sandbox": {
+    "native": "Cyber Engine Tweaks (installed with every Cyberpunk merge) has a console: press ~ in game.",
+    "note": "Spawn cars, NPCs and props, free camera, god mode and unlimited eddies.",
+    "slots": [
+      {
+        "name": "Spawner and sandbox menu",
+        "search": "Appearance Menu Mod"
+      },
+      {
+        "name": "Cheat menu (god mode, money, items)",
+        "search": "Simple Menu"
+      },
+      {
+        "name": "Free camera / photo mode",
+        "search": "freefly"
+      }
+    ]
+  }
 }

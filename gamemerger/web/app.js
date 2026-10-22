@@ -187,7 +187,7 @@ function renderLibrary() {
       <button class="tile ${x.base ? "base" : ""} ${x.key === state.selected ? "selected" : ""}" data-key="${x.key}" data-cover="${x.key}" aria-pressed="${x.key === state.selected}">
         ${caseHtml(x.name, state.covers[x.key])}
         <div class="tile-name">${esc(x.name)}</div>
-        <div class="tile-sub">${esc(x.source)} · ${x.key === state.selected ? "main game" : x.moddable === "no" ? "no mod support" : x.moddable === "limited" ? "limited mods" : "moddable"}</div>
+        <div class="tile-sub">${esc(x.source)} · ${x.key === state.selected ? "main game" : x.moddable === "no" ? "no mod support" : x.moddable === "limited" ? "limited mods" : "moddable"}${x.creative ? ` · <span class="creative-tag" title="Has a creative / sandbox mode">creative</span>` : ""}</div>
       </button>`).join("");
   el.innerHTML = `${banner}
     <section class="shelf">
@@ -734,6 +734,8 @@ async function loadMerges() {
       </div>
       <div class="merge-actions">
         <button class="btn primary" data-act="play">▶ Play</button>
+        ${m.creative ? `<button class="btn creative" data-act="creative" title="Sandbox: spawners, god mode, free camera. Own saves, offline.">✦ Creative</button>` : ""}
+        <button class="btn ghost" data-act="rundown" title="What's in this merge and what to do">Rundown</button>
         <button class="btn" data-act="mods">Mods &amp; profiles</button>
         <button class="btn" data-act="add">Add mods</button>
         <button class="btn" data-act="share">Share</button>
@@ -766,6 +768,71 @@ async function offerUpdate(u, asked = false) {
     ${u.notes ? `<div class="log">${esc(u.notes)}</div>` : ""}`,
     [{ label: "Later", value: false }, { label: "Update now", value: true, primary: true }]);
   if (go) followJob(await call("install_update"), "Updating Frankenstein");
+}
+
+// ---------- the rundown: what's new and what to do, while the game loads ----------
+async function showRundown(m, creative, onPlay) {
+  let d;
+  try { d = await call("merge_rundown", m.id, creative); } catch (e) { return; }
+  if (onPlay && !d.show) return;
+  document.querySelector(".rundown")?.remove();
+  const el = document.createElement("div");
+  el.className = "rundown";
+  el.setAttribute("role", "dialog");
+  el.setAttribute("aria-label", "Rundown for " + m.name);
+  const screens = await call("screens").catch(() => 0);
+  const list = (title, xs) => xs && xs.length ? `<section><h3>${title}</h3><ul>${xs.map((x) => `<li>${esc(x)}</li>`).join("")}</ul></section>` : "";
+  const draw = () => {
+    el.innerHTML = `<div class="rd-box">
+      <div class="eyebrow">${onPlay ? "Loading" : "Rundown"}${creative ? " · Creative" : ""}</div>
+      <h1>${esc(d.headline)}</h1>${d.tagline ? `<p class="muted">${esc(d.tagline)}</p>` : ""}
+      <div class="rd-grid">${list("What's new", d.new)}${list("Try first", d.try)}${list("Keys and buttons", d.keys)}${list("Your quest", d.quest ? [d.quest] : [])}${list("Tips", d.tips)}</div>
+      ${d.ready ? "" : `<p class="muted small">Writing a fuller rundown in the background…</p>`}
+      <div class="row rd-actions">
+        <label class="switch small grow"><input type="checkbox" id="rdShow" ${d.show ? "checked" : ""}> Show this when I press Play</label>
+        ${screens > 1 ? `<button class="btn" id="rdSecond">Show on my other screen</button>` : ""}
+        ${screens ? `<button class="btn" id="rdTop">Keep on top</button>` : ""}
+        <button class="btn primary" id="rdGo">${onPlay ? "Let's go" : "Close"}</button></div></div>`;
+    $("#rdGo").onclick = close;
+    $("#rdShow").onchange = (e) => call("rundown_pref", m.id, e.target.checked);
+    if ($("#rdSecond")) $("#rdSecond").onclick = () => { call("rundown_window", m.id, "second", creative); close(); };
+    if ($("#rdTop")) $("#rdTop").onclick = () => { call("rundown_window", m.id, "overlay", creative); close(); };
+    $("#rdGo").focus();
+  };
+  const key = (e) => { if (e.key === "Escape") { e.preventDefault(); close(); } };
+  const close = () => { document.removeEventListener("keydown", key, true); el.remove(); };
+  document.addEventListener("keydown", key, true);
+  document.body.appendChild(el);
+  draw();
+  for (let i = 0; i < 12 && !d.ready && el.isConnected; i++) {  // swap in the AI version when it's ready
+    await sleep(2500);
+    const n = await call("merge_rundown", m.id, creative).catch(() => null);
+    if (n && n.ready && el.isConnected) { d = n; draw(); }
+  }
+}
+
+// ---------- creative mode: sandbox tools, own saves ----------
+// Returns true to go ahead and play in creative.
+async function creativeSetup(m) {
+  const c = await call("creative_info", m.id);
+  const extra = [];
+  const body = `<p>${esc(c.note)}</p>
+    ${c.native ? `<div class="note small"><strong>Built in:</strong> ${esc(c.native)}</div>` : ""}
+    ${c.slots.length ? `<p class="muted">Sandbox mods you can add (they're only switched on in creative):</p>
+      <div>${c.slots.map((x, i) => `<div class="row" style="padding:6px 0;border-top:1px solid var(--line)"><span class="grow">${esc(x.name)}</span><button class="btn" data-sb="${i}" type="button">Find</button></div>`).join("")}</div>` : ""}
+    ${c.mods.length ? `<p class="muted small">Added: ${c.mods.map(esc).join(", ")}</p>` : ""}
+    <p class="muted small">${c.own_saves ? "Creative has its own saves (a copy of this merge's saves to start), so your normal progress stays clean. " : "This game's saves can't be told apart, so creative uses the same saves; make a new save slot in the game. "}${c.offline ? "It always starts offline, so none of this reaches online play." : "Don't take creative tools into online games."}</p>`;
+  const done = modal("Creative mode: " + m.name, body, [{ label: "Cancel", value: false }, { label: "Play creative", value: true, primary: true }]);
+  document.querySelectorAll("[data-sb]").forEach((b) => (b.onclick = () => {
+    const slot = c.slots[+b.dataset.sb];
+    closeModal();
+    modBrowser({ recipe: c.recipe_id, title: slot.name, search: slot.search, sources: c.sources, loader: c.mc_loader, version: c.mc_version,
+      onFiles: (files) => extra.push(...files.map((f) => f.path)) }).then(async () => {
+      if (extra.length) await followJob(await call("creative_add", m.id, extra.splice(0)), "Adding sandbox mods");
+      mergeAction(m.id, "creative");
+    });
+  }));
+  return done;
 }
 
 // ---------- controller buttons for one merge ----------
@@ -867,11 +934,16 @@ function watchPlaying() {
 async function mergeAction(id, act) {
   const m = state.merges.find((x) => x.id === id);
   try {
-    if (act === "play") {
-      const r = await call("play", id);
-      if (r && r.note) toast(r.note, 6000); else { toast("Starting " + m.name + "… its own saves are loaded."); watchPlaying(); }
+    if (act === "play" || act === "creative") {
+      const creative = act === "creative";
+      if (creative && !(await creativeSetup(m))) return;
+      toast(creative ? "Starting creative mode…" : "Starting " + m.name + "…");
+      const r = await call("play", id, creative);
+      if (r && r.note) toast(r.note, 6000); else watchPlaying();
       loadMerges();
+      showRundown(m, creative, true);
     }
+    else if (act === "rundown") showRundown(m, false, false);
     else if (act === "folder") await call("open_folder", id);
     else if (act === "pad") await padDialog(m);
     else if (act === "share") await shareMerge(m);

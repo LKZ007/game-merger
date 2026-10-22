@@ -109,5 +109,19 @@
       "source_appid": "271590"
     }
   ],
-  "multiplayer": "Schedule I has co-op built in. Share your merge so everyone has exactly the same mods, then invite friends through Steam from the game's menu. A party here also helps if Steam invites won't connect."
+  "multiplayer": "Schedule I has co-op built in. Share your merge so everyone has exactly the same mods, then invite friends through Steam from the game's menu. A party here also helps if Steam invites won't connect.",
+  "sandbox": {
+    "native": "Schedule I has its own console: switch it on in the game's Settings, then press ~ (commands like changecash, give and spawnvehicle).",
+    "note": "Unlimited cash and items, spawn vehicles, free camera.",
+    "slots": [
+      {
+        "name": "Cheat / sandbox menu",
+        "search": "cheat menu"
+      },
+      {
+        "name": "Free camera and object tools",
+        "search": "UnityExplorer"
+      }
+    ]
+  }
 }

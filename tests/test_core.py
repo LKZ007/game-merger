@@ -605,6 +605,15 @@ class ModSourceAndControllerTests(unittest.TestCase):
         self.assertTrue(all(v in controller.KEYS for k, v in controller.DEFAULT.items()
                             if k not in ("left_stick", "right_stick", "sensitivity")))
 
+    def test_creative_mode_on_every_engine(self):
+        from gamemerger import autorecipe
+        for eng in ("unity-mono", "unity-il2cpp", "unreal", "bethesda", "source", "godot", "unknown"):
+            sb = autorecipe.sandbox_for({"engine": eng})
+            self.assertTrue(sb.get("note"), eng)
+        recipes = {r.id: r for r in load_recipes()}
+        for rid in ("schedule1", "gta5", "cyberpunk2077"):
+            self.assertTrue(recipes[rid].sandbox.get("slots"), rid)
+
 
 if __name__ == "__main__":
     unittest.main()

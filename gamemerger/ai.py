@@ -198,6 +198,25 @@ class AI:
             return None
         return {"description": str(data.get("description") or "")[:500], "slots": slots}
 
+    def rundown(self, base, source, merge_name, mods, quest="", controls="", creative=False):
+        """What's new and what to do, shown while the merged game loads. Plain, short, skimmable."""
+        ask = ("The player is starting \"%s\": %s merged with %s style%s. Mods installed: %s.%s%s "
+               "Write a quick rundown they read while it loads: what's new and what they can do now. Only mention "
+               "things these mods really add (by their names; if a name is unclear, say what kind of mod it is). Short "
+               "lines, no hype. Answer with only JSON: {\"headline\": \"one line\", \"new\": [\"up to 5 things that are "
+               "new\"], \"try\": [\"up to 4 things to try first\"], \"keys\": [\"up to 4 keys or buttons for the new "
+               "stuff, only if you know them (e.g. mod menus)\"], \"tips\": [\"up to 3 tips\"]}" % (
+                   merge_name, base, source, " in creative/sandbox mode" if creative else "",
+                   ", ".join(mods[:30]) or "none yet", (" Current quest: %s." % quest) if quest else "",
+                   (" Controller: %s." % controls) if controls else ""))
+        data = _json(self.ask(ask, 4000))
+        clean = lambda xs, n: [str(x)[:160] for x in (xs or [])[:n] if str(x).strip()]
+        out = {"headline": str(data.get("headline") or "")[:140], "new": clean(data.get("new"), 5),
+               "try": clean(data.get("try"), 4), "keys": clean(data.get("keys"), 4), "tips": clean(data.get("tips"), 3)}
+        if not (out["headline"] or out["new"]):
+            raise AIError("The rundown came out empty.")
+        return out
+
     def ask(self, text, max_tokens=16000):
         """One question, the whole answer back as text."""
         a = self._anthropic

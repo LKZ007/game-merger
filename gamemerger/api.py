@@ -250,9 +250,9 @@ class Api:
         if not state:
             return
         try:
-            r = self._recipe(Merge.load(state["merge_id"]).data.get("recipe_id"))
+            r = self._recipe(Merge.load(state["merge_id"].split("~")[0]).data.get("recipe_id"))
             if r and saves.running(r.processes):
-                self._playing = state["merge_id"]
+                self._playing = state["merge_id"].split("~")[0]
                 saves.watch_until_closed(r.processes, self._game_closed, grace=0)
                 return
         except (OSError, ValueError):
@@ -315,7 +315,7 @@ class Api:
             out.append({"key": str(i), "name": g.name, "source": g.source, "path": g.path, "base": r is not None,
                         "recipe_id": r.id if r else None, "warning": r.warning if r else "", "themes": themes,
                         "engine": auto.get("engine", ""), "moddable": auto.get("moddable", "yes" if r else "no"),
-                        "mod_note": auto.get("note", "")})
+                        "mod_note": auto.get("note", ""), "creative": bool(r and r.sandbox)})
         return out
 
     # ---------- every game you own (all launchers, any PC) ----------
@@ -1090,7 +1090,7 @@ class Api:
 
     def _rundown_stale(self, m):
         """The mods changed, so the rundown shown on Play gets written again."""
-        if m.data.pop("rundown", None) is not None:
+        if m.data.pop("rundown", None) is not None or m.data.pop("rundown_creative", None) is not None:
             m.save()
 
     def _new_merge(self, g, t, mode, destination, name, job, tagline=""):
@@ -1392,6 +1392,7 @@ class Api:
                         "playing": self._playing == m.id, "needs_upgrade": m.data.get("upgraded", 1) < self.UPGRADE,
                         "sources": self._sources_for(self._recipe(m.data.get("recipe_id"))),
                         "mc_loader": m.data.get("mc_loader"), "mc_version": m.data.get("mc_version"),
+                        "creative": bool(self._recipe(m.data.get("recipe_id")) and self._recipe(m.data.get("recipe_id")).sandbox),
                         "pad": "native" if not self._mapper_wanted(m, self._pad_status(m.data.get("game_name", ""))) else "mapped"})
         return out
 
@@ -1421,12 +1422,15 @@ class Api:
                 "source_name": m.data.get("source_name", "") or m.data.get("theme_name", ""),
                 "base": covers.as_data_uri(base), "source": covers.as_data_uri(source), "merged": covers.as_data_uri(merged)}
 
-    def play(self, merge_id):
-        """Swap in this merge's own saves, start the game, and swap them back when it closes."""
+    def play(self, merge_id, creative=False):
+        """Swap in this merge's own saves, start the game, and swap them back when it closes.
+        creative: the sandbox version, with its creative mods switched on and its own separate saves."""
         if self._playing and self._playing != merge_id:
             raise MergeError("Another merged game is still running. Close it first.")
         m = Merge.load(merge_id)
         r = self._recipe(m.data.get("recipe_id"))
+        if creative and not (r and r.sandbox):
+            raise MergeError("Creative mode isn't available for %s." % m.data.get("game_name", "this game"))
         if m.data.get("mc_root"):
             try:
                 minecraft.select_profile(m.data["mc_root"], m.id)
@@ -1434,30 +1438,201 @@ class Api:
                 raise MergeError(str(e))
             minecraft.launch()
             self._award("first_play")
-            return {"note": "The Minecraft Launcher is opening with “%s” picked. Press Play there." % m.name}
+            note = "The Minecraft Launcher is opening with “%s” picked. Press Play there." % m.name
+            if creative:
+                note += " Pick Creative when you make a world."
+            return {"note": note}
         exe = r.launch_exe(m.target_path) if r else None
         if not exe:
             raise MergeError("Couldn't find the game's .exe in %s." % m.target_path)
+        self._switch_creative(m, r, creative)
         m.data["plays"] = m.data.get("plays", 0) + 1
         m.save()
         self._award("first_play")
         if self._bump("plays") >= 10:
             self._award("ten_plays")
+        slot = merge_id + "~creative" if creative else merge_id
         cloud = self._settings.get("cloud_folder")
-        if cloud and r and r.saves and self._playing != merge_id:
+        if cloud and r and r.saves and self._playing != merge_id and not creative:
             try:
                 saves.pull_cloud(merge_id, cloud, m.name)
             except OSError:
                 pass
         if r.saves and self._playing != merge_id:
-            saves.swap_in(merge_id, r)
+            if creative and not os.path.isdir(saves.slot_root(slot)):
+                # creative starts from a copy of the merge's normal saves, then goes its own way
+                if os.path.isdir(saves.slot_root(merge_id)):
+                    shutil.copytree(saves.slot_root(merge_id), saves.slot_root(slot))
+            saves.swap_in(slot, r)
             self._playing = merge_id
             saves.watch_until_closed(r.processes or [os.path.basename(exe)], self._game_closed)
-        # modded copies start offline-only where the game supports it, so mods never reach online modes
-        args = list(r.launch_args) if r and m.mode != MODE_INPLACE else []
+        # modded copies start offline-only where the game supports it, so mods never reach online modes;
+        # creative mode always does
+        args = list(r.launch_args) if r and (m.mode != MODE_INPLACE or creative) else []
         subprocess.Popen([exe] + args, cwd=os.path.dirname(exe))
         self._discord_playing(m, r.processes or [os.path.basename(exe)])
         self._start_mapper(m, r.processes or [os.path.basename(exe)])
+        return True
+
+    # ---------- creative / sandbox mode ----------
+
+    def creative_info(self, merge_id):
+        m = Merge.load(merge_id)
+        r = self._recipe(m.data.get("recipe_id"))
+        sb = (r.sandbox if r else {}) or {}
+        return {"available": bool(sb), "native": sb.get("native", ""), "note": sb.get("note", ""),
+                "slots": sb.get("slots", []), "mods": m.data.get("creative_mods", []),
+                "own_saves": bool(r and r.saves), "offline": bool(r and r.launch_args),
+                "sources": self._sources_for(r), "recipe_id": r.id if r else None,
+                "mc_loader": m.data.get("mc_loader"), "mc_version": m.data.get("mc_version")}
+
+    def creative_add(self, merge_id, files):
+        """Add sandbox mods (trainers, spawners, free camera). They're only switched on in creative mode."""
+        self._perm("mods", "add mods")
+        m = Merge.load(merge_id)
+        r = self._recipe(m.data.get("recipe_id"))
+        if self._playing == merge_id:
+            raise MergeError("Close the game first.")
+
+        def work(job):
+            for p in files:
+                label = "[Creative] " + os.path.basename(p)
+                try:
+                    m.install(p, label, r.layout, log=job.write, check=scan.scan)
+                    m.data.setdefault("creative_mods", []).append(label)
+                except Exception as e:
+                    job.write("✖ %s failed: %s" % (os.path.basename(p), e))
+            m.data["creative_on"] = True
+            m.save()
+            self._rundown_stale(m)
+            job.write("These only run in creative mode. Normal play switches them off again.")
+            return True
+        return self._run(work)
+
+    def _switch_creative(self, m, r, creative):
+        """Creative mods on for creative play, off for normal play (only reinstalls when it changes)."""
+        extra = set(m.data.get("creative_mods", []))
+        if not extra or bool(m.data.get("creative_on")) == bool(creative):
+            return
+        on = [x["label"] for x in m.all_mods() if x["on"] and x["label"] not in extra]
+        if creative:
+            on += [x["label"] for x in m.all_mods() if x["label"] in extra]
+        m.rebuild(r.layout, on)
+        m.data["creative_on"] = bool(creative)
+        m.save()
+
+    # ---------- the rundown shown while a merge loads ----------
+
+    def _rundown_basic(self, m, creative):
+        """The rundown without AI: what's installed, controls, quest and tips."""
+        r = self._recipe(m.data.get("recipe_id"))
+        extra = set(m.data.get("creative_mods", []))
+        mods = [x["label"] for x in m.all_mods() if x["on"] or (creative and x["label"] in extra)]
+        pretty = []
+        for label in mods:
+            mm = re.match(r"^(.*?)\.(?:zip|7z|rar|jar|dll|asi|pak)?\s*\((.+)\)$", label)
+            pretty.append("%s: %s" % (mm.group(2), mm.group(1)) if mm else label)
+        keys = []
+        status = self._pad_status(m.data.get("game_name", ""))
+        if self._mapper_wanted(m, status):
+            mp = controller.merged_map(m.data.get("pad_map"))
+            keys.append("Controller: left stick moves, right stick looks, RT = %s, LT = %s, A = %s, B = %s, Y = %s, Start = %s."
+                        % (mp["rt"], mp["lt"], mp["a"], mp["b"], mp["y"], mp["start"]))
+        if creative and r and r.sandbox.get("native"):
+            keys.append(r.sandbox["native"])
+        quest = ""
+        for q in m.data.get("questlines", []):
+            if not q.get("finished"):
+                for i, row in enumerate(q["done"]):
+                    if False in row:
+                        quest = "%s: %s (next: %s)" % (q["title"], q["quests"][i]["title"], q["quests"][i]["objectives"][row.index(False)])
+                        break
+                break
+        tips = ["This merge has its own saves, so your normal game is safe."] if r and r.saves else []
+        if creative:
+            tips.insert(0, "Creative mode has its own saves too, and it always starts offline where the game allows it.")
+        tips.append("If it crashes, press Fix crash in My merges.")
+        return {"headline": "%s: %s with %s style%s" % (m.name, m.data.get("game_name", ""), m.data.get("source_name") or m.data.get("theme_name", ""),
+                                                         " · Creative" if creative else ""),
+                "tagline": m.data.get("tagline", ""), "new": pretty[:8], "try": [], "keys": keys, "quest": quest, "tips": tips,
+                "mods": mods}
+
+    def merge_rundown(self, merge_id, creative=False):
+        """{"headline", "new", "try", "keys", "quest", "tips", "ready", "show"}. The AI version is made in the
+        background (once per set of mods) and the plain one is shown until it's ready."""
+        m = Merge.load(merge_id)
+        basic = self._rundown_basic(m, creative)
+        key = "rundown_creative" if creative else "rundown"
+        sig = "|".join(basic["mods"])
+        got = m.data.get(key)
+        show = m.data.get("rundown_on_play", True)
+        if got and got.get("sig") == sig:
+            return dict(basic, **{k: got[k] for k in ("headline", "new", "try", "keys", "tips") if got.get(k)},
+                        keys=basic["keys"] + got.get("keys", []), ready=True, show=show)
+        busy = getattr(self, "_rundown_busy", set())
+        self._rundown_busy = busy
+        if not self._settings.get("claude_api_key"):
+            return dict(basic, ready=True, show=show)
+        if (merge_id, creative) not in busy:
+            busy.add((merge_id, creative))
+
+            def run():
+                try:
+                    out = self._ai().rundown(m.data.get("game_name", ""), basic["headline"].split(" with ", 1)[-1],
+                                             m.name, basic["mods"], basic["quest"], "; ".join(basic["keys"])[:300], creative)
+                    fresh = Merge.load(merge_id)
+                    fresh.data[key] = dict(out, sig=sig)
+                    fresh.save()
+                except Exception:
+                    pass
+                finally:
+                    busy.discard((merge_id, creative))
+            threading.Thread(target=run, daemon=True).start()
+        return dict(basic, ready=False, show=show)
+
+    def rundown_pref(self, merge_id, show):
+        m = Merge.load(merge_id)
+        m.data["rundown_on_play"] = bool(show)
+        m.save()
+        return True
+
+    def screens(self):
+        """How many screens there are (for "show it on my other screen")."""
+        if self._window is None:
+            return 0
+        try:
+            import webview
+            return len(webview.screens)
+        except Exception:
+            return 1
+
+    def rundown_window(self, merge_id, where="second", creative=False):
+        """Show the rundown in its own window: on the second screen, or small and always on top."""
+        if self._window is None:
+            return False
+        import webview
+        import html as h
+        d = self.merge_rundown(merge_id, creative)
+        sec = lambda title, xs: ("<h3>%s</h3><ul>%s</ul>" % (title, "".join("<li>%s</li>" % h.escape(x) for x in xs))) if xs else ""
+        page = ("<!doctype html><meta charset=utf-8><body style='margin:0;background:#0c0912;color:#ece8f5;font:15px/1.5 Segoe UI,sans-serif;"
+                "padding:22px'><div style='color:#a78bfa;font-size:12px;letter-spacing:2px;text-transform:uppercase'>Now playing</div>"
+                "<h2 style='margin:4px 0 12px'>%s</h2>%s%s%s%s%s</body>" % (
+                    h.escape(d["headline"]), sec("What's new", d["new"]), sec("Try first", d["try"]),
+                    sec("Keys and buttons", d["keys"]), sec("Quest", [d["quest"]] if d["quest"] else []), sec("Tips", d["tips"])))
+        try:
+            screens = list(webview.screens)
+        except Exception:
+            screens = []
+        if where == "second" and len(screens) > 1:
+            sc = screens[1]
+            webview.create_window("Rundown: " + Merge.load(merge_id).name, html=page, x=sc.x + 40, y=sc.y + 40,
+                                  width=min(560, sc.width - 80), height=min(900, sc.height - 80))
+        else:
+            sc = screens[0] if screens else None
+            w, hgt = 420, 620
+            x = (sc.x + sc.width - w - 30) if sc else None
+            y = (sc.y + 60) if sc else None
+            webview.create_window("Rundown", html=page, x=x, y=y, width=w, height=hgt, on_top=True)
         return True
 
     # ---------- questlines ----------

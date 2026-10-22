@@ -112,6 +112,34 @@ def detect(folder):
             "note": "Frankenstein can't tell how this game is modded, so it can only copy the game and drop files in where you say."}
 
 
+def sandbox_for(eng):
+    """What creative mode can offer on this engine, honestly."""
+    e = eng["engine"]
+    if e.startswith("unity"):
+        return {"note": "Free camera, an object explorer that can change values (money, health, items), plus any cheat mods.",
+                "slots": [{"name": "Free camera and object tools", "search": "UnityExplorer"},
+                          {"name": "Cheat / sandbox menu", "search": "cheat"}]}
+    if e == "unreal":
+        return {"note": "Unreal games often hide a developer console; a console unlocker or cheat mod opens it up.",
+                "slots": [{"name": "Console unlocker", "search": "console unlocker"}, {"name": "Cheat / trainer", "search": "cheat"}]}
+    if e == "bethesda":
+        return {"native": "The game's own console: press ~ (tgm = god mode, tcl = fly through walls, player.additem to add items).",
+                "note": "Using the console can switch off achievements in some Bethesda games.",
+                "slots": [{"name": "Spawner / cheat menu", "search": "cheat room"}]}
+    if e == "source":
+        return {"native": "The developer console: turn it on in Options, press ~, type sv_cheats 1, then god, noclip or give.",
+                "note": "Works on your own (local) games only.", "slots": []}
+    if e == "minecraft":
+        return {"native": "Minecraft's own Creative mode: pick Creative when you make a world (or /gamemode creative with cheats on).",
+                "note": "Building tools make it even better.", "slots": [{"name": "Building tools", "search": "WorldEdit"}]}
+    if eng.get("moddable") == "limited":
+        return {"note": "Limited: only if someone has made a trainer for this game.",
+                "slots": [{"name": "Trainer / cheats", "search": "trainer"}]}
+    return {"note": "Frankenstein can't add sandbox tools to this game, but Creative still gets its own save slot "
+                    "and you can add a trainer file yourself.",
+            "slots": [{"name": "Trainer / cheats", "search": "trainer"}]}
+
+
 def guess_saves(folder, eng):
     """Where the game probably keeps its saves, so a merge can have its own. [] when unsure."""
     if eng["engine"].startswith("unity"):
@@ -192,7 +220,7 @@ def build(game, styles, nexus_domain=None):
     data = {"id": rid, "name": game.name, "exe": exe, "steam_appids": [game.appid] if game.appid else [],
             "nexus_domain": nexus_domain or nexus_guess(game.name), "layout": eng["layout"],
             "frameworks": eng["frameworks"], "themes": [], "warning": warning, "logs": eng["logs"],
-            "saves": guess_saves(game.path, eng), "processes": [os.path.basename(e) for e in exe[:1]],
+            "saves": guess_saves(game.path, eng), "sandbox": sandbox_for(eng), "processes": [os.path.basename(e) for e in exe[:1]],
             "auto": {"engine": eng["label"], "moddable": eng["moddable"], "note": eng["note"], "path": game.path}}
     with open(_file(rid), "w", encoding="utf-8") as f:
         json.dump(data, f, indent=1)

@@ -102,5 +102,19 @@
   "multiplayer": "GTA V story mode is single-player, so mods can't add friends to it. To play together, one of you runs a private FiveM server (the official community multiplayer for GTA V) and everyone connects to the host's party IP shown here. Your merge's script mods won't carry over to FiveM.",
   "launch_args": [
     "-scOfflineOnly"
-  ]
+  ],
+  "sandbox": {
+    "native": "Script Hook V comes with Native Trainer: press F4 in game for god mode, money, vehicles, weapons and teleports.",
+    "note": "Story Mode only: creative merges always start offline.",
+    "slots": [
+      {
+        "name": "Menyoo (spawn objects, peds, vehicles, build maps)",
+        "search": "Menyoo"
+      },
+      {
+        "name": "Trainer",
+        "search": "trainer"
+      }
+    ]
+  }
 }

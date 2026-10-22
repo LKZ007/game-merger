@@ -20,6 +20,8 @@ merge names and one-click crash repair.
 - **AI in the background** (optional Claude API key): fun ratings, mod searches for any pairing, merge names and taglines, one-click crash repair, questlines.
 - **Mods from Nexus Mods, CurseForge, Modrinth or any link** in one search, with required mods pulled in automatically. Minecraft: Java Edition merges get their own launcher profile with Fabric, Quilt, Forge or NeoForge.
 - **A controller on every game**: native where the game supports it, Frankenstein's key mapper everywhere else (buttons editable per merge).
+- **A rundown while the game loads**: what's new, what to try, controls, quests and tips (second monitor or overlay optional).
+- **Creative mode on every game**: a sandbox with its own save slot, sandbox tools and online blocked, honest about what each game allows.
 - **Own saves per merge**, with optional cloud backup to OneDrive or Google Drive.
 - **Mod profiles** (chill / chaos), **Defender scan** of every mod, **online-safety lock** for GTA V.
 - **Play together**: a private network for you and your friends, like Hamachi (built on ZeroTier).
