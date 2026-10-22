@@ -945,3 +945,11 @@ class CarryOverTests(unittest.TestCase):
         st = carryover.settings("gta5", {"saved": 5, "name": "Tarnished", "money": 900, "abilities": ["magic", "rich"]})
         self.assertEqual(st["id"], "5")
         self.assertEqual(st["powers"], ["magic", "money"])
+
+
+class StartupTests(unittest.TestCase):
+    def test_page_and_script_carry_this_version(self):
+        from gamemerger.api import Api
+        from gamemerger.version import VERSION
+        here = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "gamemerger")
+        self.assertEqual(Api._stale_web(here), [], "index.html PAGE_BUILD and app.js APP_BUILD must equal VERSION " + VERSION)

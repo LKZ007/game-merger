@@ -1,4 +1,5 @@
 "use strict";
+window.APP_BUILD = "3.28.1";  // must match index.html: a mixed-up install is caught at start
 
 // ---------- talking to the Python side ----------
 const TOKEN = document.querySelector('meta[name="gm-token"]')?.content;
@@ -488,7 +489,7 @@ const initials = (n) => (n || "?").trim().split(/\s+/).map((w) => w[0]).join("")
 
 // "Who's playing?" when there's more than one account or a PIN. Resolves once someone is in.
 async function whoIsPlaying(force = false) {
-  const st = await call("profiles_state").catch(() => null);
+  const st = await atMost(call("profiles_state"), 8000).catch(() => null);
   state.profiles = st;
   if (!st || (!st.locked && !force)) return renderMe();
   const el = document.createElement("div");
@@ -1848,8 +1849,10 @@ async function firstRun() {
 let splashBrain = null;
 document.querySelectorAll("canvas[data-brain]").forEach((cv) => {
   const size = cv.dataset.brain;
-  if (size === "front") { splashBrain = window.LogoBrain.mount(cv, { dense: 700, head: false, front: true }); return; }
-  window.LogoBrain.mount(cv, { dense: size === "big" ? 1400 : size === "small" ? 420 : 180, speed: size === "big" ? 0.45 : 0.3 });
+  try {
+    if (size === "front") { splashBrain = window.LogoBrain.mount(cv, { dense: 700, head: false, front: true }); return; }
+    window.LogoBrain.mount(cv, { dense: size === "big" ? 1400 : size === "small" ? 420 : 180, speed: size === "big" ? 0.45 : 0.3 });
+  } catch (e) { console.error("brain", e); }  // no brain is better than no app
 });
 
 // ---------- startup animation ----------
@@ -1865,7 +1868,11 @@ function splashCovers(a, b) {
 splashCovers(genCover("Host game"), genCover("Extension game"));
 function splashFrame(now) {
   const stage = $("#splashStage");
-  if (!stage) return;
+  if (!stage || !stage.isConnected) return;
+  try { splashDraw(now); } catch (e) { console.error("splash", e); }
+  requestAnimationFrame(splashFrame);
+}
+function splashDraw(now) {
   const dt = Math.min(0.05, (now - (splash.last || now)) / 1000);
   splash.last = now;
   splash.p += (splash.target - splash.p) * Math.min(1, dt * 3.2);
@@ -1882,18 +1889,19 @@ function splashFrame(now) {
   }
   // hands: in a little as it loads, then all the way to meet in the middle
   const hand = 5 * p + (34.6 - 5 * p) * ease;  // % of their own width
-  $("#spHandL").style.transform = `translateX(${hand}%) rotate(${ease * 8}deg)`;
-  $("#spHandR").style.transform = `translateX(${-hand}%) rotate(${-ease * 8}deg)`;
+  const hl = $("#spHandL"), hr = $("#spHandR"), cl = $("#spCoverL"), cr = $("#spCoverR");
+  if (!hl || !hr || !cl || !cr) return;
+  hl.style.transform = `translateX(${hand}%) rotate(${ease * 8}deg)`;
+  hr.style.transform = `translateX(${-hand}%) rotate(${-ease * 8}deg)`;
   // covers: closer together as it loads, then into one in the middle
   const bob = still ? 0 : Math.sin(now / 420) * 2;
   const cx = 70 * p + (175 - 70 * p) * ease;  // % of a cover's width
   const shrink = 1 - ease * 0.35;
-  $("#spCoverL").style.transform = `translate(${cx}%, ${bob}%) scale(${shrink})`;
-  $("#spCoverR").style.transform = `translate(${-cx}%, ${-bob}%) scale(${shrink})`;
-  $("#spCoverL .sp-card").style.transform = still ? "" : `rotateY(${splash.spinL % 360}deg)`;
-  $("#spCoverR .sp-card").style.transform = still ? "" : `rotateY(${splash.spinR % 360}deg)`;
+  cl.style.transform = `translate(${cx}%, ${bob}%) scale(${shrink})`;
+  cr.style.transform = `translate(${-cx}%, ${-bob}%) scale(${shrink})`;
+  cl.firstElementChild.style.transform = still ? "" : `rotateY(${splash.spinL % 360}deg)`;
+  cr.firstElementChild.style.transform = still ? "" : `rotateY(${splash.spinR % 360}deg)`;
   if (c >= 1 && splash.done) { const d = splash.done; splash.done = null; d(); }
-  requestAnimationFrame(splashFrame);
 }
 requestAnimationFrame(splashFrame);
 function splashBurst() {
@@ -1934,8 +1942,10 @@ function splashBurst() {
 function splashClap() {
   return new Promise((done) => {
     splash.target = 1;
-    $("#splash").classList.add("clap");
-    if (calm.matches) return done();
+    const el = $("#splash");
+    if (!el || el.classList.contains("gone") || calm.matches || document.hidden) return done();  // skipped: nothing to clap
+    el.classList.add("clap");
+    setTimeout(done, 1500);  // never waits on the animation for long
     splash.done = done;
     splash.clap = performance.now();
   });
@@ -1944,37 +1954,48 @@ function splashClap() {
 // ---------- start ----------
 const SPLASH = ["It's alive! Finding your games…", "Checking Steam, Epic, GOG and the Xbox app…", "Grabbing your box art…", "Working out how each game is modded…"];
 
+// waits for a step, but never longer than `ms` (the step carries on in the background)
+const atMost = (p, ms) => Promise.race([p, sleep(ms)]);
+function splashText(t) { const l = $("#splashLine"); if (l && $("#splash")) l.textContent = t; }
+
 (async () => {
   splashProgress(0.08);
-  await whoIsPlaying();
-  splashProgress(0.15);
   const started = Date.now();
   let i = 0;
-  const rotate = setInterval(() => { $("#splashLine").textContent = SPLASH[++i % SPLASH.length]; }, 1600);
+  const rotate = setInterval(() => splashText(SPLASH[++i % SPLASH.length]), 1600);
   const creep = setInterval(() => splashProgress(splash.target + (0.78 - splash.target) * 0.12), 250);
+  // two random games from last time over the palms straight away, real covers once the scan is done
+  try {
+    const last = JSON.parse(localStorage.getItem("splashGames") || "[]").sort(() => Math.random() - 0.5);
+    if (last.length) splashCovers(genCover(last[0]), genCover(last[1] || last[0]));
+  } catch (e) { /* first start */ }
+  await whoIsPlaying();
+  splashProgress(0.15);
   renderLibrary();
-  try { state.settings = await call("get_settings"); } catch (e) { /* shown when needed */ }
+  try { state.settings = await atMost(call("get_settings"), 8000); } catch (e) { /* shown when needed */ }
   splashProgress(0.25);
-  await scan();
+  await atMost(scan(), 45000);
   clearInterval(creep);
   splashProgress(0.82);
-  // the two games over the palms: the Host and its partner if one is picked, else the first two with art
-  const pick = [...state.games].sort((a, b) => (b.key === state.selected) - (a.key === state.selected)).slice(0, 6);
-  const arts = (await Promise.all(pick.map((g) => loadCover(g.key).catch(() => null)))).filter(Boolean);
+  // the two games over the palms: two random games from your library, with their real covers
+  const pick = [...(state.games || [])].sort(() => Math.random() - 0.5).slice(0, 6);
+  try { localStorage.setItem("splashGames", JSON.stringify((state.games || []).map((g) => g.name).slice(0, 40))); } catch (e) { /* private mode */ }
+  const arts = (await atMost(Promise.all(pick.map((g) => loadCover(g.key).catch(() => null))), 6000) || []).filter(Boolean);
   splashCovers(arts[0] || genCover(pick[0]?.name || "Host game"), arts[1] || genCover(pick[1]?.name || "Extension game"));
   splashProgress(0.92);
   loadOwned(false, true).then(() => state.owned?.sources.length && loadOwned(true, true));
   await sleep(Math.max(0, 2400 - (Date.now() - started)));
   clearInterval(rotate);
   const n = state.games.length;
-  $("#splashLine").textContent = n > 1 ? `Found ${n} games.` : n ? "Found 1 game." : "No games found yet. Add a game folder in the Library.";
+  splashText(n > 1 ? `Found ${n} games.` : n ? "Found 1 game." : "No games found yet. Add a game folder in the Library.");
   splashProgress(1);
-  await sleep(900);
-  await splashClap();
-  splashBurst();
-  await sleep(250);
-  $("#splash").classList.add("gone");
-  setTimeout(() => $("#splash").remove(), 700);
+  if ($("#splash") && !$("#splash").classList.contains("gone")) {
+    await sleep(900);
+    await splashClap();
+    splashBurst();
+    await sleep(250);
+  } else $("#splashBurst")?.remove();
+  window.skipSplash ? window.skipSplash() : $("#splash")?.remove();
   if (await call("playing").catch(() => null)) watchPlaying();
   await sleep(700);
   await firstRun();

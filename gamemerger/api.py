@@ -367,6 +367,11 @@ class Api:
         missing = [f for f in self.REQUIRED if not os.path.isfile(os.path.join(here, *f.split("/")))]
         if missing:
             problems.append("Frankenstein's install is missing %s. Press Repair to download a fresh copy." % ", ".join(missing))
+        stale = self._stale_web(here)
+        if stale:
+            missing += stale
+            problems.append("Frankenstein's own pages are from different versions (%s). Press Repair to download a fresh copy."
+                            % ", ".join(stale))
         for m in Merge.all():
             try:
                 fixed += ["%s: %s" % (m.name, x) for x in self._check_merge(m)]
@@ -378,6 +383,28 @@ class Api:
         self._settings["checked_version"] = VERSION
         paths.save_settings(self._settings)
         return res
+
+    @staticmethod
+    def _stale_web(here):
+        """The app's page and script carry the version they belong to: any that don't match this one."""
+        out = []
+        for f, mark in (("index.html", 'window.PAGE_BUILD = "%s"'), ("app.js", 'window.APP_BUILD = "%s"')):
+            try:
+                with open(os.path.join(here, "web", f), encoding="utf-8") as fh:
+                    if mark % VERSION not in fh.read():
+                        out.append("web/" + f)
+            except OSError:
+                pass
+        return out
+
+    def report_js_error(self, text):
+        """A script error or slow start on the app's own page, kept in a log so it can be fixed."""
+        try:
+            with open(os.path.join(paths.sub("logs"), "app-errors.log"), "a", encoding="utf-8") as f:
+                f.write("%s  %s  %s\n" % (time.strftime("%Y-%m-%d %H:%M:%S"), VERSION, str(text)[:500]))
+        except OSError:
+            pass
+        return True
 
     def _check_merge(self, m):
         """Bring one merge up to date with this version. Returns what was fixed, in plain words."""

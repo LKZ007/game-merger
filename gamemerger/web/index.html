@@ -7,7 +7,12 @@
 <link rel="icon" href="logo/icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="app.css">
+<script>
+  // Every start loads this version's own scripts and styles fresh (never an older copy the web view kept)
+  window.PAGE_BUILD = "3.28.1";
+  window.ASSET_V = window.PAGE_BUILD + "-" + Date.now();
+  document.write('<link rel="stylesheet" href="app.css?v=' + window.ASSET_V + '">');
+</script>
 </head>
 <body>
 <div class="splash" id="splash" role="status" aria-live="polite">
@@ -70,8 +75,51 @@
 </div>
 <div class="toast hidden" id="toast" role="status"></div>
 
-<script src="brain.js"></script>
-<script src="app.js"></script>
-<script src="gamepad.js"></script>
+<script>
+  ["brain.js", "app.js", "gamepad.js"].forEach(function (f) { document.write('<script src="' + f + '?v=' + window.ASSET_V + '"><\/script>'); });
+</script>
+<script>
+  // The startup screen can never keep you out: Skip after a few seconds (or Esc / a click), gone by itself
+  // after 30, and a script error or mixed-up install is shown and reported instead of a frozen screen.
+  (function () {
+    var t0 = Date.now(), errors = [];
+    function splash() { var s = document.getElementById("splash"); return s && !s.classList.contains("gone") ? s : null; }
+    function line(text) { var l = document.getElementById("splashLine"); if (l) l.textContent = text; }
+    function report(text) {
+      try { if (window.pywebview && window.pywebview.api && window.pywebview.api.report_js_error) window.pywebview.api.report_js_error(text); } catch (e) {}
+    }
+    function skip() {
+      var s = splash();
+      if (!s) return;
+      s.classList.add("gone");
+      setTimeout(function () { if (s.parentNode) s.parentNode.removeChild(s); }, 700);
+    }
+    window.skipSplash = skip;
+    window.addEventListener("error", function (e) {
+      var text = (e && e.message ? e.message : "script error") + (e && e.filename ? " (" + e.filename.split("/").pop().split("?")[0] + ":" + e.lineno + ")" : "");
+      errors.push(text);
+      report(text);
+      if (splash()) { line("Something went wrong starting up: " + text + ". Opening anyway…"); setTimeout(skip, 2500); }
+    });
+    window.addEventListener("keydown", function (e) { if (e.key === "Escape" && Date.now() - t0 > 1500) skip(); });
+    var btn = document.createElement("button");
+    btn.className = "btn ghost splash-skip";
+    btn.textContent = "Skip";
+    btn.onclick = skip;
+    var tick = setInterval(function () {
+      var s = splash(), age = (Date.now() - t0) / 1000;
+      if (!s) return clearInterval(tick);
+      if (age > 2 && window.APP_BUILD !== window.PAGE_BUILD) {
+        // the page and its script are from different versions: say so, open, and let the self-check repair it
+        line("Frankenstein's files are from two different versions. Opening anyway; Settings > Repair fixes it.");
+        report("mixed install: page " + window.PAGE_BUILD + ", script " + (window.APP_BUILD || "old"));
+        clearInterval(tick);
+        return setTimeout(skip, 3000);
+      }
+      if (age > 6 && !btn.parentNode) s.appendChild(btn);
+      if (age > 30) { report("startup took over 30 s"); skip(); }
+    }, 500);
+  })();
+</script>
 </body>
 </html>
