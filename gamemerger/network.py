@@ -64,9 +64,122 @@ def setup(download, log=lambda *_: None):
               ":have",
               'copy /y "%s" "%s" >nul' % (src, dest),
               'icacls "%s" /inheritance:r /grant:r "%s":R >nul' % (dest, permissions.current_user())]
+    lines += FIREWALL
     log("Windows will ask once to set it up.")
     if not permissions.run_elevated(lines, name="gamemerger-network") or not os.path.isfile(dest):
         raise NetworkError("Setup didn't finish. Press Set it up again and click Yes when Windows asks.")
+
+
+# Windows puts the ZeroTier adapter on the "Public" profile, whose firewall blocks games from answering friends.
+# Let in anything from party addresses (10.147.x.x), and mark ZeroTier networks private.
+FIREWALL = [
+    'netsh advfirewall firewall delete rule name="Frankenstein party" >nul 2>&1',
+    'netsh advfirewall firewall add rule name="Frankenstein party" dir=in action=allow remoteip=10.147.0.0/16 profile=any >nul',
+    'powershell -NoProfile -Command "Get-NetConnectionProfile | Where-Object {$_.InterfaceAlias -like \'ZeroTier*\'} | '
+    'Set-NetConnectionProfile -NetworkCategory Private" >nul 2>&1',
+]
+SHARE_PORT = 47777
+# party traffic goes straight to the friend's PC, never through a system proxy
+_direct = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+
+
+def repair():
+    """Fix the usual reasons friends can't connect: the firewall, and a stopped ZeroTier service. One prompt."""
+    if sys.platform != "win32":
+        raise NetworkError("Play together works on Windows only.")
+    lines = ['sc config ZeroTierOneService start= auto >nul', 'net start ZeroTierOneService >nul 2>&1'] + FIREWALL
+    if not permissions.run_elevated(lines, name="gamemerger-network-fix"):
+        raise NetworkError("The fix didn't run. Press Fix connection again and click Yes when Windows asks.")
+
+
+def find_host(my_ip, timeout=1.5):
+    """The host's merge server on the party network: (ip, info) or None. Tries every address in the party."""
+    import concurrent.futures
+    if not my_ip:
+        return None
+    base = my_ip.rsplit(".", 1)[0]
+
+    def probe(n):
+        ip = "%s.%d" % (base, n)
+        if ip == my_ip:
+            return None
+        try:
+            with _direct.open("http://%s:%d/info" % (ip, SHARE_PORT), timeout=timeout) as r:
+                return ip, json.load(r)
+        except (OSError, ValueError):
+            return None
+    with concurrent.futures.ThreadPoolExecutor(64) as pool:
+        for hit in pool.map(probe, range(1, 255)):
+            if hit:
+                return hit
+    return None
+
+
+class MergeServer:
+    """The host hands its merge (a .gmerge file) to friends in the party, so everyone has the same mods."""
+
+    def __init__(self):
+        self.httpd = None
+        self.file = None
+        self.info = {}
+
+    def start(self, ip, path, info):
+        from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+        import threading
+        self.stop()
+        self.file, self.info = path, info
+        me = self
+
+        class H(BaseHTTPRequestHandler):
+            def log_message(self, *a):
+                pass
+
+            def do_GET(self):
+                if self.path == "/info":
+                    body = json.dumps(me.info).encode()
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/json")
+                    self.send_header("Content-Length", str(len(body)))
+                    self.end_headers()
+                    self.wfile.write(body)
+                elif self.path == "/merge" and me.file and os.path.isfile(me.file):
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/octet-stream")
+                    self.send_header("Content-Length", str(os.path.getsize(me.file)))
+                    self.end_headers()
+                    with open(me.file, "rb") as f:
+                        while True:
+                            chunk = f.read(1 << 16)
+                            if not chunk:
+                                break
+                            self.wfile.write(chunk)
+                else:
+                    self.send_error(404)
+        try:
+            self.httpd = ThreadingHTTPServer((ip, SHARE_PORT), H)
+        except OSError as e:
+            raise NetworkError("Couldn't share on the party network (%s). Wait until you're connected." % e)
+        threading.Thread(target=self.httpd.serve_forever, daemon=True).start()
+
+    def stop(self):
+        if self.httpd:
+            self.httpd.shutdown()
+            self.httpd.server_close()
+            self.httpd = None
+
+
+def fetch_merge(ip, dest, progress=lambda d, t: None):
+    with _direct.open("http://%s:%d/merge" % (ip, SHARE_PORT), timeout=30) as r:
+        total, done = int(r.headers.get("Content-Length") or 0), 0
+        with open(dest, "wb") as f:
+            while True:
+                chunk = r.read(1 << 16)
+                if not chunk:
+                    break
+                f.write(chunk)
+                done += len(chunk)
+                progress(done, total)
+    return dest
 
 
 def _call(method, path, body=None):

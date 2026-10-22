@@ -16,7 +16,7 @@ import urllib.parse
 import uuid
 import webbrowser
 
-from . import storymode, accounts, achievements, ai, autorecipe, controller, covers, minecraft, modsources, storeinfo, discord, profiles, detect, downloader, gallery, network, nexus, paths, permissions, saves, scan, sharing, updater
+from . import installer, storymode, accounts, achievements, ai, autorecipe, controller, covers, minecraft, modsources, storeinfo, discord, profiles, detect, downloader, gallery, network, nexus, paths, permissions, saves, scan, sharing, updater
 from .version import VERSION
 from .installer import MODE_COPY, MODE_HARDLINK, MODE_INPLACE, Merge, MergeError, find_clashes, preview
 from . import recipes
@@ -48,15 +48,21 @@ BUILTIN = {
     "schedule1": {"label": "Frankenstein item menu and story mode", "dest": "Mods", "needs": ["s1api"],
                   "settings": "UserData/Frankenstein/settings.json",
                   "what": "Item menu: press F6 (or Back + Y) in game for every item, mods' items included."},
-    "cyberpunk2077": {"label": "Frankenstein item menu", "dest": "bin/x64/plugins/cyber_engine_tweaks/mods",
+    "cyberpunk2077": {"label": "Frankenstein sandbox menu", "dest": "bin/x64/plugins/cyber_engine_tweaks/mods",
                       "settings": "bin/x64/plugins/cyber_engine_tweaks/mods/frankenstein_items/settings.json",
-                      "what": "Item menu: open the Cyber Engine Tweaks overlay (~) for every item, mods' items included."},
+                      "what": "Sandbox menu, built in: press ~ in game for every item, every car into your garage, "
+                              "god mode, eddies, heal, lose the police, time, weather and a fly tool. Mods' items and cars included."},
 }
 
 # A starter kit the merge hands you in game, once per save: the merged game's signature gear, made from
 # items the host game really has. Names are matched loosely against the game's own item list.
 KITS = {
-    "hoodwarfare": {"name": "Hood Warfare arsenal",
+    "hoodwarfare": {"name": "Hood Warfare arsenal", "shop_name": "hardware",
+                    # sold at Handy Hank's hardware store (game money); names match the kit's stand-ins
+                    "shop": ["AK47=Choppa@3500", "AK47 Magazine@150", "SMG=Uzi@2200", "SMG Magazine@120", "M1911=Glock@900",
+                             "M1911 Magazine@60", "Pump Shotgun=Pump Shotty@1800", "Shotgun Shell@15", "Sniper=.308 Sniper@4500",
+                             "Sniper Magazine@200", "Revolver@1200", "Revolver Cylinder@80", "Machete=Blade@300",
+                             "MiniGun@15000", "RPG@20000"],
                     "items": ["AK47=Choppa*1", "AK47 Magazine*3", "SMG=Uzi*1", "SMG Magazine*3", "M1911=Glock*1",
                               "M1911 Magazine*4", "Pump Shotgun=Pump Shotty*1", "Shotgun Shell*14", "Sniper=.308 Sniper*1",
                               "Sniper Magazine*2", "Revolver*1", "Revolver Cylinder*3", "Machete=Blade*1"]},
@@ -87,10 +93,13 @@ class Api:
     def __init__(self):
         self._window = None  # set by app.py when running inside pywebview
         data = profiles.ensure_admin(paths.load_settings(), self._default_admin_name())
-        last = profiles.find(data.get("last")) or data["profiles"][0]
+        self._sync_accounts(pull=True)
+        data = profiles.load()
+        remember = profiles.remembered()
+        last = profiles.find(remember or data.get("last")) or data["profiles"][0]
         self._settings = profiles.Settings(paths.load_settings(), last["id"])
-        # one account without a PIN opens straight in; otherwise the page shows who's playing first
-        self._locked = len(data["profiles"]) > 1 or bool(last.get("pin"))
+        # a remembered account, or one account without a PIN, opens straight in; otherwise "who's playing?"
+        self._locked = remember != last["id"] and (len(data["profiles"]) > 1 or bool(last.get("pin")))
         self._hand = load_recipes([resource_dir(), paths.user_recipes_dir()])
         self._recipes = self._hand + autorecipe.load_all()
         self._games = []
@@ -131,9 +140,29 @@ class Api:
     def profiles_state(self):
         data = profiles.load()
         return {"current": profiles.public(self._me()) if self._me() else None, "locked": self._locked,
+                "remembered": profiles.remembered() == self._settings.pid,
                 "profiles": [profiles.public(p) for p in data["profiles"]], "permissions": profiles.PERMISSIONS}
 
-    def profile_switch(self, pid, pin=""):
+    def _cloud_roots(self):
+        roots = [path for _label, path in saves.cloud_folders()]
+        for p in profiles.load()["profiles"]:
+            c = profiles.load_personal(p["id"]).get("cloud_folder")
+            if c and c not in roots:
+                roots.insert(0, c)
+        return [r for r in roots if r and os.path.isdir(r)]
+
+    def _sync_accounts(self, pull=False):
+        """Your accounts on every PC: read what your other PCs wrote to the cloud folder, then write ours."""
+        try:
+            roots = self._cloud_roots()
+            if pull:
+                profiles.pull(roots)
+            for r in roots[:1]:
+                profiles.publish(r)
+        except Exception:
+            pass  # cloud folder offline or busy: next start tries again
+
+    def profile_switch(self, pid, pin="", remember=True):
         p = profiles.find(pid)
         if not p:
             raise MergeError("That account doesn't exist any more.")
@@ -142,12 +171,33 @@ class Api:
         with self._lock:
             self._settings = profiles.Settings(paths.load_settings(), pid)
         profiles.set_last(pid)
+        profiles.set_remember(pid if remember else None)
         self._locked = False
+        threading.Thread(target=self._sync_accounts, daemon=True).start()
         return self.profiles_state()
 
     def profile_lock(self):
-        """Back to "who's playing?" (switch account)."""
+        """Back to "who's playing?" (switch account). This PC stops opening straight into it."""
+        profiles.set_remember(None)
         self._locked = True
+        return self.profiles_state()
+
+    def profile_link_code(self):
+        """A code that puts your account on another PC (paste it there in Settings > Accounts)."""
+        self._sync_accounts()
+        return {"code": profiles.link_code(self._settings.pid), "cloud": bool(self._cloud_roots())}
+
+    def profile_link(self, code):
+        try:
+            pid = profiles.link(profiles.read_code(code))
+        except profiles.ProfileError as e:
+            raise MergeError(str(e))
+        with self._lock:
+            self._settings = profiles.Settings(paths.load_settings(), pid)
+        profiles.set_last(pid)
+        profiles.set_remember(pid)
+        self._locked = False
+        self._sync_accounts()
         return self.profiles_state()
 
     def profile_add(self, name, pin="", perms=None):
@@ -180,7 +230,7 @@ class Api:
 
     # ---------- upgrading merges made by older versions ----------
 
-    UPGRADE = 3  # bump when a release adds something old merges should get
+    UPGRADE = 4  # bump when a release adds something old merges should get
 
     def _upgrade_all(self):
         """Once per release: give merges made by older versions everything new ones get."""
@@ -217,6 +267,9 @@ class Api:
             except Exception:
                 pass
         m.data.setdefault("owner", None)
+        if m.mode == MODE_HARDLINK and os.path.isdir(m.target_path):
+            # space-saver copies: split off every file the game or a mod could write, so the original stays untouched
+            installer.harden(m.target_path)
         try:
             self._install_builtin(m, self._recipe(m.data.get("recipe_id")), lambda *_: None)
         except Exception:
@@ -224,6 +277,20 @@ class Api:
         m.data["upgraded"] = self.UPGRADE
         m.save()
         return True
+
+    def _originals_note(self, m):
+        """What the after-play check found about the original game, in plain words ("" if never played)."""
+        o = m.data.get("originals")
+        if not o:
+            return ""
+        if o.get("game_files"):
+            return ("Last play changed %d of the original game's files through the space-saver copy (%s). That copy now "
+                    "has its own files, but check the original: Steam > right-click the game > Properties > Installed "
+                    "Files > Verify integrity." % (len(o["game_files"]), ", ".join(o["game_files"][:3])))
+        if o.get("saves_restored"):
+            return ("Something changed your own saves while this merge played (usually Steam Cloud). Frankenstein put "
+                    "your originals back from the backup and kept the changed files aside.")
+        return "Checked after the last play: your original game and saves weren't touched."
 
     def merge_upgrade(self, merge_id):
         """The Upgrade button: run the upgrade for one merge again."""
@@ -306,9 +373,27 @@ class Api:
         saves.swap_out()
 
     def _game_closed(self):
-        mid = self._playing or (saves.active() or {}).get("merge_id")
+        slot = (saves.active() or {}).get("merge_id")
+        mid = self._playing or slot
         saves.swap_out()
         self._playing = None
+        if slot:
+            try:
+                m = Merge.load(slot.split("~")[0])
+                # a save cut off or broken in that session goes back to its last good copy
+                done = saves.repair(slot)
+                if done["fixed"] or done["set_aside"]:
+                    m.data["save_fix"] = dict(done, time=time.time())
+                # the originals: your own saves must match their backup, and no shared game file may have changed
+                orig = saves.check_originals(slot)
+                touched = installer.shared_changed(m.target_path, m.data.get("session_start", time.time())) \
+                    if m.mode == MODE_HARDLINK else []
+                if touched:
+                    installer.harden(m.target_path)
+                m.data["originals"] = {"time": time.time(), "saves_restored": orig, "game_files": touched[:20]}
+                m.save()
+            except (OSError, ValueError):
+                pass
         cloud = self._settings.get("cloud_folder")
         if cloud and mid:
             try:
@@ -349,13 +434,17 @@ class Api:
 
     def library(self):
         installed = {g.name.lower() for g in self._games}
+        keys = {g.name.lower(): str(i) for i, g in enumerate(self._games)}
         out = []
         for i, g in enumerate(self._games):
             r = g.recipe
             themes = []
             for t in (r.themes if r else []):
                 themes.append({"id": t.id, "name": t.name, "from_game": t.from_game, "description": t.description,
-                               "found": any(any(m in n for m in t.source_match) for n in installed)})
+                               "found": any(any(m in n for m in t.source_match) for n in installed),
+                               # the other game's tile in the library, so it can glow next to the host
+                               "source_key": next((keys[n] for n in installed if n != g.name.lower() and (
+                                   any(m in n for m in t.source_match) or n == (t.from_game or "").lower())), None)})
             themes.sort(key=lambda t: (t["id"].startswith("style-"), not t["found"], t["from_game"].lower()))
             auto = getattr(r, "auto", None) or {}
             out.append({"key": str(i), "name": g.name, "source": g.source, "path": g.path, "base": r is not None,
@@ -772,7 +861,8 @@ class Api:
                 if self._pad_status(g.name, g.appid) in ("partial", "none") and not self._is_mc(r) else []),
             "default_name": "%s - %s" % (r.name.split(" (")[0], t.from_game.split(" /")[0]),
             "destination": self._settings.get("destination") or default_destination(g.path),
-            "mode": self._settings.get("mode", MODE_HARDLINK),
+            # full copies by default: a separate game the merge can change freely, the original stays untouched
+            "mode": self._settings.get("mode") if self._settings.get("mode") == MODE_HARDLINK else MODE_COPY,
             "sources": self._sources_for(r),
             "minecraft": {"loaders": minecraft.LOADERS} if self._is_mc(r) else None,
         }
@@ -1139,6 +1229,8 @@ class Api:
         g = self._game(p["key"])
         r = g.recipe
         t = r.theme(p["theme_id"])
+        if p["mode"] == MODE_INPLACE and not self._is_mc(r):
+            p["mode"] = MODE_COPY  # never mod the original install
         self._settings.update(mode=p["mode"], destination=p["destination"])
         paths.save_settings(self._settings)
         frameworks = [r.framework(fid) for fid in p["frameworks"]]
@@ -1258,10 +1350,18 @@ class Api:
             except Exception as e:
                 got, hit = [], None
                 job.write("✖ Search failed: %s" % e)
+            if not got and getattr(slot, "builtin", ""):  # Frankenstein's own mod already does this
+                adds.append({"slot": slot.name, "ok": True, "mod": slot.builtin, "source": "Built in", "page": "",
+                             "extra": 0, "creative": bool(prefix), "why": ""})
+                job.write("✔ %s: %s (built into Frankenstein)" % (slot.name, slot.builtin))
+                continue
             if not got:
-                why = ("no mod for it that Frankenstein can download by itself" +
+                why = ("no mod for it that Frankenstein can download by itself. The mods for this are on Nexus Mods, "
+                       "and Nexus only lets apps download for Premium members" if getattr(slot, "picks", None) else
+                       "no mod for it that Frankenstein can download by itself" +
                        ("" if self._settings.get("curseforge_key") else " (a CurseForge key in Settings finds more)"))
-                adds.append({"slot": slot.name, "ok": False, "why": why, "search": slot.search, "creative": bool(prefix)})
+                adds.append({"slot": slot.name, "ok": False, "why": why, "search": slot.search, "creative": bool(prefix),
+                             "picks": list(getattr(slot, "picks", None) or [])})
                 job.write("– %s: %s" % (slot.name, why))
                 continue
             labels = []
@@ -1370,7 +1470,11 @@ class Api:
         try:
             os.makedirs(os.path.dirname(p), exist_ok=True)
             with open(p, "w", encoding="utf-8") as f:
-                json.dump(dict({"item_menu": on}, **({"kit": kit["items"], "kit_name": kit["name"]} if kit else {})), f)
+                extra = {"kit": kit["items"], "kit_name": kit["name"]} if kit else {}
+                shop = KITS.get(m.data.get("theme_id"), {})
+                if shop.get("shop"):
+                    extra.update(shop=shop["shop"], shop_name=shop.get("shop_name", "hardware"))
+                json.dump(dict({"item_menu": on}, **extra), f)
         except OSError:
             pass
 
@@ -1485,6 +1589,9 @@ class Api:
         out = {"ready": network.ready(), "installed": network.installed(), "party": None, "error": None,
                "games": [{"name": r.name, "how": r.multiplayer} for r in self._recipes if r.multiplayer]}
         code = self._settings.get("party")
+        srv = getattr(self, "_party_server", None)
+        out["sharing"] = srv.info.get("name") if srv and srv.httpd else None
+        out["merges"] = [{"id": m["id"], "name": m["name"]} for m in self.merges()] if code else []
         if out["ready"] and code:
             try:
                 out["party"] = network.status(code)
@@ -1517,6 +1624,8 @@ class Api:
 
     def party_leave(self):
         code = self._settings.pop("party", None)
+        if getattr(self, "_party_server", None):
+            self._party_server.stop()
         paths.save_settings(self._settings)
         if code:
             try:
@@ -1524,6 +1633,50 @@ class Api:
             except network.NetworkError:
                 pass
         return True
+
+    def party_fix(self):
+        """Firewall and service fixes for when friends can't connect (one Windows prompt)."""
+        network.repair()
+        return True
+
+    def party_share(self, merge_id):
+        """Host: hand this merge to everyone in the party, so they have exactly the same mods."""
+        self._perm("online", "share merges")
+        m = Merge.load(merge_id)
+        r = self._recipe(m.data.get("recipe_id"))
+        st = network.status(self._settings["party"])
+        if not st["my_ip"]:
+            raise MergeError("Wait until the party shows Connected, then share.")
+
+        def work(job):
+            folder = paths.sub(os.path.join("library", "party"))
+            out = sharing.export(m, r, folder, log=job.write)
+            if not hasattr(self, "_party_server"):
+                self._party_server = network.MergeServer()
+            self._party_server.start(st["my_ip"], out, {"name": m.name, "game": m.data.get("game_name", ""),
+                                                        "size": os.path.getsize(out), "how": r.multiplayer if r else ""})
+            self._settings["party_merge"] = m.name
+            job.write("Your friends can press “Get the host's merge” now. Keep Frankenstein open.")
+            return True
+        return self._run(work)
+
+    def party_fetch(self):
+        """Friend: download the host's merge over the party network and add it here."""
+        self._perm("mods", "add merges from friends")
+        st = network.status(self._settings["party"])
+
+        def work(job):
+            job.write("Looking for the host's merge …")
+            hit = network.find_host(st["my_ip"])
+            if not hit:
+                raise MergeError("The host hasn't shared a merge yet (or you're not connected). Ask them to press "
+                                 "Share with the party.")
+            ip, info = hit
+            job.write("Downloading “%s” from the host …" % info.get("name", "the merge"))
+            dest = os.path.join(paths.sub(os.path.join("library", "party")), "from-host.gmerge")
+            network.fetch_merge(ip, dest, lambda d, t: setattr(job, "progress", [d, t] if t else None))
+            return {"path": dest, "info": info}
+        return self._run(work)
 
     def party_let_in(self, member, name=""):
         network.let_in(self._settings["party"], member, name)
@@ -1684,7 +1837,7 @@ class Api:
                         "has_saves": os.path.isdir(saves.slot_root(m.id)),
                         "offline_lock": bool(self._recipe(m.data.get("recipe_id")) and
                                              self._recipe(m.data.get("recipe_id")).launch_args and m.mode != MODE_INPLACE),
-                        "playing": self._playing == m.id, "needs_upgrade": m.data.get("upgraded", 1) < self.UPGRADE,
+                        "playing": self._playing == m.id, "needs_upgrade": m.data.get("upgraded", 1) < self.UPGRADE, "originals": self._originals_note(m), "save_fix": m.data.get("save_fix"),
                         "sources": self._sources_for(self._recipe(m.data.get("recipe_id"))),
                         "mc_loader": m.data.get("mc_loader"), "mc_version": m.data.get("mc_version"),
                         "story": storymode.depth(self._recipe(m.data.get("recipe_id")))["label"],
@@ -1758,6 +1911,8 @@ class Api:
                 # creative starts from a copy of the merge's normal saves, then goes its own way
                 if os.path.isdir(saves.slot_root(merge_id)):
                     shutil.copytree(saves.slot_root(merge_id), saves.slot_root(slot))
+            m.data["session_start"] = time.time()
+            m.save()
             saves.swap_in(slot, r)
             self._playing = merge_id
             saves.watch_until_closed(r.processes or [os.path.basename(exe)], self._game_closed)
@@ -2115,9 +2270,27 @@ class Api:
         r = self._recipe(m.data.get("recipe_id"))
         if self._playing == merge_id and saves.running(r.processes if r else []):
             raise MergeError("The game is still running. Close it first.")
-        bot = self._ai()
 
         def work(job):
+            # damaged saves first: no AI or logs needed, and it's the usual "Saved data is damaged" fix
+            job.write("Checking this merge's saves …")
+            fixed, aside = [], []
+            for slot in (merge_id, merge_id + "~creative"):
+                try:
+                    done = saves.repair(slot, log=job.write)
+                except OSError as e:
+                    job.write("✖ Couldn't check the saves: %s" % e)
+                    continue
+                fixed += done["fixed"]
+                aside += done["set_aside"]
+            if fixed or aside:
+                why = ("Some saves were damaged. %s Your own game's saves weren't touched." % " ".join(filter(None, [
+                    "Put back the last good copy of %s." % ", ".join(fixed) if fixed else "",
+                    "Moved %s aside, so the game loads your next newest save." % ", ".join(aside) if aside else ""])))
+                job.write(why)
+                return {"fixed": True, "culprit": "", "why": why}
+            job.write("The saves look fine.")
+            bot = self._ai()
             job.write("Reading the crash logs …")
             logs = ai.read_logs(m.target_path, r.logs if r else [])
             if not logs:
@@ -2227,7 +2400,8 @@ class Api:
         me = self._me()
         return {"has_key": bool(key), "key_hint": ("…" + key[-4:]) if key else "",
                 "admin": bool(me.get("admin")), "perms": dict(profiles.DEFAULT_PERMS, **me.get("perms", {})),
-                "mode": self._settings.get("mode", MODE_HARDLINK),
+                # full copies by default: a separate game the merge can change freely, the original stays untouched
+            "mode": self._settings.get("mode") if self._settings.get("mode") == MODE_HARDLINK else MODE_COPY,
                 "destination": self._settings.get("destination", ""),
                 "data_folder": paths.data_dir(),
                 "version": VERSION,

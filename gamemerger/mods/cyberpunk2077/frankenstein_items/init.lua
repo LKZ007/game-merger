@@ -1,10 +1,11 @@
--- Frankenstein's item menu for Cyberpunk 2077 (a Cyber Engine Tweaks mod).
--- Every item in TweakDB, so items that mods add (through TweakXL or ArchiveXL) are listed too.
+-- Frankenstein's sandbox menu for Cyberpunk 2077 (a Cyber Engine Tweaks mod), built in so it needs no
+-- downloads: every item, every car into your garage, cheats (god mode, eddies, heal, wanted level, time,
+-- weather) and a fly/teleport tool. Items and cars that mods add (TweakXL / ArchiveXL) are listed too.
 -- Open the CET overlay (~) to see it, or bind "Frankenstein item menu" in CET's Bindings.
 -- Frankenstein writes settings.json next to this file before each launch.
 
 local menu = { open = false, items = {}, shown = {}, cats = { "All" }, cat = "All", search = "", last = nil,
-               overlay = false, allowed = true, note = "" }
+               overlay = false, allowed = true, note = "", cars = {}, carSearch = "", god = false, saved = nil }
 
 local function readSettings()
     local f = io.open("settings.json", "r")
@@ -56,6 +57,34 @@ local function filter()
     menu.last = menu.search .. "|" .. menu.cat
 end
 
+local function loadCars()
+    menu.cars = {}
+    local ok, recs = pcall(function() return TweakDB:GetRecords("gamedataVehicle_Record") end)
+    if not ok or not recs then return end
+    for _, rec in ipairs(recs) do
+        local id = TDBID.ToStringDEBUG(rec:GetID())
+        if id and id:find("_player") then
+            local name = nameOf(rec) or id:gsub("^Vehicle%.", "")
+            table.insert(menu.cars, { id = id, name = name, find = (name .. " " .. id):lower() })
+        end
+    end
+    table.sort(menu.cars, function(a, b) return a.name < b.name end)
+end
+
+-- every cheat is wrapped: if a game update renames something, the button says so instead of breaking
+local function try(label, fn)
+    local ok, err = pcall(fn)
+    menu.note = ok and label or (label .. " didn't work in this game version (" .. tostring(err):sub(1, 80) .. ")")
+end
+
+local function player() return Game.GetPlayer() end
+
+local function teleport(dx, dy, dz)
+    local p = player()
+    local pos = p:GetWorldPosition()
+    Game.GetTeleportationFacility():Teleport(p, Vector4.new(pos.x + dx, pos.y + dy, pos.z + dz, 1), p:GetWorldOrientation():ToEulerAngles())
+end
+
 local function give(it, qty)
     local ok = pcall(function() Game.AddToInventory(it.id, qty) end)
     menu.note = ok and ("Got " .. qty .. " x " .. it.name) or ("Couldn't give " .. it.name)
@@ -64,10 +93,11 @@ end
 registerForEvent("onInit", function()
     readSettings()
     load()
+    loadCars()
 end)
 registerForEvent("onOverlayOpen", function() menu.overlay = true end)
 registerForEvent("onOverlayClose", function() menu.overlay = false end)
-registerHotkey("frankenstein_items", "Frankenstein item menu", function()
+registerHotkey("frankenstein_items", "Frankenstein sandbox menu", function()
     if menu.allowed then menu.open = not menu.open end
 end)
 
@@ -82,28 +112,126 @@ registerForEvent("onDraw", function()
         end
         return
     end
-    ImGui.SetNextWindowSize(640, 560, ImGuiCond.FirstUseEver)
-    if ImGui.Begin("Frankenstein · every item in this merge (" .. #menu.items .. ")") then
-        if #menu.items == 0 and ImGui.Button("Load items") then load() end
-        menu.search = ImGui.InputText("Search", menu.search, 100)
-        if ImGui.BeginCombo("Category", menu.cat) then
-            for _, c in ipairs(menu.cats) do
-                if ImGui.Selectable(c, c == menu.cat) then menu.cat = c end
+    ImGui.SetNextWindowSize(680, 600, ImGuiCond.FirstUseEver)
+    if ImGui.Begin("Frankenstein sandbox · every item and car in this merge") then
+        ImGui.Text(menu.note)
+        if ImGui.BeginTabBar("frank_tabs") then
+            if ImGui.BeginTabItem("Items (" .. #menu.items .. ")") then
+                if #menu.items == 0 and ImGui.Button("Load items") then load() end
+                menu.search = ImGui.InputText("Search", menu.search, 100)
+                if ImGui.BeginCombo("Category", menu.cat) then
+                    for _, c in ipairs(menu.cats) do
+                        if ImGui.Selectable(c, c == menu.cat) then menu.cat = c end
+                    end
+                    ImGui.EndCombo()
+                end
+                if menu.last ~= menu.search .. "|" .. menu.cat then filter() end
+                ImGui.Text(#menu.shown .. " shown")
+                ImGui.BeginChild("items", 0, 0, true)
+                for i, it in ipairs(menu.shown) do
+                    if i > 400 then ImGui.Text("… search to see more"); break end
+                    if ImGui.Button("x1##" .. i) then give(it, 1) end
+                    ImGui.SameLine()
+                    if ImGui.Button("x10##" .. i) then give(it, 10) end
+                    ImGui.SameLine()
+                    ImGui.Text(it.name .. "  (" .. it.cat .. ")")
+                end
+                ImGui.EndChild()
+                ImGui.EndTabItem()
             end
-            ImGui.EndCombo()
+            if ImGui.BeginTabItem("Cars (" .. #menu.cars .. ")") then
+                ImGui.TextWrapped("Add a car to your garage, then call it: press V (or your Call vehicle button). Car mods you install show up here too.")
+                if #menu.cars == 0 and ImGui.Button("Load cars") then loadCars() end
+                menu.carSearch = ImGui.InputText("Search cars", menu.carSearch, 100)
+                if ImGui.Button("Add every car to my garage") then
+                    try("Every car is in your garage", function()
+                        for _, c in ipairs(menu.cars) do Game.GetVehicleSystem():EnablePlayerVehicle(c.id, true, false) end
+                    end)
+                end
+                ImGui.BeginChild("cars", 0, 0, true)
+                local q = menu.carSearch:lower()
+                for i, c in ipairs(menu.cars) do
+                    if q == "" or c.find:find(q, 1, true) then
+                        if ImGui.Button("Add##car" .. i) then
+                            try(c.name .. " is in your garage. Press V to call it.", function()
+                                Game.GetVehicleSystem():EnablePlayerVehicle(c.id, true, false)
+                            end)
+                        end
+                        ImGui.SameLine()
+                        ImGui.Text(c.name)
+                    end
+                end
+                ImGui.EndChild()
+                ImGui.EndTabItem()
+            end
+            if ImGui.BeginTabItem("Cheats") then
+                local god = ImGui.Checkbox("God mode (can't die)", menu.god)
+                if god ~= menu.god then
+                    menu.god = god
+                    try(god and "God mode on" or "God mode off", function()
+                        local gm, id = Game.GetGodModeSystem(), player():GetEntityID()
+                        if god then gm:AddGodMode(id, gameGodModeType.Invulnerable, CName.new("Frankenstein"))
+                        else gm:ClearGodMode(id, CName.new("Frankenstein")) end
+                    end)
+                end
+                if ImGui.Button("+100,000 eddies") then try("+100,000 eddies", function() Game.AddToInventory("Items.money", 100000) end) end
+                ImGui.SameLine()
+                if ImGui.Button("Heal") then
+                    try("Healed", function()
+                        Game.GetStatPoolsSystem():RequestSettingStatPoolValue(player():GetEntityID(), gamedataStatPoolType.Health, 100, nil)
+                    end)
+                end
+                ImGui.SameLine()
+                if ImGui.Button("Lose the police") then
+                    try("Police called off", function()
+                        Game.GetScriptableSystemsContainer():Get(CName.new("PreventionSystem")):ChangeHeatStage(EPreventionHeatStage.Heat_0, "Frankenstein")
+                    end)
+                end
+                ImGui.Separator()
+                ImGui.Text("Time")
+                for _, h in ipairs({ 6, 12, 18, 23 }) do
+                    if ImGui.Button(string.format("%02d:00", h)) then
+                        try("Time set", function() Game.GetTimeSystem():SetGameTimeByHMS(h, 0, 0) end)
+                    end
+                    ImGui.SameLine()
+                end
+                ImGui.NewLine()
+                ImGui.Text("Weather")
+                for _, w in ipairs({ { "Sunny", "24h_weather_sunny" }, { "Rain", "24h_weather_rain" }, { "Fog", "24h_weather_fog" }, { "Storm", "24h_weather_storm" } }) do
+                    if ImGui.Button(w[1]) then
+                        try("Weather: " .. w[1], function() Game.GetWeatherSystem():SetWeather(w[2], 5, 0) end)
+                    end
+                    ImGui.SameLine()
+                end
+                ImGui.NewLine()
+                ImGui.EndTabItem()
+            end
+            if ImGui.BeginTabItem("Fly") then
+                ImGui.TextWrapped("Move yourself around the map. For a free camera, use the game's own Photo mode from the pause menu.")
+                if ImGui.Button("Up 20 m") then try("Up", function() teleport(0, 0, 20) end) end
+                ImGui.SameLine()
+                if ImGui.Button("Down 5 m") then try("Down", function() teleport(0, 0, -5) end) end
+                ImGui.SameLine()
+                if ImGui.Button("Forward 25 m") then
+                    try("Forward", function()
+                        local f = player():GetWorldForward()
+                        teleport(f.x * 25, f.y * 25, 0)
+                    end)
+                end
+                if ImGui.Button("Save this spot") then
+                    try("Spot saved", function() menu.saved = player():GetWorldPosition() end)
+                end
+                ImGui.SameLine()
+                if menu.saved and ImGui.Button("Back to saved spot") then
+                    try("Back at your spot", function()
+                        local p, s = player(), menu.saved
+                        Game.GetTeleportationFacility():Teleport(p, Vector4.new(s.x, s.y, s.z, 1), p:GetWorldOrientation():ToEulerAngles())
+                    end)
+                end
+                ImGui.EndTabItem()
+            end
+            ImGui.EndTabBar()
         end
-        if menu.last ~= menu.search .. "|" .. menu.cat then filter() end
-        ImGui.Text(#menu.shown .. " shown. " .. menu.note)
-        ImGui.BeginChild("items", 0, 0, true)
-        for i, it in ipairs(menu.shown) do
-            if i > 400 then ImGui.Text("… search to see more"); break end
-            if ImGui.Button("x1##" .. i) then give(it, 1) end
-            ImGui.SameLine()
-            if ImGui.Button("x10##" .. i) then give(it, 10) end
-            ImGui.SameLine()
-            ImGui.Text(it.name .. "  (" .. it.cat .. ")")
-        end
-        ImGui.EndChild()
     end
     ImGui.End()
 end)

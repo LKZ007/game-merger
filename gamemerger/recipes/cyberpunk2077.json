@@ -110,11 +110,51 @@
       "slots": [
         {
           "name": "Real-world style cars",
-          "search": "real car"
+          "search": "real car",
+          "picks": [
+            {
+              "name": "Porsche",
+              "url": "https://www.nexusmods.com/games/cyberpunk2077/mods?keyword=porsche"
+            },
+            {
+              "name": "Nissan Skyline / GT-R",
+              "url": "https://www.nexusmods.com/games/cyberpunk2077/mods?keyword=nissan"
+            },
+            {
+              "name": "Lamborghini",
+              "url": "https://www.nexusmods.com/games/cyberpunk2077/mods?keyword=lamborghini"
+            },
+            {
+              "name": "BMW",
+              "url": "https://www.nexusmods.com/games/cyberpunk2077/mods?keyword=bmw"
+            },
+            {
+              "name": "Toyota Supra",
+              "url": "https://www.nexusmods.com/games/cyberpunk2077/mods?keyword=supra"
+            },
+            {
+              "name": "Ferrari",
+              "url": "https://www.nexusmods.com/games/cyberpunk2077/mods?keyword=ferrari"
+            },
+            {
+              "name": "Ford Mustang",
+              "url": "https://www.nexusmods.com/games/cyberpunk2077/mods?keyword=mustang"
+            },
+            {
+              "name": "Audi",
+              "url": "https://www.nexusmods.com/games/cyberpunk2077/mods?keyword=audi"
+            }
+          ]
         },
         {
           "name": "Driving / handling overhaul",
-          "search": "handling"
+          "search": "handling",
+          "picks": [
+            {
+              "name": "Driving overhauls",
+              "url": "https://www.nexusmods.com/games/cyberpunk2077/mods?keyword=handling"
+            }
+          ]
         },
         {
           "name": "Races and street racing",
@@ -166,20 +206,23 @@
   ],
   "multiplayer": "Cyberpunk 2077 has no working multiplayer yet. Community multiplayer mods are still in development, so for now share your merge and compare runs.",
   "sandbox": {
-    "native": "Cyber Engine Tweaks (installed with every Cyberpunk merge) has a console: press ~ in game.",
-    "note": "Spawn cars, NPCs and props, free camera, god mode and unlimited eddies.",
+    "native": "Frankenstein's own sandbox menu is built into every Cyberpunk merge: press ~ in game.",
+    "note": "Every item, every car into your garage, god mode, eddies, heal, lose the police, time, weather and a fly tool. Free camera: the game's own Photo mode.",
     "slots": [
       {
         "name": "Spawner and sandbox menu",
-        "search": "Appearance Menu Mod"
+        "search": "Appearance Menu Mod",
+        "builtin": "Frankenstein sandbox menu (items and cars)"
       },
       {
         "name": "Cheat menu (god mode, money, items)",
-        "search": "Simple Menu"
+        "search": "Simple Menu",
+        "builtin": "Frankenstein sandbox menu (Cheats tab)"
       },
       {
         "name": "Free camera / photo mode",
-        "search": "freefly"
+        "search": "freefly",
+        "builtin": "Fly tab plus the game's Photo mode"
       }
     ]
   }

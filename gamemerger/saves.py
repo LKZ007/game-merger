@@ -77,13 +77,179 @@ def create_slot(merge_id, recipe, copy_current=True, log=lambda *_: None):
             os.makedirs(dest, exist_ok=True)
 
 
+# ---------- keeping saves safe ----------
+# Before every play the merge's saves are snapshotted (last few kept). A save the game would call
+# "damaged" (cut off half way, empty, broken metadata) is swapped for its last good copy, and the
+# broken one is kept aside, never deleted. The player's own saves get a one-time backup too.
+
+KEEP_SNAPSHOTS = 4
+
+
+def _snap_root(slot_id):
+    return os.path.join(paths.sub("save-snapshots"), slot_id)
+
+
+def snapshot(slot_id):
+    src = slot_root(slot_id)
+    if not os.path.isdir(src) or not os.listdir(src):
+        return None
+    root = _snap_root(slot_id)
+    dest = os.path.join(root, time.strftime("%Y%m%d-%H%M%S"))
+    if os.path.exists(dest):
+        return dest
+    shutil.copytree(src, dest)
+    for old in sorted(os.listdir(root))[:-KEEP_SNAPSHOTS]:
+        shutil.rmtree(os.path.join(root, old), ignore_errors=True)
+    return dest
+
+
+def _mirror_dir(recipe_id, i):
+    return os.path.join(paths.sub("original-saves-backup"), recipe_id, str(i))
+
+
+def _files(root):
+    out = {}
+    for dirpath, _dirs, files in os.walk(root):
+        for f in files:
+            p = os.path.join(dirpath, f)
+            st = os.stat(p)
+            out[os.path.relpath(p, root)] = (st.st_size, int(st.st_mtime))
+    return out
+
+
+def backup_originals(recipe):
+    """Mirror the player's own saves (new and changed files only, so it's quick after the first time)
+    before they're moved aside for a merge. check_originals() compares against this after playing."""
+    for i, d in enumerate(save_dirs(recipe)):
+        dest = _mirror_dir(getattr(recipe, "id", "game"), i)
+        if not os.path.isdir(d):
+            continue
+        have, want = (_files(dest) if os.path.isdir(dest) else {}), _files(d)
+        for rel, meta in want.items():
+            if have.get(rel) != meta:
+                os.makedirs(os.path.dirname(os.path.join(dest, rel)), exist_ok=True)
+                shutil.copy2(os.path.join(d, rel), os.path.join(dest, rel))
+        for rel in set(have) - set(want):
+            os.remove(os.path.join(dest, rel))
+
+
+def check_originals(slot_id):
+    """After a session: the player's own saves must be exactly what they were before. Anything that changed
+    (Steam Cloud syncing merge saves into them, a mod writing there) is set aside and the backup put back.
+    Returns the files that were put back."""
+    state = _last_session()
+    if not state or state.get("merge_id") != slot_id:
+        return []
+    restored = []
+    for i, d in enumerate(state.get("dirs", [])):
+        mirror = _mirror_dir(state.get("recipe_id", "game"), i)
+        if not os.path.isdir(mirror) or not os.path.isdir(d):
+            continue
+        have, want = _files(d), _files(mirror)
+        aside = os.path.join(paths.sub("changed-original-saves"), time.strftime("%Y%m%d-%H%M%S"), str(i))
+        for rel in set(have) | set(want):
+            if have.get(rel) == want.get(rel):
+                continue
+            cur = os.path.join(d, rel)
+            if os.path.exists(cur):
+                os.makedirs(os.path.dirname(os.path.join(aside, rel)), exist_ok=True)
+                shutil.move(cur, os.path.join(aside, rel))
+            if rel in want:
+                os.makedirs(os.path.dirname(cur), exist_ok=True)
+                shutil.copy2(os.path.join(mirror, rel), cur)
+            restored.append(rel)
+    return restored
+
+
+def _last_file():
+    return os.path.join(paths.data_dir(), "last-session.json")
+
+
+def _last_session():
+    try:
+        with open(_last_file(), encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return None
+
+
+def _broken(save_dir):
+    """Why the game would call this save damaged, or "" if it looks fine."""
+    files = {f.name.lower(): f for f in os.scandir(save_dir) if f.is_file()}
+    if "sav.dat" in files:  # REDengine (Cyberpunk 2077)
+        f = files["sav.dat"]
+        if f.stat().st_size < 1024:
+            return "the save file is empty or cut off"
+        with open(f.path, "rb") as h:
+            head = h.read(4)
+        if head != b"CSAV":
+            return "the save file is cut off or overwritten"
+        for name, meta in files.items():
+            if name.startswith("metadata") and name.endswith(".json"):
+                try:
+                    with open(meta.path, encoding="utf-8") as h:
+                        json.load(h)
+                except (OSError, ValueError):
+                    return "its details file is broken"
+        return ""
+    saves_here = [f for n, f in files.items() if n.endswith((".sav", ".save", ".dat", ".es3"))]
+    if saves_here and all(f.stat().st_size == 0 for f in saves_here):
+        return "the save file is empty"
+    return ""
+
+
+def damaged(slot_id):
+    """[(relative save folder, why)] for the saves in a merge's slot that won't load."""
+    out = []
+    root = slot_root(slot_id)
+    for dirpath, _dirs, _files in os.walk(root):
+        try:
+            why = _broken(dirpath)
+        except OSError as e:
+            why = str(e)
+        if why:
+            out.append((os.path.relpath(dirpath, root), why))
+    return out
+
+
+def repair(slot_id, log=lambda *_: None):
+    """Swap each damaged save for its newest good copy. Returns {fixed: [...], set_aside: [...]}"""
+    root = slot_root(slot_id)
+    fixed, aside = [], []
+    snaps = sorted(os.listdir(_snap_root(slot_id)), reverse=True) if os.path.isdir(_snap_root(slot_id)) else []
+    for rel, why in damaged(slot_id):
+        name = os.path.basename(rel)
+        good = next((os.path.join(_snap_root(slot_id), sn, rel) for sn in snaps
+                     if os.path.isdir(os.path.join(_snap_root(slot_id), sn, rel))
+                     and not _broken(os.path.join(_snap_root(slot_id), sn, rel))), None)
+        keep = os.path.join(paths.sub("damaged-saves"), slot_id, time.strftime("%Y%m%d-%H%M%S"), rel)
+        os.makedirs(os.path.dirname(keep), exist_ok=True)
+        shutil.move(os.path.join(root, rel), keep)  # never deleted, only set aside
+        if good:
+            shutil.copytree(good, os.path.join(root, rel))
+            fixed.append(name)
+            log("Fixed %s (%s): put back its last good copy." % (name, why))
+        else:
+            aside.append(name)
+            log("Moved %s aside (%s). The game loads your next newest save instead." % (name, why))
+    return {"fixed": fixed, "set_aside": aside}
+
+
 def swap_in(merge_id, recipe):
     if active():
         swap_out()
+    try:
+        backup_originals(recipe)
+        repair(merge_id)
+        snapshot(merge_id)
+    except OSError:
+        pass  # never stop a game starting over a backup
     dirs = save_dirs(recipe)
     root = slot_root(merge_id)
-    state = {"merge_id": merge_id, "dirs": dirs, "started": time.time()}
+    state = {"merge_id": merge_id, "dirs": dirs, "started": time.time(), "recipe_id": getattr(recipe, "id", "game")}
     with open(_active_file(), "w", encoding="utf-8") as f:
+        json.dump(state, f)
+    with open(_last_file(), "w", encoding="utf-8") as f:
         json.dump(state, f)
     for i, d in enumerate(dirs):
         slot = os.path.join(root, str(i))
@@ -128,15 +294,20 @@ def running(exe_names):
     return any('"%s"' % n.lower() in out for n in exe_names)
 
 
-def watch_until_closed(exe_names, on_closed, grace=90, poll=5, is_running=running):
-    """Wait for the game to start (up to `grace` seconds), then until it closes."""
+def watch_until_closed(exe_names, on_closed, grace=300, poll=5, is_running=running, settle=6):
+    """Wait for the game to start (up to `grace` seconds), then until it closes. The game has to be gone
+    for `settle` checks in a row: games that restart themselves through Steam or a launcher would
+    otherwise get their saves swapped out from under them mid-start (and a save cut off mid-write
+    is what the game calls "damaged")."""
     def loop():
         start = time.time()
         while not is_running(exe_names):
             if time.time() - start > grace:
                 break
             time.sleep(poll)
-        while is_running(exe_names):
+        gone = 0
+        while gone < settle:
+            gone = 0 if is_running(exe_names) else gone + 1
             time.sleep(poll)
         on_closed()
     t = threading.Thread(target=loop, daemon=True)

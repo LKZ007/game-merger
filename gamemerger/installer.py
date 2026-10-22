@@ -95,6 +95,59 @@ def clone_tree(src, dst, hardlink=True, log=_noop, progress=_noop):
     return hardlink
 
 
+# Files a game or its mods rewrite while playing (configs, caches, compiled scripts). In a space-saver
+# copy these must never stay shared with the original: writing to a shared file changes both.
+WRITABLE_EXT = (".ini", ".cfg", ".json", ".xml", ".txt", ".log", ".toml", ".yaml", ".yml", ".redscripts", ".bk",
+                ".dll", ".asi", ".lua", ".reds", ".bin", ".dat", ".cache", ".exe", ".config", ".db", ".sqlite")
+WRITABLE_DIRS = ("cache", "config", "configs", "settings", "plugins", "mods", "scripts", "r6", "red4ext", "bepinex",
+                 "melonloader", "userdata", "engine", "bin")
+KEEP_SHARED_OVER = 256 * 1024 * 1024  # only big read-only data files (game archives) stay shared
+
+
+def _unshare(path):
+    tmp = path + ".frankenstein-tmp"
+    shutil.copy2(path, tmp)
+    os.replace(tmp, path)
+
+
+def harden(target, log=_noop):
+    """Make a space-saver copy safe: every file that could be written while playing gets its own real copy,
+    so nothing the merge does can reach the original install. Returns how many files were split off."""
+    n = 0
+    for dirpath, _dirs, files in os.walk(target):
+        parts = {x.lower() for x in os.path.relpath(dirpath, target).split(os.sep)}
+        for f in files:
+            p = os.path.join(dirpath, f)
+            try:
+                st = os.stat(p)
+                if st.st_nlink < 2:
+                    continue
+                if st.st_size < KEEP_SHARED_OVER or f.lower().endswith(WRITABLE_EXT) or parts & set(WRITABLE_DIRS):
+                    _unshare(p)
+                    n += 1
+            except OSError as e:
+                log("Couldn't split off %s: %s" % (f, e))
+    if n:
+        log("Gave %d file(s) their own copy so the original game can't be changed." % n)
+    return n
+
+
+def shared_changed(target, since):
+    """Files still shared with the original install that were written after `since` (a timestamp):
+    if any, the original game was changed through them."""
+    out = []
+    for dirpath, _dirs, files in os.walk(target):
+        for f in files:
+            p = os.path.join(dirpath, f)
+            try:
+                st = os.stat(p)
+            except OSError:
+                continue
+            if st.st_nlink > 1 and st.st_mtime > since + 2:
+                out.append(os.path.relpath(p, target))
+    return out
+
+
 # ---------- working out where a mod's files go ----------
 
 def _unwrap(root, markers):
@@ -288,6 +341,8 @@ class Merge:
             linked = clone_tree(base_path, target, hardlink=(mode == MODE_HARDLINK), log=log, progress=progress)
             if mode == MODE_HARDLINK and not linked:
                 m.data["mode"] = MODE_COPY
+            elif mode == MODE_HARDLINK:
+                harden(target, log=log)
             if appid:
                 # Stops Steam games from relaunching the original install instead of this copy.
                 exe = recipe.launch_exe(target)

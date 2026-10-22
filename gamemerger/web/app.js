@@ -147,7 +147,8 @@ async function scan() {
       if (!c) return;
       document.querySelectorAll(`[data-cover="${g.key}"]`).forEach((el) => {
         el.querySelectorAll(".face, .spine").forEach((f) => { f.style.backgroundImage = `url('${c}')`; f.classList.remove("placeholder"); });
-        el.querySelector(".face").textContent = "";
+        if (el.querySelector(".face")) el.querySelector(".face").textContent = "";
+        if (el.classList.contains("pair-cover")) { el.style.backgroundImage = `url('${c}')`; el.classList.remove("placeholder"); el.textContent = ""; }
       });
       if (g.key === state.selected) $(".banner-art") && ($(".banner-art").style.backgroundImage = `url('${c}')`);
     });
@@ -164,6 +165,7 @@ function renderLibrary() {
     banner = `<section class="banner">
       <div class="banner-art" style="${state.covers[g.key] ? `background-image:url('${state.covers[g.key]}')` : ""}"></div>
       <div class="banner-shade"></div>
+      ${mergePairHtml(g, t)}
       <div class="banner-content">
         <div class="eyebrow">Main game${g.engine ? " · " + esc(g.engine) : ""}</div>
         <h1>${esc(g.name)}</h1>
@@ -183,16 +185,19 @@ function renderLibrary() {
         <div class="row"><button class="btn primary" id="addFolder2">Add game folder</button></div>
       </div></section>`;
   }
+  const partner = t?.source_key ?? null;
   const tiles = state.games.map((x) => `
-      <button class="tile ${x.base ? "base" : ""} ${x.key === state.selected ? "selected" : ""}" data-key="${x.key}" data-cover="${x.key}" aria-pressed="${x.key === state.selected}">
+      <button class="tile ${x.base ? "base" : ""} ${x.key === state.selected ? "selected picked" : ""} ${x.key === partner ? "partner picked" : ""}" data-key="${x.key}" data-cover="${x.key}" aria-pressed="${x.key === state.selected}">
+        ${x.key === state.selected ? `<span class="pick-badge host">Host</span>` : x.key === partner ? `<span class="pick-badge">Merging in</span>` : ""}
         ${caseHtml(x.name, state.covers[x.key])}
+        ${x.key === state.selected ? "" : x.base ? `<span class="make-host" data-host="${x.key}">Make host</span>` : `<span class="make-host off" title="Frankenstein couldn't read this game's folder">Can't host</span>`}
         <div class="tile-name">${esc(x.name)}</div>
         <div class="tile-sub">${esc(x.source)} · ${x.key === state.selected ? "main game" : x.moddable === "no" ? "no mod support" : x.moddable === "limited" ? "limited mods" : "moddable"}${x.creative ? ` · <span class="creative-tag" title="Has a creative / sandbox mode">creative</span>` : ""}</div>
       </button>`).join("");
   el.innerHTML = `${banner}
     <section class="shelf">
       <div class="shelf-head"><h2>Your games</h2>
-        <div class="row"><span class="muted small">Click any game to make it the main game</span>
+        <div class="row"><span class="muted small">Make host picks the main game · the glowing pair is this merge</span>
           <button class="btn ghost" id="rescan">Rescan</button><button class="btn" id="addFolder">Add game folder</button></div></div>
       ${state.games.length ? `<div class="grid">${tiles}</div>` : `<div class="empty">No games found yet.</div>`}
     </section>
@@ -200,7 +205,17 @@ function renderLibrary() {
   renderOwnedShelf();
   el.querySelectorAll(".tile").forEach((b) => (b.onclick = () => {
     const x = game(b.dataset.key);
+    // a game that one of the host's themes merges in: pick it as the second game
+    const th = !x || x.key === state.selected ? null : g?.themes.find((y) => y.source_key === x.key);
+    if (th && th.id !== state.themeId) { state.themeId = th.id; return renderLibrary(); }
     if (!x.base) return toast(`Frankenstein couldn't read ${x.name}'s folder. Try Rescan.`);
+    state.selected = x.key;
+    state.themeId = x.themes[0]?.id;
+    renderLibrary();
+  }));
+  el.querySelectorAll(".make-host[data-host]").forEach((h) => (h.onclick = (e) => {
+    e.stopPropagation();
+    const x = game(h.dataset.host);
     state.selected = x.key;
     state.themeId = x.themes[0]?.id;
     renderLibrary();
@@ -216,6 +231,18 @@ function renderLibrary() {
   if ($("#themePick")) $("#themePick").onchange = (e) => { state.themeId = e.target.value; renderLibrary(); };
   if ($("#mergeBtn")) $("#mergeBtn").onclick = startSetup;
   if ($("#previewBtn")) $("#previewBtn").onclick = () => previewMerge(state.selected, state.themeId);
+}
+
+// Top right of the banner: this merge at a glance, host on the left, the game merged in on the right.
+function mergePairHtml(g, t) {
+  if (!t) return "";
+  const other = t.source_key != null ? game(t.source_key) : null;
+  const card = (name, key, label) => `<div class="pair-card">
+      <div class="pair-cover ${key != null && state.covers[key] ? "" : "placeholder"}" data-cover="${key ?? ""}" style="${key != null && state.covers[key] ? `background-image:url('${state.covers[key]}')` : ""}">${key != null && state.covers[key] ? "" : esc(name)}</div>
+      <div class="pair-label"><span class="muted small">${label}</span><strong>${esc(name)}</strong></div></div>`;
+  return `<aside class="merge-pair" aria-label="This merge">
+    <div class="eyebrow">This merge</div>
+    <div class="pair-row">${card(g.name, g.key, "Host")}<div class="pair-fuse" aria-hidden="true">+</div>${card(other ? other.name : t.from_game || t.name, other ? other.key : null, "Merging in")}</div></aside>`;
 }
 
 // ---------- merge setup ----------
@@ -258,9 +285,8 @@ async function pickLoader(s, loader) {
 }
 
 const MODES = [
-  ["hardlink", "Fast copy", "Separate folder that shares untouched files with the original. Almost no extra space. Same drive only."],
-  ["copy", "Full copy", "Completely independent folder. Safest, but as big as the game."],
-  ["inplace", "Mod the original", "Changes your real install. Every replaced file is backed up first."],
+  ["copy", "Full copy (recommended)", "A completely separate copy of the game that Frankenstein can change freely. Your original install is never touched."],
+  ["hardlink", "Space saver", "A separate copy that shares only big, read-only game data with the original. Anything the game or a mod could write gets its own copy. Same drive only."],
 ];
 
 function renderSetup() {
@@ -283,7 +309,9 @@ function renderSetup() {
         <button class="icon-btn" data-remove="${j}" aria-label="Remove ${esc(basename(m.path))}"><svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>`;
     }).join("");
     return `<div class="slot"><div class="slot-head"><span class="slot-name">${esc(sl.name)}</span>
-        <button class="btn ghost" data-find="${i}">Find mods</button><button class="btn" data-add="${i}">Add file</button></div>${files}</div>`;
+        ${files ? `<span class="tag">Your pick</span>` : `<span class="tag live" title="Frankenstein finds and installs the best mod for this when you press Merge it">Auto</span>`}
+        <span class="muted small">or pick yourself:</span>
+        <button class="btn ghost" data-find="${i}">Find mods</button><button class="btn ghost" data-add="${i}">Add file</button></div>${files}</div>`;
   }).join("");
   const clashes = s.check.clashes.length
     ? `<div class="note"><strong>Heads up:</strong> these mods change the same files, so the one added last wins.<ul>${s.check.clashes.map((c) => `<li>${esc(c)}</li>`).join("")}</ul>Switch one off later in Mods &amp; profiles if it causes trouble.</div>` : "";
@@ -301,8 +329,8 @@ function renderSetup() {
       <div class="row"><select class="input" id="mcLoader">${Object.entries(s.options.minecraft.loaders).map(([id, n]) => `<option value="${id}" ${s.loader === id ? "selected" : ""}>${esc(n)}</option>`).join("")}</select>
         <span class="muted">${s.version ? `Minecraft ${esc(s.version)}` : "Finding the newest Minecraft version…"}</span></div>
       <p class="muted small">Fabric is quickest to set up. Mods only show if they work with the loader and version you pick.</p></div>` : ""}
-    <div class="card"><div class="section-title"><span class="step">1</span><h2>Pick your mods</h2></div>
-      <p class="muted" style="margin-top:-6px">Click <strong>Find mods</strong> to search ${esc((s.options.sources || ["Nexus Mods"]).join(", "))} at once, or paste a download link. Mods it needs come along automatically. You can also skip this and add mods later.</p>
+    <div class="card"><div class="section-title"><span class="step">1</span><h2>What it brings over</h2></div>
+      <p class="muted" style="margin-top:-6px">You don't need to pick anything. When you press <strong>Merge it</strong>, Frankenstein searches ${esc((s.options.sources || ["Nexus Mods"]).join(", "))} and installs the best mod for each part below by itself, plus its own built-in mod where it has one. Afterwards "What it adds" shows what it got and anything it couldn't get on its own. Only want a specific mod? Use Find mods or Add file for that part.</p>
       ${slots}${clashes}</div>
     <div class="card"><div class="section-title"><span class="step">2</span><h2>Merge it</h2></div>
       <p class="muted" style="margin-top:-6px">Everything else is handled: mod loaders download automatically, the merge goes into its own safe copy, and it gets its own save games.</p>
@@ -499,7 +527,12 @@ async function renderAccountsCard() {
         ${me.admin || p.id === me.id ? `<button class="btn ghost" data-act="rename">Rename</button><button class="btn ghost" data-act="pin">${p.has_pin ? "Change PIN" : "Set PIN"}</button>` : ""}
         ${me.admin && !p.admin ? `<button class="btn ghost danger" data-act="remove">Remove</button>` : ""}</div>
       ${p.admin ? "" : `<div class="acct-perms">${perms(p)}</div>`}</div>`).join("")}
-    ${me.admin ? `<div class="row" style="margin-top:12px;flex-wrap:nowrap"><input class="input" id="newAcct" placeholder="New account name" maxlength="24"><button class="btn primary" id="addAcct">Add account</button></div>` : ""}`;
+    ${me.admin ? `<div class="row" style="margin-top:12px;flex-wrap:nowrap"><input class="input" id="newAcct" placeholder="New account name" maxlength="24"><button class="btn primary" id="addAcct">Add account</button></div>` : ""}
+    <h3 style="margin-top:18px">Your account on your other PCs</h3>
+    <p class="muted small">${st.remembered ? `This PC keeps you signed in as ${esc(me.name)}. Press your name and Switch to sign out.` : "Pick your account once and this PC keeps you signed in."}
+      With cloud backup (OneDrive or Google Drive) on both PCs, your account follows you on its own. Otherwise get a link code here and paste it on the other PC.</p>
+    <div class="row" style="flex-wrap:nowrap"><button class="btn ghost" id="linkGet">Get my link code</button>
+      <input class="input" id="linkIn" placeholder="Paste a link code from your other PC" autocomplete="off"><button class="btn primary" id="linkGo">Link</button></div>`;
   const ask = (title, label, type = "text") => {
     const done = modal(title, `<input class="input" id="askIn" type="${type}" inputmode="${type === "password" ? "numeric" : "text"}" placeholder="${esc(label)}" autocomplete="off">`,
       [{ label: "Cancel", value: null }, { label: "Save", value: true, primary: true }]);
@@ -521,6 +554,18 @@ async function renderAccountsCard() {
       try { await call("profile_update", id, null, null, p); toast("Saved."); } catch (e) { toast(errText(e)); renderAccountsCard(); }
     }));
   });
+  $("#linkGet").onclick = async () => {
+    try {
+      const r = await call("profile_link_code");
+      try { await navigator.clipboard.writeText(r.code); } catch (e) { /* the box below still shows it */ }
+      modal("Your link code", `<p class="muted">Copied. On your other PC open Frankenstein, go to Settings > Accounts, paste it and press Link. It brings your account, admin rights, PIN and achievements.</p>
+        <textarea class="input" readonly style="width:100%;height:110px;font-family:monospace;font-size:12px">${esc(r.code)}</textarea>`, [{ label: "Done", value: true, primary: true }]);
+    } catch (e) { toast(errText(e)); }
+  };
+  $("#linkGo").onclick = async () => {
+    try { state.profiles = await call("profile_link", $("#linkIn").value); toast("Linked. You're signed in on this PC now."); } catch (e) { return toast(errText(e)); }
+    renderAccountsCard(); renderMe();
+  };
   if ($("#addAcct")) $("#addAcct").onclick = async () => {
     try { await call("profile_add", $("#newAcct").value, "", null); toast("Account added. They pick it when Frankenstein opens."); } catch (e) { toast(errText(e)); }
     renderAccountsCard();
@@ -725,10 +770,17 @@ function addsHtml(a) {
   const line = (x) => `<li><strong>${esc(x.slot)}</strong>: ${esc(x.mod)} <span class="muted small">from ${esc(x.source)}${x.extra ? `, plus ${x.extra} mod${x.extra > 1 ? "s" : ""} it needs` : ""}${x.creative ? " · creative only" : ""}</span></li>`;
   return `<div class="adds">
     ${ok.length || a.builtin.length ? `<p class="muted">Brought over${a.source ? " from " + esc(a.source) : ""}:</p><ul>${ok.map(line).join("")}${a.builtin.map((b) => `<li><strong>Frankenstein</strong>: ${esc(b)}</li>`).join("")}</ul>` : `<p class="muted">Nothing added automatically yet. Press Auto-fill on the merge.</p>`}
-    ${(a.arsenal || []).length ? `<p class="muted">${esc(a.source)}'s guns, in this game:</p><table class="small" style="width:100%">${a.arsenal.map((g) => `<tr><td><strong>${esc(g.gun)}</strong></td><td>${esc(g.as)}</td><td><span class="tag">${g.match === "close" ? "close match" : "rough stand-in"}</span></td></tr>`).join("")}</table><p class="muted small">They're in your starter kit (renamed to ${esc(a.source)}'s names) and in the item menu. Not checked in game yet.</p>` : ""}
-    ${miss.length ? `<p class="muted">Couldn't bring over:</p><ul>${miss.map((x) => `<li><strong>${esc(x.slot)}</strong>: ${esc(x.why)}. <span class="muted small">Try Add mods and search “${esc(x.search || "")}”.</span></li>`).join("")}</ul>` : ""}
+    ${(a.arsenal || []).length ? `<p class="muted">${esc(a.source)}'s guns, in this game:</p><table class="small" style="width:100%">${a.arsenal.map((g) => `<tr><td><strong>${esc(g.gun)}</strong></td><td>${esc(g.as)}</td><td><span class="tag">${g.match === "close" ? "close match" : "rough stand-in"}</span></td></tr>`).join("")}</table><p class="muted small">They're in your starter kit (renamed to ${esc(a.source)}'s names), in the item menu, and for sale at Handy Hank's hardware store. Not checked in game yet.</p>` : ""}
+    ${miss.length ? `<p class="muted">Couldn't bring over by itself:</p><ul>${miss.map((x) => `<li><strong>${esc(x.slot)}</strong>: ${esc(x.why)}.
+      ${(x.picks || []).length ? `<div class="small">Hand-picked on Nexus Mods: ${x.picks.map((k) => `<a href="#" data-ext="${esc(k.url)}">${esc(k.name)}</a>`).join(" · ")}. On the mod's page press <strong>Mod Manager Download</strong> (free account) and Frankenstein adds it to this merge.</div>` : `<span class="muted small">Try Add mods and search “${esc(x.search || "")}”.</span>`}</li>`).join("")}</ul>` : ""}
     <p class="muted small">Only mods made for the main game are installed. Nothing is copied out of the other game.</p></div>`;
 }
+
+// links to web pages anywhere in the app open in the normal browser
+document.addEventListener("click", (e) => {
+  const a = e.target.closest && e.target.closest("[data-ext]");
+  if (a) { e.preventDefault(); call("open_url", a.dataset.ext); }
+});
 
 // ---------- my merges ----------
 async function loadMerges() {
@@ -741,7 +793,7 @@ async function loadMerges() {
       <div class="merge-info">
         <div class="merge-name">${esc(m.name)}</div>
         <div class="muted">${m.tagline ? `<em>${esc(m.tagline)}</em> · ` : ""}${esc(m.game)} × ${esc(m.theme)}</div>
-        <div class="row small"><span class="tag">${esc(m.mode_label)}</span><span class="tag">${m.mods.length} installed</span><span class="tag" title="How deep this merge's story goes in this game">${esc(m.story || "")}</span>${m.has_saves ? `<span class="tag">Own saves</span>` : ""}${m.offline_lock ? `<span class="tag" title="Starts in offline mode so mods can't reach online play">Online locked</span>` : ""}<button class="tag tag-btn" data-act="pad" title="${m.pad === "native" ? "This game supports controllers itself" : "Frankenstein's key mapper runs while you play. Click to change the buttons."}">🎮 ${m.pad === "native" ? "Controller" : "Controller (mapped)"}</button>${m.playing ? `<span class="tag live">Playing now</span>` : ""}${m.status === "restored" ? `<span class="tag">Mods removed</span>` : ""}</div>
+        <div class="row small"><span class="tag">${esc(m.mode_label)}</span><span class="tag">${m.mods.length} installed</span><span class="tag" title="How deep this merge's story goes in this game">${esc(m.story || "")}</span>${m.has_saves ? `<span class="tag">Own saves</span>` : ""}${m.offline_lock ? `<span class="tag" title="Starts in offline mode so mods can't reach online play">Online locked</span>` : ""}<button class="tag tag-btn" data-act="pad" title="${m.pad === "native" ? "This game supports controllers itself" : "Frankenstein's key mapper runs while you play. Click to change the buttons."}">🎮 ${m.pad === "native" ? "Controller" : "Controller (mapped)"}</button>${m.playing ? `<span class="tag live">Playing now</span>` : ""}${m.status === "restored" ? `<span class="tag">Mods removed</span>` : ""}${m.originals ? `<span class="tag ${/Verify|put your originals back/.test(m.originals) ? "bad" : ""}" title="${esc(m.originals)}">${/Verify|put your originals back/.test(m.originals) ? "⚠ Originals" : "✓ Originals untouched"}</span>` : ""}${m.save_fix ? `<span class="tag" title="A damaged save was swapped for its last good copy after you played">Save repaired</span>` : ""}</div>
         <div class="muted small" title="${esc(m.folder)}">${esc(m.folder)}</div>
       </div>
       <div class="merge-actions">
@@ -1046,7 +1098,14 @@ async function loadParty() {
         <div class="field" style="margin-top:12px"><label>Party code</label><div class="row" style="flex-wrap:nowrap"><input class="input" readonly value="${esc(q.code)}" style="font-family:monospace;font-size:18px;letter-spacing:2px"><button class="btn" id="partyCopy">Copy</button></div></div>
         <p class="muted small">Your party IP: <strong>${esc(q.my_ip || "getting one…")}</strong>. In games that ask for an IP, use the host's party IP.</p>
         ${q.host ? `<h2 style="margin-top:18px">Who's here</h2>${members || `<p class="muted">Nobody yet. Send your friends the code.</p>`}` : ""}
-        <div class="row" style="justify-content:flex-end;margin-top:14px"><button class="btn ghost danger" id="partyLeave">${q.host ? "End party" : "Leave"}</button></div></div>`;
+        <h2 style="margin-top:18px">Same mods for everyone</h2>
+        ${q.host ? `<p class="muted">Pick the merge you'll play. Everyone in the party can then download it from you in one click.</p>
+          <div class="row" style="flex-wrap:nowrap"><select class="input" id="partyMerge">${p.merges.map((m) => `<option value="${esc(m.id)}">${esc(m.name)}</option>`).join("")}</select><button class="btn primary" id="partyShare">Share with the party</button></div>
+          ${p.sharing ? `<p class="small"><span class="tag live">Sharing</span> ${esc(p.sharing)}</p>` : ""}`
+        : `<p class="muted">Get the merge the host is playing, with exactly the same mods.</p><button class="btn primary" id="partyFetch">Get the host's merge</button>`}
+        <div class="note small" style="margin-top:12px"><strong>Schedule I:</strong> once you both have the same merge, the host starts it, presses Esc, then Invite friends (Steam). The friend accepts the Steam invite. The party network is the backup if Steam can't connect.</div>
+        <div class="row" style="justify-content:space-between;margin-top:14px"><button class="btn ghost" id="partyFix" title="Fixes the firewall and restarts the network service. Windows asks once.">Friends can't connect? Fix it</button>
+        <button class="btn ghost danger" id="partyLeave">${q.host ? "End party" : "Leave"}</button></div></div>`;
     partyTimer = setTimeout(() => state.view === "party" && loadParty(), 5000);
   }
   el.innerHTML = `<div class="page"><h1>Play together</h1>
@@ -1058,6 +1117,12 @@ async function loadParty() {
   on("partyHost", () => call("party_host"));
   on("partyJoin", () => call("party_join", $("#partyCode").value));
   on("partyLeave", () => call("party_leave"));
+  on("partyFix", async () => { await call("party_fix"); toast("Fixed. Ask your friend to try again."); });
+  on("partyShare", async () => { await followJob(await call("party_share", $("#partyMerge").value), "Sharing with the party"); });
+  on("partyFetch", async () => {
+    const r = await followJob(await call("party_fetch"), "Getting the host's merge");
+    if (r && r.result) importMerge(r.result.path);
+  });
   on("partyCopy", async () => { await call("copy_text", p.party.code); toast("Code copied. Send it to your friends."); });
   el.querySelectorAll("[data-letin]").forEach((b) => (b.onclick = async () => { await call("party_let_in", b.dataset.letin, ""); loadParty(); }));
   el.querySelectorAll("[data-kick]").forEach((b) => (b.onclick = async () => { await call("party_kick", b.dataset.kick); loadParty(); }));
@@ -1265,7 +1330,8 @@ async function loadOwned(refresh = false, quiet = false) {
       state.covers[g.key] = c;
       document.querySelectorAll(`[data-cover="${CSS.escape(g.key)}"]`).forEach((el) => {
         el.querySelectorAll(".face, .spine").forEach((f) => { f.style.backgroundImage = `url('${c}')`; f.classList.remove("placeholder"); });
-        el.querySelector(".face").textContent = "";
+        if (el.querySelector(".face")) el.querySelector(".face").textContent = "";
+        if (el.classList.contains("pair-cover")) { el.style.backgroundImage = `url('${c}')`; el.classList.remove("placeholder"); el.textContent = ""; }
       });
     }).catch(() => {});
   }

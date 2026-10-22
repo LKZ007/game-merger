@@ -182,3 +182,153 @@ class Settings(dict):
             shared.pop(k)
         paths.save_settings(shared)
         save_personal(self.pid, {k: v for k, v in self.items() if k in PERSONAL})
+
+
+# ---------- staying signed in, and the same account on every PC ----------
+# "remember" is per PC: Frankenstein opens straight into that account, no picker and no PIN, until you
+# press Switch. An account is linked across PCs by its "uid" (the id it was made with on the first PC):
+# through the cloud backup folder automatically, or with a link code you paste on the other PC.
+
+LINK_PREFIX = "FRK1-"
+# kept per PC even when an account is linked: these describe this PC, not the person
+DEVICE_KEYS = {"steam_on", "steam_error", "gog_on", "fullscreen", "cloud_folder"}
+
+
+def uid(p):
+    return p.get("link") or p["id"]
+
+
+def remembered():
+    data = load()
+    pid = data.get("remember")
+    return pid if any(p["id"] == pid for p in data["profiles"]) else None
+
+
+def set_remember(pid):
+    data = load()
+    if pid:
+        data["remember"] = pid
+    else:
+        data.pop("remember", None)
+    save(data)
+
+
+def export(pid):
+    p = find(pid)
+    if not p:
+        raise ProfileError("That account doesn't exist.")
+    rec = {k: p[k] for k in ("name", "admin", "color", "perms", "pin", "salt") if k in p}
+    rec["uid"] = uid(p)
+    rec["time"] = time.time()
+    rec["personal"] = {k: v for k, v in load_personal(pid).items() if k not in DEVICE_KEYS}
+    return rec
+
+
+def link_code(pid):
+    import base64
+    import zlib
+    raw = zlib.compress(json.dumps(export(pid), separators=(",", ":")).encode("utf-8"), 9)
+    return LINK_PREFIX + base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
+
+
+def read_code(code):
+    import base64
+    import zlib
+    code = "".join((code or "").split())
+    if not code.startswith(LINK_PREFIX):
+        raise ProfileError("That isn't a Frankenstein link code. It starts with " + LINK_PREFIX)
+    body = code[len(LINK_PREFIX):]
+    try:
+        rec = json.loads(zlib.decompress(base64.urlsafe_b64decode(body + "=" * (-len(body) % 4))).decode("utf-8"))
+    except Exception:
+        raise ProfileError("That link code is cut off or mistyped. Copy the whole thing again.")
+    if not rec.get("uid") or not rec.get("name"):
+        raise ProfileError("That link code doesn't have an account in it.")
+    return rec
+
+
+def _merge_personal(pid, theirs):
+    mine = load_personal(pid)
+    for k, v in theirs.items():
+        if k in DEVICE_KEYS:
+            continue
+        if k == "achievements" and isinstance(v, dict) and isinstance(mine.get(k), dict):
+            for a, t in v.items():
+                mine[k][a] = min(t, mine[k].get(a, t)) if isinstance(t, (int, float)) else mine[k].get(a, t)
+        elif k == "counters" and isinstance(v, dict) and isinstance(mine.get(k), dict):
+            for c, n in v.items():
+                if isinstance(n, (int, float)):
+                    mine[k][c] = max(n, mine[k].get(c, 0))
+        elif k not in mine:
+            mine[k] = v
+    save_personal(pid, mine)
+
+
+def link(rec, newer_only=False):
+    """Bring an account from another PC onto this one. The same account (same uid) is updated; the other
+    PC's admin becomes this PC's admin if this one isn't linked yet, so you're one person everywhere.
+    Returns the local account id."""
+    data = load()
+    p = next((x for x in data["profiles"] if uid(x) == rec["uid"]), None)
+    if p is None and rec.get("admin"):
+        p = next((x for x in data["profiles"] if x.get("admin") and not x.get("link")), None)
+        if p is not None and p["id"] != rec["uid"]:
+            p["link"] = rec["uid"]
+    if p is not None and newer_only and p.get("synced", 0) >= rec.get("time", 0):
+        return p["id"]
+    if p is None:
+        if any(x["name"].lower() == rec["name"].lower() for x in data["profiles"]):
+            rec = dict(rec, name=(rec["name"] + " (2)")[:24])
+        p = {"id": "p" + secrets.token_hex(4), "link": rec["uid"], "admin": False}
+        data["profiles"].append(p)
+    p["name"] = rec["name"][:24]
+    p["color"] = rec.get("color", p.get("color", "#8b5cf6"))
+    if not p.get("admin"):
+        p["perms"] = dict(DEFAULT_PERMS, **(rec.get("perms") or {}))
+    if rec.get("pin") and rec.get("salt"):
+        p["pin"], p["salt"] = rec["pin"], rec["salt"]
+    elif "pin" not in rec:
+        p.pop("pin", None)
+        p.pop("salt", None)
+    p["synced"] = rec.get("time", time.time())
+    save(data)
+    _merge_personal(p["id"], rec.get("personal") or {})
+    return p["id"]
+
+
+def _sync_file(cloud_root):
+    return os.path.join(cloud_root, "Frankenstein accounts", "accounts.json")
+
+
+def publish(cloud_root):
+    """Write every account on this PC to the cloud folder, so your other PCs pick them up."""
+    if not cloud_root or not os.path.isdir(cloud_root):
+        return
+    f = _sync_file(cloud_root)
+    try:
+        with open(f, encoding="utf-8") as h:
+            have = json.load(h)
+    except (OSError, ValueError):
+        have = {}
+    for p in load()["profiles"]:
+        have[uid(p)] = export(p["id"])
+    os.makedirs(os.path.dirname(f), exist_ok=True)
+    with open(f, "w", encoding="utf-8") as h:
+        json.dump(have, h)
+
+
+def pull(cloud_roots):
+    """Accounts your other PCs wrote to a cloud folder. Returns how many were added or updated."""
+    n = 0
+    for root in cloud_roots:
+        try:
+            with open(_sync_file(root), encoding="utf-8") as h:
+                recs = json.load(h)
+        except (OSError, ValueError, TypeError):
+            continue
+        for rec in recs.values():
+            if isinstance(rec, dict) and rec.get("uid") and rec.get("name"):
+                before = {x["id"]: x.get("synced") for x in load()["profiles"]}
+                pid = link(rec, newer_only=True)
+                n += before.get(pid, -1) != (find(pid) or {}).get("synced")
+    return n

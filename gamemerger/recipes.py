@@ -35,6 +35,8 @@ class Slot:
     github: str = ""  # or a tool published on its own GitHub page
     asset: str = ""
     flat_root: bool = False
+    picks: list = field(default_factory=list)  # hand-picked pages ({name, url}) for mods only a person can download
+    builtin: str = ""  # what Frankenstein's own mod does for this slot when no download is found
 
 
 @dataclass

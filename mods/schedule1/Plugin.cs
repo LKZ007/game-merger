@@ -17,6 +17,8 @@ namespace Frankenstein
         public static bool MenuAllowed = true;
         public static System.Collections.Generic.List<string> Kit = new System.Collections.Generic.List<string>();
         public static string KitName = "";
+        public static System.Collections.Generic.List<string> Shop = new System.Collections.Generic.List<string>();
+        public static string ShopName = "hardware";
 
         public override void OnInitializeMelon()
         {
@@ -35,6 +37,8 @@ namespace Frankenstein
                 MenuAllowed = J.S(s, "item_menu", "true") != "False" && J.S(s, "item_menu", "true") != "false";
                 foreach (var k in J.L(s, "kit")) Kit.Add(k.ToString());
                 KitName = J.S(s, "kit_name", "Starter kit");
+                foreach (var k in J.L(s, "shop")) Shop.Add(k.ToString());
+                ShopName = J.S(s, "shop_name", "hardware");
             }
             catch (Exception e)
             {
@@ -49,6 +53,8 @@ namespace Frankenstein
             _next = Time.unscaledTime + 1f;
             try { Story.Tick(); }
             catch (Exception e) { Melon<Plugin>.Logger.Warning("Story: " + e.Message); }
+            try { GunShop.Tick(); }
+            catch (Exception e) { Melon<Plugin>.Logger.Warning("Gun shop: " + e.Message); }
         }
 
         public override void OnGUI()

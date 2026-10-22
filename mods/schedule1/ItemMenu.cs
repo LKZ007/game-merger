@@ -131,8 +131,10 @@ namespace Frankenstein
             Cursor.lockState = CursorLockMode.None;
             Cursor.visible = true;
             if (Input.GetKeyDown(KeyCode.Escape) || (pressed & B) != 0) { Close(); return; }
+            Type();
 
             int n = _shown.Count;
+            if ((pressed & Back) != 0 && (now & Y) == 0) _search = ""; // Back alone clears the search
             if ((pressed & Left) != 0 || Input.GetKeyDown(KeyCode.LeftArrow)) Move(-1);
             if ((pressed & Right) != 0 || Input.GetKeyDown(KeyCode.RightArrow)) Move(1);
             if ((pressed & Up) != 0 || Input.GetKeyDown(KeyCode.UpArrow)) Move(-_cols);
@@ -147,6 +149,22 @@ namespace Frankenstein
             }
         }
 
+        // The search box reads the keyboard itself instead of using a Unity text field: the game's own input
+        // fights over text fields (and they don't take focus reliably on every build), so typing anywhere
+        // while the menu is open goes into the search. The game is paused meanwhile, so keys don't move you.
+        static void Type()
+        {
+            string typed = Input.inputString;
+            if (string.IsNullOrEmpty(typed)) return;
+            foreach (char c in typed)
+            {
+                if (c == '\b') { if (_search.Length > 0) _search = _search.Substring(0, _search.Length - 1); }
+                else if (c == '\n' || c == '\r') { }
+                else if (!char.IsControl(c) && _search.Length < 40) _search += c;
+            }
+            if (Input.GetKey(KeyCode.LeftControl) && Input.GetKeyDown(KeyCode.Backspace)) _search = "";
+        }
+
         static void Move(int by)
         {
             if (_shown.Count == 0) return;
@@ -158,12 +176,16 @@ namespace Frankenstein
             if (rowTop + TileH > _scroll.y + viewH) _scroll.y = rowTop + TileH - viewH;
         }
 
+        static float _oldScale = 1f;
+
         static void Open()
         {
             Refresh();
             _open = true;
             _oldLock = Cursor.lockState;
             _oldVisible = Cursor.visible;
+            _oldScale = Time.timeScale;
+            Time.timeScale = 0f; // paused while you browse and type
         }
 
         static void Close()
@@ -171,6 +193,7 @@ namespace Frankenstein
             _open = false;
             Cursor.lockState = _oldLock;
             Cursor.visible = _oldVisible;
+            Time.timeScale = _oldScale > 0f ? _oldScale : 1f;
         }
 
         static void Toast(string text)
@@ -218,8 +241,11 @@ namespace Frankenstein
             if (GUI.Button(new Rect(x + W - 40, y + 8, 28, 26), "X")) { Close(); return; }
 
             GUI.Label(new Rect(x + 16, y + 42, 60, 24), "Search");
-            _search = GUI.TextField(new Rect(x + 76, y + 40, 320, 26), _search ?? "");
-            GUI.Label(new Rect(x + 410, y + 42, W - 426, 24), "Click: grab 1   ·   Right-click: full stack   ·   Pad: A / X (10) / Y (stack), LB RB category");
+            bool blink = ((int)(Time.unscaledTime * 2)) % 2 == 0;
+            GUI.Box(new Rect(x + 76, y + 40, 280, 26), "");
+            GUI.Label(new Rect(x + 82, y + 42, 270, 24), (_search.Length > 0 ? _search : (blink ? "" : "just start typing…")) + (blink ? "|" : ""));
+            if (_search.Length > 0 && GUI.Button(new Rect(x + 360, y + 40, 40, 26), "Clear")) _search = "";
+            GUI.Label(new Rect(x + 410, y + 42, W - 426, 24), "Type to search  ·  Click: grab 1  ·  Right-click: stack  ·  Pad: A / X (10) / Y (stack), LB RB category");
 
             // categories, as a row of buttons that wraps
             float cx = x + 16, cy = y + 76;

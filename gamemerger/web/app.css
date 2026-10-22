@@ -357,3 +357,25 @@ body.pad .tile:focus .face { border: 2px solid var(--accent); box-shadow: 0 0 30
 .rd-actions { gap: 10px; align-items: center; }
 .creative-tag { color: #f0abfc; }
 .btn.creative { border-color: #c084fc; color: #f0abfc; }
+
+/* the two games in the merge glow purple; every game can be made the host */
+.tile.picked .face { border: 2px solid #b388ff; box-shadow: 0 0 0 3px rgba(167,118,255,.45), 0 0 34px 8px rgba(139,92,246,.75), 16px 20px 30px rgba(0,0,0,.7); }
+.tile.picked .case { animation: halo 2.4s ease-in-out infinite; border-radius: 10px; }
+@keyframes halo { 0%, 100% { filter: drop-shadow(0 0 6px rgba(139,92,246,.6)); } 50% { filter: drop-shadow(0 0 18px rgba(167,118,255,.95)); } }
+.tile { position: relative; }
+.pick-badge { position: absolute; top: -10px; left: 6px; z-index: 3; background: #7c3aed; color: #fff; font-size: 11px; font-weight: 700;
+  padding: 2px 8px; border-radius: 999px; box-shadow: 0 0 12px rgba(139,92,246,.8); letter-spacing: .03em; }
+.pick-badge.host { background: #a855f7; }
+.make-host { align-self: flex-start; font-size: 11px; padding: 3px 9px; border-radius: 999px; border: 1px solid #5b3fa8; color: #d8c7ff;
+  background: rgba(124,58,237,.18); cursor: pointer; }
+.make-host:hover { background: rgba(124,58,237,.45); color: #fff; }
+.make-host.off { opacity: .45; cursor: default; }
+.merge-pair { position: absolute; top: 22px; right: 28px; z-index: 2; background: rgba(12,8,22,.72); border: 1px solid #5b3fa8; border-radius: 14px;
+  padding: 12px 14px; backdrop-filter: blur(6px); box-shadow: 0 0 24px rgba(139,92,246,.35); }
+.pair-row { display: flex; align-items: center; gap: 12px; margin-top: 6px; }
+.pair-card { display: flex; flex-direction: column; align-items: center; gap: 6px; width: 104px; text-align: center; }
+.pair-cover { width: 96px; height: 128px; border-radius: 8px; background: #241a3d center/cover no-repeat; border: 2px solid #b388ff;
+  box-shadow: 0 0 18px rgba(139,92,246,.7); display: flex; align-items: center; justify-content: center; font-size: 12px; padding: 6px; color: #d8c7ff; }
+.pair-label { display: flex; flex-direction: column; font-size: 12px; line-height: 1.2; }
+.pair-fuse { font-size: 28px; font-weight: 800; color: #c4a5ff; text-shadow: 0 0 12px rgba(167,118,255,.9); }
+@media (max-width: 1100px) { .merge-pair { top: 12px; right: 12px; transform: scale(.8); transform-origin: top right; } }

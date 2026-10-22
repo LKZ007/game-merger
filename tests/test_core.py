@@ -2,6 +2,7 @@ import json
 import os
 import tempfile
 import unittest
+import types
 import zipfile
 
 TMP = tempfile.mkdtemp()
@@ -470,6 +471,32 @@ class AccountsTests(unittest.TestCase):
         with self.assertRaises(profiles.ProfileError):
             profiles.add("Bob", "12")
 
+    def test_same_admin_on_two_pcs(self):
+        from gamemerger import paths, profiles
+        cloud = tempfile.mkdtemp()
+        laptop = profiles.ensure_admin(paths.load_settings(), "Zokol")["profiles"][0]
+        profiles.update(laptop["id"], pin="1234")
+        profiles.save_personal(laptop["id"], {"achievements": {"first_merge": 5}, "steam_on": True})
+        profiles.publish(cloud)
+        code = profiles.link_code(laptop["id"])
+        os.environ["GAMEMERGER_HOME"] = tempfile.mkdtemp()  # the desktop
+        desk = profiles.ensure_admin(paths.load_settings(), "levy")["profiles"][0]
+        profiles.save_personal(desk["id"], {"achievements": {"first_merge": 9, "party": 3}})
+        profiles.pull([cloud])
+        data = profiles.load()
+        self.assertEqual(len(data["profiles"]), 1)  # linked, not a second admin
+        me = data["profiles"][0]
+        self.assertEqual((me["id"], me["name"], profiles.uid(me)), (desk["id"], "Zokol", laptop["id"]))
+        self.assertTrue(profiles.check_pin(me, "1234"))
+        mine = profiles.load_personal(me["id"])
+        self.assertEqual(mine["achievements"], {"first_merge": 5, "party": 3})
+        self.assertNotIn("steam_on", mine)  # per PC
+        self.assertEqual(profiles.link(profiles.read_code(code)), me["id"])  # the code finds the same account
+        profiles.set_remember(me["id"])
+        self.assertEqual(profiles.remembered(), me["id"])
+        with self.assertRaises(profiles.ProfileError):
+            profiles.read_code("FRK1-abc")
+
 
 
 class AnyGameTests(unittest.TestCase):
@@ -668,3 +695,55 @@ class ModSourceAndControllerTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SafetyTests(unittest.TestCase):
+    def setUp(self):
+        os.environ["GAMEMERGER_HOME"] = tempfile.mkdtemp()
+
+    def test_damaged_save_goes_back_to_last_good_copy(self):
+        from gamemerger import saves
+        slot = os.path.join(saves.slot_root("m1"), "0", "ManualSave-1")
+        os.makedirs(slot)
+        with open(os.path.join(slot, "sav.dat"), "wb") as f:
+            f.write(b"CSAV" + b"x" * 4000)
+        saves.snapshot("m1")
+        with open(os.path.join(slot, "sav.dat"), "wb") as f:
+            f.write(b"\0" * 10)  # cut off mid-write
+        self.assertEqual(len(saves.damaged("m1")), 1)
+        done = saves.repair("m1")
+        self.assertEqual(done["fixed"], ["ManualSave-1"])
+        with open(os.path.join(slot, "sav.dat"), "rb") as f:
+            self.assertEqual(f.read(4), b"CSAV")
+        self.assertEqual(saves.damaged("m1"), [])
+
+    def test_original_saves_put_back(self):
+        from gamemerger import saves
+        orig = tempfile.mkdtemp()
+        with open(os.path.join(orig, "a.sav"), "w") as f:
+            f.write("mine")
+        r = types.SimpleNamespace(id="g", saves=[orig])
+        saves.swap_in("m2", r)
+        with open(os.path.join(orig, "merge.sav"), "w") as f:
+            f.write("merge")
+        os.rename(orig + saves.ORIGINAL_SUFFIX + "", orig + ".tmp")  # simulate cloud writing into the originals
+        with open(os.path.join(orig + ".tmp", "a.sav"), "w") as f:
+            f.write("clobbered!")
+        os.rename(orig + ".tmp", orig + saves.ORIGINAL_SUFFIX)
+        saves.swap_out()
+        self.assertEqual(saves.check_originals("m2"), ["a.sav"])
+        with open(os.path.join(orig, "a.sav")) as f:
+            self.assertEqual(f.read(), "mine")
+
+    def test_space_saver_never_shares_writable_files(self):
+        from gamemerger import installer
+        base, target = tempfile.mkdtemp(), tempfile.mkdtemp()
+        os.makedirs(os.path.join(base, "r6", "cache"))
+        with open(os.path.join(base, "r6", "cache", "final.redscripts"), "w") as f:
+            f.write("vanilla")
+        installer.clone_tree(base, os.path.join(target, "copy"), hardlink=True)
+        self.assertEqual(installer.harden(os.path.join(target, "copy")), 1)
+        with open(os.path.join(target, "copy", "r6", "cache", "final.redscripts"), "w") as f:
+            f.write("modded")
+        with open(os.path.join(base, "r6", "cache", "final.redscripts")) as f:
+            self.assertEqual(f.read(), "vanilla")
