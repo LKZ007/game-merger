@@ -215,4 +215,59 @@ namespace Frankenstein
             catch (Exception) { return false; }
         }
     }
+
+    /// <summary>Drawing that works on both builds. IL2CPP strips Unity methods the game itself never calls
+    /// (GUI.DrawTexture and friends can be missing), so pictures and solid colours are drawn as a GUI box whose
+    /// style has the picture as its background: that path is always there.</summary>
+    internal static class Paint
+    {
+        static GUIStyle _plain;
+        static bool _texOk = true;
+
+        static GUIStyle Plain(Texture t)
+        {
+            if (_plain == null) _plain = new GUIStyle();
+            _plain.normal.background = t as Texture2D;
+            return _plain;
+        }
+
+        public static void Fill(Rect r, Color c)
+        {
+            var old = GUI.color;
+            GUI.color = c;
+            GUI.Box(r, "", Plain(Texture2D.whiteTexture));
+            GUI.color = old;
+        }
+
+        /// <summary>A sprite (an item's icon). Single-picture sprites go through the always-there path; sprites
+        /// cut from a sheet need DrawTextureWithTexCoords, tried once and dropped if this build lacks it.</summary>
+        public static bool Sprite(Rect at, Sprite s)
+        {
+            if (s == null) return false;
+            var t = s.texture;
+            if (t == null) return false;
+            var r = s.textureRect;
+            bool whole = Math.Abs(r.width - t.width) < 1 && Math.Abs(r.height - t.height) < 1;
+            if (!whole && _texOk)
+            {
+                try
+                {
+                    GUI.DrawTextureWithTexCoords(at, t, new Rect(r.x / t.width, r.y / t.height, r.width / t.width, r.height / t.height));
+                    return true;
+                }
+                catch (Exception e)
+                {
+                    _texOk = false;
+                    MelonLoader.Melon<Plugin>.Logger.Warning("Icons: this build can't cut icons from a sheet (" + e.Message + "); showing whole pictures.");
+                }
+            }
+            GUI.Box(at, "", Plain(t));
+            return true;
+        }
+
+        public static void Picture(Rect at, Texture t)
+        {
+            if (t != null) GUI.Box(at, "", Plain(t));
+        }
+    }
 }

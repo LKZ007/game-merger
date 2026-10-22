@@ -27,6 +27,7 @@ public class FrankensteinMenu : Script
     int confirmUntil;
     string[] rundown = new string[0];
     bool creative, playAs, applied;
+    int nextAmmo;
     int page = -1, pageAt, tries, nextCheck;
     int ownModel;
 
@@ -244,6 +245,12 @@ public class FrankensteinMenu : Script
     void OnTick(object sender, EventArgs e)
     {
         if (!lit && world.Length > 0 && Game.GameTime > 15000) { try { Light(); } catch (Exception) { } }
+        if (creative && Game.GameTime > nextAmmo)
+        {
+            // Creative is unlimited, like Minecraft's: the clip never empties and never needs reloading
+            nextAmmo = Game.GameTime + 1000;
+            try { Function.Call(Hash.SET_PED_INFINITE_AMMO_CLIP, Game.Player.Character, true); } catch (Exception) { }
+        }
         if (powers.Count > 0 || carryId.Length > 0) { try { Powers(); } catch (Exception) { } }
         if (!hinted && Game.GameTime > 20000)
         {

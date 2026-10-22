@@ -90,13 +90,7 @@ namespace Frankenstein
             }
         }
 
-        static void Fill(Rect r, Color c)
-        {
-            var old = GUI.color;
-            GUI.color = c;
-            GUI.DrawTexture(r, Texture2D.whiteTexture);
-            GUI.color = old;
-        }
+        static void Fill(Rect r, Color c) => Paint.Fill(r, c);
 
         static string Hex(Color c) => "#" + ((int)(c.r * 255)).ToString("X2") + ((int)(c.g * 255)).ToString("X2") + ((int)(c.b * 255)).ToString("X2");
 
@@ -116,7 +110,7 @@ namespace Frankenstein
                 // a slow push in across the merged picture
                 float z = 1.04f + 0.0025f * Math.Min(t, 40f);
                 float w = W * z, h = H * z;
-                GUI.DrawTexture(new Rect((W - w) / 2 - 8f * (float)Math.Sin(t * 0.07f), (H - h) / 2, w, h), _art, ScaleMode.ScaleAndCrop);
+                Paint.Picture(new Rect((W - w) / 2 - 8f * (float)Math.Sin(t * 0.07f), (H - h) / 2, w, h), _art);
             }
             // the Extension's colour washed over the top and a dark fade at the bottom for the words
             Fill(new Rect(0, 0, W, H), new Color(Accent.r, Accent.g, Accent.b, 0.10f));

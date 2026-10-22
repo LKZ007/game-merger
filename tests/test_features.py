@@ -37,7 +37,7 @@ API = {
     "updates and self-check": ["check_update", "check_update_now", "install_update", "self_check_result", "repair_install"],
     "merge upgrades": ["merge_upgrade"],
     "settings": ["get_settings", "save_settings"],
-    "moving covers (trailer loops in the box)": ["cover_clip", "merge_cover_clip"],
+    "trailer clips for preview slides": ["cover_clip", "merge_cover_clip"],
     "Merge plan before Merge it": ["merge_plan", "merge_plan_of"],
     "Carry over my save (character and abilities)": ["carry_read", "carry_save"],
 }
@@ -56,7 +56,9 @@ WEB = {
     "hero item first": ["★ Hero"],
     "preview slideshow with both games fused": ["pvShow", "pv-fused"],
     "no blank covers, 3D moving covers": ["genCover", "cover-float", "cover-sweep", "prefers-reduced-motion"],
-    "moving pictures inside the covers": ["clipVideo", "face-clip", "watchClips", "cover-pan"],
+    "moving pictures in the preview slides": ["clipVideo", "face-clip", "watchClips"],
+    "moving covers: the original cover art, living (3.28)": ["cover-live", "live-fx", "clipStart"],
+    "new logo and startup: covers over each palm, clap, dotted burst (3.28)": ["logo/base.png", "logo/hand_l.png", "splashProgress", "splash-burst", "front: true"],
     "roomy merge card: big Play, the rest under More": ["play-big", "data-more", "more-menu", "closeMore"],
     "what's inside the game itself": ["In the game:"],
     "animated preview slides with named guns, items, characters": ["pv-items", "pv-bg"],
@@ -216,6 +218,17 @@ class FeatureChecklist(unittest.TestCase):
         dll = open(os.path.join(PKG, "mods", "schedule1", "Frankenstein.dll"), "rb").read()
         for word in ("GANGS", "Initiation", "Turf war", "Recruit", "Sell a brick", "Drugs and guns"):
             self.assertIn(word.encode("utf-16-le"), dll, word)
+
+    def test_328_icons_unlimited_creative_covers(self):
+        dll = open(os.path.join(PKG, "mods", "schedule1", "Frankenstein.dll"), "rb").read()
+        for word in ("Storage", "hotbarSlots", "Equippable_RangedWeapon"):
+            self.assertIn(word.encode("utf-16-le"), dll, word)
+        self.assertIn("class Paint", read(ROOT, "mods", "schedule1", "Rt.cs"))  # icons drawn the way IL2CPP keeps
+        self.assertIn("SET_PED_INFINITE_AMMO_CLIP", read(PKG, "mods", "gta5", "FrankensteinMenu.3.cs"))
+        self.assertIn("creativeTick", read(PKG, "mods", "cyberpunk2077", "frankenstein_items", "init.lua"))
+        self.assertIn("def _scene", read(PKG, "covers.py"))  # no blank covers: painted art for games without any
+        for f in ("base.png", "hand_l.png", "hand_r.png", "icon.png"):
+            self.assertTrue(os.path.isfile(os.path.join(PKG, "web", "logo", f)), f)
 
 if __name__ == "__main__":
     unittest.main()

@@ -77,6 +77,21 @@
       this.still = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
       this.talking = false;
       this.head = opts.head ?? true;
+      // the startup logo: the brain faces forward, glows purple and keeps collapsing inward and swelling back out
+      this.front = opts.front ?? false;
+      this.purple = opts.purple ?? this.front;
+      this.level = 0;  // 0..1: how hard it works (the loading bar)
+      if (this.front) {
+        // a network over the dots, like the logo's glowing brain: some dots are nodes, each joined to its nearest two
+        this.nodes = this.pts.map((p, i) => i).filter((i) => i % 7 === 0 && this.pts[i].kind === 0);
+        this.edges = [];
+        for (const i of this.nodes) {
+          const a = this.pts[i];
+          const near = this.nodes.filter((j) => j !== i).map((j) => [j, (this.pts[j].x - a.x) ** 2 + (this.pts[j].y - a.y) ** 2 + (this.pts[j].z - a.z) ** 2])
+            .sort((x, y) => x[1] - y[1]).slice(0, 2);
+          near.forEach(([j]) => i < j && this.edges.push([i, j]));
+        }
+      }
       this.resize();
       this.last = performance.now();
       this.frame = this.frame.bind(this);
@@ -100,8 +115,9 @@
       }
       const dt = Math.min(0.05, (now - this.last) / 1000);
       this.last = now;
-      if (!this.still) this.angle += dt * (this.talking ? this.speed * 2.2 : this.speed);
-      if (!this.still && Math.random() < (this.talking ? 0.35 : 0.08)) {
+      if (this.front) this.angle = this.still ? 0 : 0.28 * Math.sin(now / 1000 * 0.45);
+      else if (!this.still) this.angle += dt * (this.talking ? this.speed * 2.2 : this.speed);
+      if (!this.still && Math.random() < (this.talking ? 0.35 : 0.08 + this.level * 0.3)) {
         const p = this.pts[(Math.random() * this.dense) | 0];
         this.sparks.push({ p, life: 1 });
       }
@@ -135,15 +151,34 @@
         cy = hy - k * 0.33;
       }
       const ca = Math.cos(this.angle), sa = Math.sin(this.angle);
-      const tilt = 0.12, ct = Math.cos(tilt), st = Math.sin(tilt);
+      const tilt = this.front ? 0.05 : 0.12, ct = Math.cos(tilt), st = Math.sin(tilt);
       const pulse = 1 + (this.still ? 0 : 0.025 * Math.sin(t * (this.talking ? 9 : 2.2)));
+      const beat = 1.7 + this.level * 2.2;  // the collapse speeds up as loading gets closer to done
       const proj = [];
       for (const p of this.pts) {
         // turn around the vertical axis, then tip forward a little
         let x = p.x * ca + p.z * sa, z = -p.x * sa + p.z * ca, y = -p.y; // model is y-up, canvas is y-down
         const y2 = y * ct - z * st; z = y * st + z * ct; y = y2;
         const persp = 2.6 / (2.6 - z);
-        proj.push({ x: cx + x * s * persp * pulse, y: cy + y * s * persp * pulse, z, p });
+        // collapse inward and back out: the outer dots lag the inner ones, so it ripples like it's breathing
+        let k = pulse;
+        if (this.front && !this.still) k *= 0.7 + 0.3 * (0.5 + 0.5 * Math.sin(t * beat - Math.hypot(p.x, p.y, p.z) * 2.4));
+        proj.push({ x: cx + x * s * persp * k, y: cy + y * s * persp * k, z, p });
+      }
+      if (this.front && this.edges) {
+        const at = proj.slice();  // still in the points' own order
+        ctx.lineWidth = Math.max(0.6, s / 160);
+        for (const [i, j] of this.edges) {
+          const a = at[i], b = at[j], depth = ((a.z + b.z) / 2 + 1.1) / 2.2;
+          ctx.strokeStyle = `rgba(196,150,255,${0.08 + depth * 0.28})`;
+          ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+        }
+        for (const i of this.nodes) {  // the nodes glow brighter than the rest
+          const a = at[i];
+          if (a.z < -0.2) continue;
+          ctx.fillStyle = "rgba(240,220,255,0.85)";
+          ctx.beginPath(); ctx.arc(a.x, a.y, Math.max(1.2, s / 75), 0, TAU); ctx.fill();
+        }
       }
       proj.sort((a, b) => a.z - b.z);
       const dot = Math.max(this.head ? 0.5 : 0.7, s / 70);
@@ -154,7 +189,7 @@
         // colour pulse: a slow wave rolls across the brain, each dot breathing between grey and white
         const wave = this.still ? 0.6 : 0.5 + 0.5 * Math.sin(t * (this.talking ? 6 : 2.4) - q.p.z * 3.2 - q.p.y * 2.0);
         const v = (120 + wave * 135) | 0;
-        ctx.fillStyle = `rgba(${v},${v},${v},${a})`;
+        ctx.fillStyle = this.purple ? `rgba(${(140 + wave * 105) | 0},${(70 + wave * 150) | 0},255,${a})` : `rgba(${v},${v},${v},${a})`;
         ctx.beginPath();
         ctx.arc(q.x, q.y, r, 0, TAU);
         ctx.fill();
@@ -166,8 +201,8 @@
         if (!q) continue;
         const g = ctx.createRadialGradient(q.x, q.y, 0, q.x, q.y, dot * 9 * sp.life);
         g.addColorStop(0, `rgba(255,255,255,${0.9 * sp.life})`);
-        g.addColorStop(0.3, `rgba(225,225,230,${0.5 * sp.life})`);
-        g.addColorStop(1, "rgba(200,200,210,0)");
+        g.addColorStop(0.3, this.purple ? `rgba(200,150,255,${0.6 * sp.life})` : `rgba(225,225,230,${0.5 * sp.life})`);
+        g.addColorStop(1, this.purple ? "rgba(168,85,247,0)" : "rgba(200,200,210,0)");
         ctx.fillStyle = g;
         ctx.beginPath();
         ctx.arc(q.x, q.y, dot * 9 * sp.life, 0, TAU);

@@ -339,7 +339,7 @@ body.pad .tile:focus .face { border: 2px solid var(--accent); box-shadow: 0 0 30
 .q-reward { color: var(--accent); }
 
 .logo { display: flex; align-items: center; }
-.logo-brain { width: 30px; height: 30px; flex-shrink: 0; margin-right: 8px; }
+.logo-brain { width: 34px; height: 34px; flex-shrink: 0; margin-right: 8px; border-radius: 50%; }
 
 /* mod browser: every site in one list */
 .mod-results { max-height: 420px; overflow: auto; margin-top: 10px; }
@@ -469,7 +469,27 @@ body.pad .tile:focus .face { border: 2px solid var(--accent); box-shadow: 0 0 30
 .case .face video.face-clip.half.l { box-shadow: 2px 0 0 var(--accent); z-index: 1; }
 .case .face.pan { animation: cover-pan 14s ease-in-out infinite alternate; background-size: 125% auto; }
 @keyframes cover-pan { 0% { background-position: 0% 30%; } 100% { background-position: 100% 70%; } }
-@media (prefers-reduced-motion: reduce) { .case .face.pan { animation: none; background-size: cover; } .case .face video.face-clip { display: none; } }
+/* living covers: the game's own cover art drifting and zooming, with sparks rising in front of it */
+.case .face.alive { animation: cover-live 18s ease-in-out infinite alternate; }
+.tile:nth-child(3n) .case .face.alive { animation-duration: 22s; animation-direction: alternate-reverse; }
+@keyframes cover-live {
+  0% { background-size: 106% auto; background-position: 46% 42%; }
+  50% { background-size: 116% auto; background-position: 54% 52%; }
+  100% { background-size: 110% auto; background-position: 50% 60%; } }
+.case .face .live-fx { position: absolute; inset: 0; pointer-events: none; z-index: 2; overflow: hidden; opacity: 0; transition: opacity .8s; }
+.case .face.alive .live-fx { opacity: 1; }
+.case .face .live-fx i { position: absolute; bottom: -6px; width: 3px; height: 3px; border-radius: 50%; background: rgba(255,240,255,.9);
+  box-shadow: 0 0 6px 2px rgba(196,165,255,.8); animation: live-spark 6s linear infinite; }
+.case .face .live-fx i:nth-child(1) { left: 12%; animation-delay: 0s; }
+.case .face .live-fx i:nth-child(2) { left: 28%; animation-delay: -1.7s; animation-duration: 7s; }
+.case .face .live-fx i:nth-child(3) { left: 44%; animation-delay: -3.1s; }
+.case .face .live-fx i:nth-child(4) { left: 58%; animation-delay: -0.8s; animation-duration: 8s; }
+.case .face .live-fx i:nth-child(5) { left: 71%; animation-delay: -4.4s; }
+.case .face .live-fx i:nth-child(6) { left: 84%; animation-delay: -2.5s; animation-duration: 6.5s; }
+.case .face .live-fx i:nth-child(7) { left: 93%; animation-delay: -5.2s; animation-duration: 9s; }
+@keyframes live-spark { 0% { transform: translate(0, 0) scale(.6); opacity: 0; } 15% { opacity: 1; }
+  100% { transform: translate(14px, -320px) scale(1.1); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .case .face.pan, .case .face.alive { animation: none; background-size: cover; } .case .face video.face-clip, .case .face .live-fx { display: none; } }
 
 /* ---------- preview slides: one merged picture each, moving ---------- */
 .pv-bg, .pv-mix { position: absolute; inset: 0; }
@@ -532,3 +552,21 @@ body.pad .tile:focus .face { border: 2px solid var(--accent); box-shadow: 0 0 30
 @media (prefers-reduced-motion: reduce) { .ls-art, .ls-bar div { animation: none; } .ls-bar div { width: 60%; } }
 .carry-ab { display: flex; gap: 10px; align-items: center; padding: 8px 0; border-top: 1px solid var(--line); }
 .carry-ab .grow { display: flex; flex-direction: column; }
+
+/* ---------- startup: the hooded figure, two games spinning over its palms, then the clap ---------- */
+.splash-stage { position: relative; width: min(440px, 62vh); aspect-ratio: 1;
+  -webkit-mask-image: radial-gradient(circle at 50% 50%, #000 62%, transparent 71%); mask-image: radial-gradient(circle at 50% 50%, #000 62%, transparent 71%); }
+.splash-stage > * { position: absolute; }
+.sp-base { inset: 0; width: 100%; height: 100%; }
+.sp-brain { left: 28%; top: 37%; width: 44%; height: 40%; }
+.sp-hand { width: 27.67%; top: 52.15%; will-change: transform; z-index: 3; }
+.sp-hand.l { left: 12.76%; }
+.sp-hand.r { left: 59.65%; }
+.sp-cover { width: 15%; aspect-ratio: 2 / 3; top: 37%; perspective: 500px; z-index: 2; will-change: transform; }
+.sp-cover.l { left: 16%; }
+.sp-cover.r { left: 69%; }
+.sp-card { width: 100%; height: 100%; border-radius: 4px; background: #2a1a4a center / cover no-repeat; transform-style: preserve-3d;
+  box-shadow: 0 0 18px rgba(168,85,247,.75), 0 6px 14px rgba(0,0,0,.6); outline: 1px solid rgba(196,165,255,.6); }
+.splash-bar > div { height: 100%; width: 0; background: linear-gradient(90deg, #7c3aed, #c084fc); border-radius: inherit; box-shadow: 0 0 12px rgba(168,85,247,.8); }
+.splash-burst { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 60; }
+@media (prefers-reduced-motion: reduce) { .sp-card { transform: none !important; } }

@@ -78,6 +78,7 @@ namespace Frankenstein
         {
             ItemMenu.Update();
             MainMenu.Update();
+            try { Creative.Update(); } catch (Exception e) { Melon<Plugin>.Logger.Warning("Creative: " + e.Message); }
             try { Gangs.Update(); } catch (Exception e) { Melon<Plugin>.Logger.Warning("Gangs: " + e.Message); }
             try { Guns.Update(); } catch (Exception e) { Melon<Plugin>.Logger.Warning("Guns: " + e.Message); }
             try { Carry.Update(); } catch (Exception e) { Melon<Plugin>.Logger.Warning("Carry: " + e.Message); }

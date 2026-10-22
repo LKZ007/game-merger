@@ -998,17 +998,11 @@ document.addEventListener("pointermove", (e) => {
   c.style.setProperty("--lx", ((x + 0.5) * 100).toFixed(0) + "%");
 });
 
-// ---------- moving covers: the picture inside each box plays a short muted loop of the game's trailer ----------
-// Streamed from Steam, never saved. Only boxes on screen play (at most CLIP_MAX at once, the one under the mouse
-// always), and nothing moves with reduced motion. Games without a trailer get a slow pan across their still art.
+// ---------- living covers: each box shows the game's own cover art, moving ----------
+// The original art, never swapped for trailer footage: it drifts and zooms slowly (like a GIF of the cover), a light
+// sweeps across it and sparks rise in front. Only boxes on screen move, and nothing moves with reduced motion.
+// clipVideo is still used by the merge preview slides, which do play trailers.
 const CLIP_MAX = 6, clipCache = {}, clipLive = new Set();
-function clipFor(box) {
-  const tile = box.closest("[data-cover], [data-owned], [data-merge-cover]");
-  if (!tile) return null;
-  if (tile.dataset.mergeCover) return { key: "m:" + tile.dataset.mergeCover, get: () => call("merge_cover_clip", tile.dataset.mergeCover) };
-  if (tile.dataset.owned) return { key: "o:" + tile.dataset.owned, get: () => call("cover_clip", tile.dataset.owned, true) };
-  return { key: "g:" + tile.dataset.cover, get: () => call("cover_clip", tile.dataset.cover, false) };
-}
 function clipVideo(c, cls) {
   const v = document.createElement("video");
   v.className = "face-clip " + (cls || "");
@@ -1025,30 +1019,24 @@ function clipVideo(c, cls) {
   v.addEventListener("error", () => v.remove(), true);
   return v;
 }
-async function clipStart(box) {
-  if (calm.matches || box.dataset.clip === "none") return;
+function clipStart(box) {
+  if (calm.matches) return;
   const face = box.querySelector(".face") || box;
-  let vids = face.querySelectorAll("video.face-clip");
-  if (!vids.length) {
-    const want = clipFor(box);
-    if (!want) return;
-    if (!(want.key in clipCache)) clipCache[want.key] = want.get().catch(() => null);
-    const c = await clipCache[want.key];
-    const parts = c && c.sources ? [[c, ""]] : c ? [[c.base, "half l"], [c.source, "half r"]].filter((x) => x[0]) : [];
-    if (parts.length === 1 && parts[0][1]) parts[0][1] = "";  // only one of the two games has a trailer: it fills the box
-    const made = parts.map(([x, cls]) => clipVideo(x, cls)).filter(Boolean);
-    if (!made.length) { box.dataset.clip = "none"; face.classList.add("pan"); return; }
-    made.forEach((v) => face.appendChild(v));
-    vids = face.querySelectorAll("video.face-clip");
+  if (!face.querySelector(".live-fx")) {
+    const fx = document.createElement("span");
+    fx.className = "live-fx";
+    fx.setAttribute("aria-hidden", "true");
+    fx.innerHTML = "<i></i>".repeat(7);
+    face.appendChild(fx);
   }
+  face.classList.add("alive");
   clipLive.add(box);
-  vids.forEach((v) => v.play().catch(() => {}));
-  if (clipLive.size > CLIP_MAX) clipStop([...clipLive].find((b) => b !== box && !b.matches(":hover")));
 }
 function clipStop(box) {
   if (!box) return;
   clipLive.delete(box);
-  box.querySelectorAll("video.face-clip").forEach((v) => v.pause());
+  const face = box.querySelector(".face");
+  if (face) face.classList.remove("alive");
 }
 const clipSeen = "IntersectionObserver" in window ? new IntersectionObserver((list) => list.forEach((e) => {
   if (e.isIntersecting) setTimeout(() => e.target.isConnected && clipStart(e.target), 400 + Math.random() * 900);
@@ -1857,28 +1845,134 @@ async function firstRun() {
 }
 
 // ---------- the logo: a head with a brain of dots ----------
+let splashBrain = null;
 document.querySelectorAll("canvas[data-brain]").forEach((cv) => {
   const size = cv.dataset.brain;
+  if (size === "front") { splashBrain = window.LogoBrain.mount(cv, { dense: 700, head: false, front: true }); return; }
   window.LogoBrain.mount(cv, { dense: size === "big" ? 1400 : size === "small" ? 420 : 180, speed: size === "big" ? 0.45 : 0.3 });
 });
+
+// ---------- startup animation ----------
+// The hooded figure holds a game over each palm, spinning opposite ways. As the loading bar fills they spin
+// faster and the hands draw in; at 100% the hands slap together, the games merge, and a purple dotted burst
+// opens the app. Reduced motion: no spinning, no burst, just the bar.
+const splash = { p: 0, target: 0, spinL: 0, spinR: 0, last: 0, clap: -1, done: null };
+function splashProgress(v) { splash.target = Math.max(splash.target, Math.min(1, v)); }
+function splashCovers(a, b) {
+  const set = (id, art) => { const c = $(id + " .sp-card"); if (c && art) c.style.backgroundImage = `url('${art}')`; };
+  set("#spCoverL", a); set("#spCoverR", b);
+}
+splashCovers(genCover("Host game"), genCover("Extension game"));
+function splashFrame(now) {
+  const stage = $("#splashStage");
+  if (!stage) return;
+  const dt = Math.min(0.05, (now - (splash.last || now)) / 1000);
+  splash.last = now;
+  splash.p += (splash.target - splash.p) * Math.min(1, dt * 3.2);
+  const p = splash.p, still = calm.matches;
+  const fill = $("#splashFill");
+  if (fill) { fill.style.width = (p * 100).toFixed(1) + "%"; fill.parentElement.setAttribute("aria-valuenow", Math.round(p * 100)); }
+  if (splashBrain) splashBrain.level = p;
+  // the clap: 0..1 over half a second once loading is done
+  const c = splash.clap < 0 ? 0 : Math.min(1, (now - splash.clap) / 480);
+  const ease = c * c * (3 - 2 * c);
+  if (!still) {
+    const speed = 160 + p * 900 + ease * 1400;  // degrees a second
+    splash.spinL += speed * dt; splash.spinR -= speed * dt;
+  }
+  // hands: in a little as it loads, then all the way to meet in the middle
+  const hand = 5 * p + (34.6 - 5 * p) * ease;  // % of their own width
+  $("#spHandL").style.transform = `translateX(${hand}%) rotate(${ease * 8}deg)`;
+  $("#spHandR").style.transform = `translateX(${-hand}%) rotate(${-ease * 8}deg)`;
+  // covers: closer together as it loads, then into one in the middle
+  const bob = still ? 0 : Math.sin(now / 420) * 2;
+  const cx = 70 * p + (175 - 70 * p) * ease;  // % of a cover's width
+  const shrink = 1 - ease * 0.35;
+  $("#spCoverL").style.transform = `translate(${cx}%, ${bob}%) scale(${shrink})`;
+  $("#spCoverR").style.transform = `translate(${-cx}%, ${-bob}%) scale(${shrink})`;
+  $("#spCoverL .sp-card").style.transform = still ? "" : `rotateY(${splash.spinL % 360}deg)`;
+  $("#spCoverR .sp-card").style.transform = still ? "" : `rotateY(${splash.spinR % 360}deg)`;
+  if (c >= 1 && splash.done) { const d = splash.done; splash.done = null; d(); }
+  requestAnimationFrame(splashFrame);
+}
+requestAnimationFrame(splashFrame);
+function splashBurst() {
+  // a purple explosion of dots from the slap, filling the screen
+  const cv = $("#splashBurst"), st = $("#splashStage");
+  if (!cv || !st || calm.matches) { if (cv) cv.remove(); return Promise.resolve(); }
+  const r = st.getBoundingClientRect(), dpr = window.devicePixelRatio || 1;
+  cv.width = innerWidth * dpr; cv.height = innerHeight * dpr;
+  const ctx = cv.getContext("2d");
+  ctx.scale(dpr, dpr);
+  const ox = r.left + r.width * 0.5, oy = r.top + r.height * 0.62;
+  const dots = Array.from({ length: 700 }, () => {
+    const a = Math.random() * Math.PI * 2, v = 120 + Math.random() * Math.max(innerWidth, innerHeight) * 1.1;
+    return { x: ox, y: oy, vx: Math.cos(a) * v, vy: Math.sin(a) * v, r: 1 + Math.random() * 2.6, h: 260 + Math.random() * 40 };
+  });
+  return new Promise((done) => {
+    const start = performance.now();
+    let last = start;
+    const step = (now) => {
+      const t = (now - start) / 1000, dt = (now - last) / 1000;
+      last = now;
+      ctx.clearRect(0, 0, innerWidth, innerHeight);
+      if (t < 0.18) {  // the flash where the hands meet
+        const g = ctx.createRadialGradient(ox, oy, 0, ox, oy, 260);
+        g.addColorStop(0, `rgba(240,220,255,${0.9 - t * 4})`); g.addColorStop(1, "rgba(168,85,247,0)");
+        ctx.fillStyle = g; ctx.fillRect(0, 0, innerWidth, innerHeight);
+      }
+      for (const d of dots) {
+        d.x += d.vx * dt; d.y += d.vy * dt; d.vx *= 0.985; d.vy *= 0.985;
+        ctx.fillStyle = `hsla(${d.h},95%,${70 + Math.random() * 20}%,${Math.max(0, 1 - t / 1.1)})`;
+        ctx.beginPath(); ctx.arc(d.x, d.y, d.r, 0, Math.PI * 2); ctx.fill();
+      }
+      if (t < 1.15) requestAnimationFrame(step); else { cv.remove(); done(); }
+    };
+    requestAnimationFrame(step);
+  });
+}
+function splashClap() {
+  return new Promise((done) => {
+    splash.target = 1;
+    $("#splash").classList.add("clap");
+    if (calm.matches) return done();
+    splash.done = done;
+    splash.clap = performance.now();
+  });
+}
 
 // ---------- start ----------
 const SPLASH = ["It's alive! Finding your games…", "Checking Steam, Epic, GOG and the Xbox app…", "Grabbing your box art…", "Working out how each game is modded…"];
 
 (async () => {
+  splashProgress(0.08);
   await whoIsPlaying();
+  splashProgress(0.15);
   const started = Date.now();
   let i = 0;
   const rotate = setInterval(() => { $("#splashLine").textContent = SPLASH[++i % SPLASH.length]; }, 1600);
+  const creep = setInterval(() => splashProgress(splash.target + (0.78 - splash.target) * 0.12), 250);
   renderLibrary();
   try { state.settings = await call("get_settings"); } catch (e) { /* shown when needed */ }
+  splashProgress(0.25);
   await scan();
+  clearInterval(creep);
+  splashProgress(0.82);
+  // the two games over the palms: the Host and its partner if one is picked, else the first two with art
+  const pick = [...state.games].sort((a, b) => (b.key === state.selected) - (a.key === state.selected)).slice(0, 6);
+  const arts = (await Promise.all(pick.map((g) => loadCover(g.key).catch(() => null)))).filter(Boolean);
+  splashCovers(arts[0] || genCover(pick[0]?.name || "Host game"), arts[1] || genCover(pick[1]?.name || "Extension game"));
+  splashProgress(0.92);
   loadOwned(false, true).then(() => state.owned?.sources.length && loadOwned(true, true));
-  await sleep(Math.max(0, 2200 - (Date.now() - started)));
+  await sleep(Math.max(0, 2400 - (Date.now() - started)));
   clearInterval(rotate);
   const n = state.games.length;
   $("#splashLine").textContent = n > 1 ? `Found ${n} games.` : n ? "Found 1 game." : "No games found yet. Add a game folder in the Library.";
-  await sleep(1100);
+  splashProgress(1);
+  await sleep(900);
+  await splashClap();
+  splashBurst();
+  await sleep(250);
   $("#splash").classList.add("gone");
   setTimeout(() => $("#splash").remove(), 700);
   if (await call("playing").catch(() => null)) watchPlaying();

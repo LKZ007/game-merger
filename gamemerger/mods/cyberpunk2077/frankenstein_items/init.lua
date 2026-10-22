@@ -595,6 +595,19 @@ registerForEvent("onInit", function()
         end
     end)
 end)
+-- Creative is unlimited, like Minecraft's: every ammo type is topped back up the moment it runs low.
+local AMMO = { "Ammo.HandgunAmmo", "Ammo.RifleAmmo", "Ammo.ShotgunAmmo", "Ammo.SniperRifleAmmo" }
+function creativeTick()
+    if not (menu.s and menu.s.creative) then return end
+    local p = Game.GetPlayer()
+    if not p then return end
+    local ts = Game.GetTransactionSystem()
+    for _, id in ipairs(AMMO) do
+        local have = ts:GetItemQuantity(p, ItemID.FromTDBID(TweakDBID.new(id)))
+        if have < 200 then Game.AddToInventory(id, 500 - have) end
+    end
+end
+
 registerForEvent("onUpdate", function(dt)
     menu.now = (menu.now or 0) + dt
     menu.clock = menu.clock + dt
@@ -606,6 +619,7 @@ registerForEvent("onUpdate", function(dt)
             menu.note = "Quit the game now: Frankenstein starts it again in the other mode."
         end
     end
+    pcall(creativeTick)
     pcall(raceTick)
     pcall(worldTick)
     pcall(carryTick)

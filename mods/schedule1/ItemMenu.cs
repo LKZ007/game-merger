@@ -42,6 +42,12 @@ namespace Frankenstein
 
         public static void Load() { }
 
+        static Sprite IconOf(ItemDefinition d)
+        {
+            try { return d.Icon ?? Rt.Get(Rt.Get(d, "S1ItemDefinition"), "Icon", "icon") as Sprite; }
+            catch (Exception) { return null; }
+        }
+
         static void Refresh()
         {
             try
@@ -50,8 +56,8 @@ namespace Frankenstein
                     .Where(d => d != null && !string.IsNullOrEmpty(d.ID))
                     .Select(d => new Entry
                     {
-                        Id = d.ID, Name = string.IsNullOrEmpty(d.Name) ? d.ID : d.Name, Category = d.Category.ToString(),
-                        Icon = d.Icon, Stack = Math.Max(1, d.StackLimit),
+                        Id = d.ID, Name = string.IsNullOrEmpty(d.Name) ? d.ID : d.Name, Category = CatName(d.Category),
+                        Icon = IconOf(d), Stack = Math.Max(1, d.StackLimit),
                     })
                     .OrderBy(e => e.Category).ThenBy(e => e.Name).ToList();
                 foreach (var e in _all) e.Search = (e.Name + " " + e.Id + " " + e.Category).ToLowerInvariant();
@@ -217,16 +223,41 @@ namespace Frankenstein
             }
         }
 
+        static bool _iconsLogged;
+
         static void DrawIcon(Entry e, Rect at)
         {
             if (e.Icon == null) return;
-            try
+            try { if (!Paint.Sprite(at, e.Icon)) e.Icon = null; }
+            catch (Exception ex)
             {
-                var t = e.Icon.texture;
-                var r = e.Icon.textureRect;
-                GUI.DrawTextureWithTexCoords(at, t, new Rect(r.x / t.width, r.y / t.height, r.width / t.width, r.height / t.height));
+                e.Icon = null;
+                if (!_iconsLogged) { _iconsLogged = true; Melon<Plugin>.Logger.Warning("Icons: " + ex.Message); }
             }
-            catch (Exception) { e.Icon = null; }
+        }
+
+        // the game's item categories by number, for builds where a category has no name (it shows as "12")
+        static readonly string[] CatNames = { "Product", "Packaging", "Growing", "Tools", "Furniture", "Lighting", "Cash",
+                                              "Consumable", "Equipment", "Ingredient", "Decoration", "Clothing", "Storage" };
+
+        static string CatName(object c)
+        {
+            var s = c?.ToString() ?? "";
+            int n;
+            if (int.TryParse(s, out n)) return n >= 0 && n < CatNames.Length ? CatNames[n] : "Other";
+            return s;
+        }
+
+        // no picture in the game for this item: a coloured badge with its first letter, by category
+        static GUIStyle _glyph;
+        static void Glyph(Entry e, Rect at)
+        {
+            int h = 0;
+            foreach (var ch in e.Category) h = h * 31 + ch;
+            var c = Color.HSVToRGB((Math.Abs(h) % 360) / 360f, 0.55f, 0.75f);
+            Paint.Fill(at, c);
+            if (_glyph == null) { _glyph = new GUIStyle(GUI.skin.box) { fontSize = 30 }; _glyph.normal.background = null; }  // the box style centres
+            GUI.Label(at, e.Name.Length > 0 ? e.Name.Substring(0, 1).ToUpperInvariant() : "?", _glyph);
         }
 
         public static void Draw()
@@ -236,9 +267,9 @@ namespace Frankenstein
             if (!_open) return;
 
             float x = (Screen.width - W) / 2f, y = (Screen.height - H) / 2f;
-            GUI.Box(new Rect(x - 6, y - 6, W + 12, H + 12), "");
-            GUI.Box(new Rect(x, y, W, H), "");
-            GUI.Box(new Rect(x, y, W, H), "");
+            Paint.Fill(new Rect(0, 0, Screen.width, Screen.height), new Color(0.02f, 0.01f, 0.04f, 0.55f));
+            Paint.Fill(new Rect(x - 6, y - 6, W + 12, H + 12), new Color(0.65f, 0.55f, 0.98f, 0.9f));
+            Paint.Fill(new Rect(x, y, W, H), new Color(0.07f, 0.05f, 0.11f, 1f));
             GUI.Label(new Rect(x + 16, y + 10, 600, 24), "FRANKENSTEIN  ·  Every item in this merge (" + _all.Count + ")");
             if (GUI.Button(new Rect(x + W - 40, y + 8, 28, 26), "X")) { Close(); return; }
 
@@ -298,7 +329,7 @@ namespace Frankenstein
                     if (GUI.Button(r, "")) { _sel = i; Give(e, 1); }
                     if (i == _sel) GUI.Box(new Rect(r.x - 2, r.y - 2, r.width + 4, r.height + 4), "");
                     DrawIcon(e, new Rect(r.x + (Tile - 64) / 2, r.y + 8, 64, 64));
-                    if (e.Icon == null) GUI.Label(new Rect(r.x + 8, r.y + 30, Tile - 16, 24), e.Category);
+                    if (e.Icon == null) Glyph(e, new Rect(r.x + (Tile - 56) / 2, r.y + 12, 56, 56));
                     GUI.Label(new Rect(r.x + 6, r.y + 76, Tile - 12, 40), label);
                 }
             }

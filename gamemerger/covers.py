@@ -260,30 +260,108 @@ def _exe_icon(folder, exe_names=()):
     return None
 
 
+def _scene(name):
+    """A painted scene for a game with no box art: a pixel world of blocks for block games, otherwise a sky,
+    a glow and layered hills in colours picked from the game's name (the same game always gets the same art)."""
+    import colorsys
+    import random
+    from PIL import Image, ImageDraw, ImageFilter
+    rnd = random.Random(hashlib.sha1(name.encode("utf-8")).hexdigest())
+    img = Image.new("RGB", (W, H))
+    d = ImageDraw.Draw(img)
+    if re.search(r"minecraft|craft|block|roblox|lego", name, re.I):
+        px = 30
+        for y in range(0, H, 6):  # day sky
+            t = y / H
+            d.rectangle([0, y, W, y + 6], fill=(int(96 + 60 * t), int(160 + 50 * t), int(240 - 20 * t)))
+        d.rectangle([420, 70, 510, 160], fill=(255, 244, 170))  # square sun
+        for cx, cy in ((80, 140), (300, 90), (470, 230)):  # blocky clouds
+            for i in range(rnd.randint(3, 5)):
+                d.rectangle([cx + i * px, cy, cx + i * px + px * 2, cy + px], fill=(250, 250, 252))
+        ground = [400 + int(60 * __import__("math").sin(x / 3.0) + rnd.randint(-1, 1) * px) // px * px for x in range(W // px + 1)]
+        for i, top in enumerate(ground):
+            x = i * px
+            for y in range(top, H, px):
+                depth = (y - top) // px
+                if depth == 0:
+                    c = (95 + rnd.randint(-10, 10), 159 + rnd.randint(-12, 12), 53)
+                elif depth < 4:
+                    c = (134 + rnd.randint(-12, 12), 96 + rnd.randint(-10, 10), 67)
+                else:
+                    g = 118 + rnd.randint(-16, 16)
+                    c = (g, g, g)
+                    if rnd.random() < 0.05:
+                        c = rnd.choice([(80, 200, 215), (230, 220, 90), (200, 60, 60)])  # ores
+                d.rectangle([x, y, x + px - 1, y + px - 1], fill=c)
+                d.line([x, y, x + px - 1, y], fill=tuple(min(255, v + 18) for v in c))
+        for _ in range(3):  # trees
+            i = rnd.randint(1, len(ground) - 2)
+            x, top = i * px, ground[i]
+            d.rectangle([x, top - 4 * px, x + px - 1, top - 1], fill=(104, 78, 46))
+            d.rectangle([x - 2 * px, top - 7 * px, x + 3 * px - 1, top - 4 * px - 1], fill=(56, 120, 40))
+        return img
+    h1 = rnd.random()
+    h2 = (h1 + 0.12 + rnd.random() * 0.25) % 1
+
+    def col(h, l, sat=0.65):
+        r, g, b = colorsys.hls_to_rgb(h, l, sat)
+        return int(r * 255), int(g * 255), int(b * 255)
+    top, bottom = col(h1, 0.16), col(h2, 0.42)
+    for y in range(0, H, 3):
+        t = y / H
+        d.rectangle([0, y, W, y + 3], fill=tuple(int(a + (b - a) * t) for a, b in zip(top, bottom)))
+    for _ in range(90):  # stars
+        x, y = rnd.randint(0, W), rnd.randint(0, int(H * 0.5))
+        v = rnd.randint(150, 255)
+        d.point((x, y), fill=(v, v, v))
+    glow = Image.new("L", (W, H), 0)
+    gx, gy = rnd.randint(150, 450), rnd.randint(220, 360)
+    ImageDraw.Draw(glow).ellipse([gx - 130, gy - 130, gx + 130, gy + 130], fill=255)
+    img.paste(Image.new("RGB", (W, H), col(h2, 0.8, 0.9)), (0, 0), glow.filter(ImageFilter.GaussianBlur(60)))
+    d = ImageDraw.Draw(img)
+    for layer in range(4):  # hills, far to near
+        base = 430 + layer * 70
+        y, pts = base, [(0, H)]
+        for x in range(0, W + 20, 20):
+            y = max(base - 120, min(base + 60, y + rnd.randint(-28, 28)))
+            pts.append((x, y))
+        pts.append((W, H))
+        d.polygon(pts, fill=col(h1, 0.10 + 0.05 * (3 - layer), 0.5))
+    return img
+
+
 def made_cover(name, folder=None, exe_names=()):
-    """A cover for games with no box art: the game's own icon over a blurred, violet-tinted copy of it."""
+    """A cover for games with no box art: a painted scene for the game (or its own icon, when the .exe has
+    one, over a blurred copy of it) and its name across the bottom. Never a blank box."""
     try:
         from PIL import Image, ImageDraw, ImageFilter
     except ImportError:
         return None
     key = hashlib.sha1((name + "|" + (folder or "")).encode()).hexdigest()[:16]
-    out = os.path.join(paths.sub("covers"), "made-%s.png" % key)
+    out = os.path.join(paths.sub("covers"), "made2-%s.png" % key)
     if os.path.isfile(out):
         return out
-    img = Image.new("RGB", (W, H), (21, 13, 38))
     icon = _exe_icon(folder, exe_names) if folder else None
     if icon is not None:
+        img = Image.new("RGB", (W, H), (21, 13, 38))
         bg = icon.resize((H, H)).filter(ImageFilter.GaussianBlur(40)).crop(((H - W) // 2, 0, (H - W) // 2 + W, H))
         img.paste(bg.convert("RGB"), (0, 0))
         img = Image.blend(img, Image.new("RGB", (W, H), (21, 13, 38)), 0.45)
         big = icon.resize((300, 300), Image.LANCZOS)
         img.paste(big, ((W - 300) // 2, 230), big)
+    else:
+        img = _scene(name)
+    band = Image.new("RGBA", (W, 300), (0, 0, 0, 0))
+    bd = ImageDraw.Draw(band)
+    for y in range(300):
+        bd.line([(0, y), (W, y)], fill=(8, 5, 16, min(235, int(y * 1.3))))
+    img.paste(band, (0, H - 300), band)
     d = ImageDraw.Draw(img)
-    d.rectangle([0, 640, W, H], fill=(14, 9, 26))
-    d.rectangle([0, 640, W, 646], fill=(167, 139, 250))
     font = _font(54)
-    y = 680
-    for line in _wrap(d, name.upper(), font, W - 80)[:3]:
+    lines = _wrap(d, name.upper(), font, W - 80)[:3]
+    y = H - 50 - 64 * len(lines)
+    d.rectangle([40, y - 22, 150, y - 17], fill=(167, 139, 250))
+    for line in lines:
         d.text((40, y), line, font=font, fill=(236, 232, 245))
         y += 64
     img.save(out)
