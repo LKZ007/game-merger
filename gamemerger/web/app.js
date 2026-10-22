@@ -111,8 +111,34 @@ function show(view) {
 document.querySelectorAll(".nav-item[data-view]").forEach((b) => (b.onclick = () => show(b.dataset.view)));
 
 // ---------- 3D cases ----------
+// A cover made from the game's name when no real art can be found, so no cover is ever blank.
+const _genCovers = {};
+function genCover(name) {
+  if (_genCovers[name]) return _genCovers[name];
+  let h = 0;
+  for (const ch of name || "?") h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  const rnd = () => ((h = (h * 1103515245 + 12345) >>> 0) % 1000) / 1000;
+  const a = Math.floor(rnd() * 360), b = (a + 40 + Math.floor(rnd() * 80)) % 360;
+  let shapes = "";
+  if (/minecraft/i.test(name)) {  // blocks
+    for (let y = 0; y < 15; y++) for (let x = 0; x < 10; x++) {
+      const g = y < 5 ? `hsl(${100 + rnd() * 20},55%,${30 + rnd() * 15}%)` : `hsl(${25 + rnd() * 10},45%,${22 + rnd() * 14}%)`;
+      shapes += `<rect x="${x * 30}" y="${y * 30}" width="30" height="30" fill="${g}"/>`;
+    }
+  } else {
+    for (let i = 0; i < 7; i++) shapes += `<circle cx="${rnd() * 300}" cy="${rnd() * 450}" r="${30 + rnd() * 110}" fill="hsla(${rnd() < .5 ? a : b},85%,60%,${.08 + rnd() * .18})"/>`;
+    for (let i = 0; i < 5; i++) { const x = rnd() * 300; shapes += `<path d="M${x} 0 L${x + 120} 450" stroke="hsla(${b},90%,75%,.12)" stroke-width="${2 + rnd() * 10}"/>`; }
+    for (let i = 0; i < 46; i++) shapes += `<circle cx="${150 + Math.cos(i * 2.4) * (8 + i * 1.6)}" cy="${150 + Math.sin(i * 2.4) * (8 + i * 1.6) * .8}" r="2.2" fill="rgba(255,255,255,${.15 + rnd() * .5})"/>`;
+  }
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 450"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="hsl(${a},65%,32%)"/><stop offset="1" stop-color="hsl(${b},70%,12%)"/></linearGradient>
+    <linearGradient id="s" x1="0" y1="0" x2="0" y2="1"><stop offset=".45" stop-color="rgba(0,0,0,0)"/><stop offset="1" stop-color="rgba(0,0,0,.75)"/></linearGradient></defs>
+    <rect width="300" height="450" fill="url(#g)"/>${shapes}<rect width="300" height="450" fill="url(#s)"/></svg>`;
+  return (_genCovers[name] = "data:image/svg+xml;base64," + btoa(unescape(encodeURIComponent(svg))));
+}
+
 function caseHtml(name, cover, extra = "") {
-  const art = cover ? `style="background-image:url('${cover}')"` : "";
+  const art = `style="background-image:url('${cover || genCover(name)}')"`;
   return `<div class="case ${extra}"><div class="case-inner">
       <div class="spine" ${art}></div>
       <div class="face ${cover ? "" : "placeholder"}" ${art}>${cover ? "" : esc(name)}</div>
@@ -238,7 +264,7 @@ function mergePairHtml(g, t) {
   if (!t) return "";
   const other = t.source_key != null ? game(t.source_key) : null;
   const card = (name, key, label) => `<div class="pair-card">
-      <div class="pair-cover ${key != null && state.covers[key] ? "" : "placeholder"}" data-cover="${key ?? ""}" style="${key != null && state.covers[key] ? `background-image:url('${state.covers[key]}')` : ""}">${key != null && state.covers[key] ? "" : esc(name)}</div>
+      <div class="pair-cover ${key != null && state.covers[key] ? "" : "placeholder"}" data-cover="${key ?? ""}" style="background-image:url('${(key != null && state.covers[key]) || genCover(name)}')">${key != null && state.covers[key] ? "" : esc(name)}</div>
       <div class="pair-label"><span class="muted small">${label}</span><strong>${esc(name)}</strong></div></div>`;
   return `<aside class="merge-pair" aria-label="This merge">
     <div class="eyebrow">This merge</div>
@@ -866,6 +892,19 @@ async function openSpawner(m) {
   setTimeout(() => $("#spQ")?.focus(), 30);
   await done;
 }
+
+// Covers tilt toward the mouse (CSS does the idle float and light sweep; both stop with reduced motion).
+const calm = window.matchMedia ? window.matchMedia("(prefers-reduced-motion: reduce)") : { matches: false };
+document.addEventListener("pointermove", (e) => {
+  if (calm.matches) return;
+  const c = e.target.closest && e.target.closest(".case");
+  if (!c) return;
+  const r = c.getBoundingClientRect();
+  const x = (e.clientX - r.left) / r.width - 0.5, y = (e.clientY - r.top) / r.height - 0.5;
+  c.style.setProperty("--ry", (x * 34).toFixed(1) + "deg");
+  c.style.setProperty("--rx", (-y * 20).toFixed(1) + "deg");
+  c.style.setProperty("--lx", ((x + 0.5) * 100).toFixed(0) + "%");
+});
 
 // ---------- updates ----------
 async function offerUpdate(u, asked = false) {

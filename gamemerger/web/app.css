@@ -391,3 +391,27 @@ body.pad .tile:focus .face { border: 2px solid var(--accent); box-shadow: 0 0 30
 .sp-name { font-size: 12px; font-weight: 600; text-align: center; line-height: 1.2; }
 .sp-cat { font-size: 10px; color: var(--muted); }
 .slot.hero { border-left: 3px solid #a855f7; padding-left: 10px; background: rgba(124,58,237,.08); border-radius: 6px; }
+
+/* covers: always art (real or made from the name), floating in 3D with a light sweep; they tilt toward the mouse */
+.case .face.placeholder { background-size: cover; text-shadow: 0 2px 10px rgba(0,0,0,.8); }
+.case-inner { animation: cover-float 7s ease-in-out infinite; }
+.tile:nth-child(3n+1) .case-inner { animation-delay: -2.3s; }
+.tile:nth-child(3n+2) .case-inner { animation-delay: -4.6s; }
+.tile:nth-child(4n) .case-inner { animation-duration: 8.5s; }
+@keyframes cover-float {
+  0%, 100% { transform: rotateY(24deg) rotateX(0deg) translateY(0); }
+  50% { transform: rotateY(16deg) rotateX(3deg) translateY(-5px); }
+}
+.case .face::before { content: ""; position: absolute; inset: -20%; pointer-events: none; z-index: 1;
+  background: linear-gradient(115deg, transparent 40%, rgba(255,255,255,.22) 50%, transparent 60%);
+  transform: translateX(-120%); animation: cover-sweep 6s ease-in-out infinite; }
+.tile:nth-child(2n) .case .face::before { animation-delay: -3s; }
+@keyframes cover-sweep { 0%, 55% { transform: translateX(-120%); } 85%, 100% { transform: translateX(120%); } }
+.tile:hover .case-inner, .tile:focus-visible .case-inner, .tile.selected .case-inner {
+  animation: none; transform: rotateY(var(--ry, 8deg)) rotateX(var(--rx, 0deg)) translateY(-8px) scale(1.03); transition: transform .12s ease-out; }
+.tile:hover .case .face::after { background: radial-gradient(circle at var(--lx, 30%) 20%, rgba(255,255,255,.28), rgba(255,255,255,0) 55%); }
+@media (prefers-reduced-motion: reduce) {
+  .case-inner, .case .face::before { animation: none !important; }
+  .tile:hover .case-inner { transform: rotateY(8deg) translateY(-6px); }
+}
+.pair-cover.placeholder { align-items: flex-end; font-weight: 700; color: #fff; text-shadow: 0 2px 8px rgba(0,0,0,.8); }

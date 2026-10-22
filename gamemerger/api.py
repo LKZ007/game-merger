@@ -549,8 +549,14 @@ class Api:
 
     # ---------- library ----------
 
+    # tools and runtimes the stores list next to games: never shown as games
+    NOT_GAMES = re.compile(r"(?i)^(steamworks common redistributables|steam linux runtime.*|proton.*|steamvr|"
+                           r"gamesave|gaming services|xbox( app| identity provider| game bar)?|"
+                           r"microsoft (gaming|visual c\+\+).*|directx.*|.*redistributable.*|.*dedicated server)$")
+
     def scan(self):
-        self._games = detect.scan(self._hand, self._settings.get("manual_folders", []))
+        self._games = [g for g in detect.scan(self._hand, self._settings.get("manual_folders", []))
+                       if not self.NOT_GAMES.match(g.name.strip())]
         self._build_recipes()
         return self.library()
 

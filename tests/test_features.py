@@ -51,6 +51,7 @@ WEB = {
     "originals untouched tag": ["Originals untouched"],
     "creative dialog": ["creativeSetup"],
     "hero item first": ["★ Hero"],
+    "no blank covers, 3D moving covers": ["genCover", "cover-float", "cover-sweep", "prefers-reduced-motion"],
 }
 
 # Frankenstein's own mods for each game, bundled with the app
@@ -62,6 +63,7 @@ LUA = ["Garage", "Tuning", "Races", "drawHud", "bridge", "Cheats", "Fly", "Cars"
 class FeatureChecklist(unittest.TestCase):
     def test_app_functions(self):
         from gamemerger.api import Api
+        self.assertTrue(Api.NOT_GAMES.match("Steamworks Common Redistributables"))  # tools never show as games
         gone = ["%s: %s" % (f, n) for f, names in API.items() for n in names if not callable(getattr(Api, n, None))]
         self.assertEqual(gone, [], "features missing from the app")
 
