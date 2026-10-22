@@ -1,6 +1,7 @@
 """Everything the window can ask the app to do. The web UI calls these methods through
 pywebview (or the local browser bridge in server.py); every argument and return value is plain JSON."""
 
+import glob
 import json
 import os
 import re
@@ -55,9 +56,30 @@ BUILTIN = {
 # A starter kit the merge hands you in game, once per save: the merged game's signature gear, made from
 # items the host game really has. Names are matched loosely against the game's own item list.
 KITS = {
-    "hoodwarfare": {"name": "Hood Warfare starter kit",
-                    "items": ["M1911*1", "M1911 Magazine*4", "Revolver*1", "Revolver Cylinder*3", "Pump Shotgun*1",
-                              "Shotgun Shell*12"]},
+    "hoodwarfare": {"name": "Hood Warfare arsenal",
+                    "items": ["AK47=Choppa*1", "AK47 Magazine*3", "SMG=Uzi*1", "SMG Magazine*3", "M1911=Glock*1",
+                              "M1911 Magazine*4", "Pump Shotgun=Pump Shotty*1", "Shotgun Shell*14", "Sniper=.308 Sniper*1",
+                              "Sniper Magazine*2", "Revolver*1", "Revolver Cylinder*3", "Machete=Blade*1"]},
+}
+
+# The merged game's guns and what stands in for each in the host game. "close": the same kind of gun, works
+# the same way; "rough": the nearest thing the host has. Shown in What it adds.
+ARSENALS = {
+    "hoodwarfare": [
+        ("Choppa (AK)", "AK47 from More Guns", "close"),
+        ("AKM", "AK47 from More Guns", "close"),
+        ("Draco (AK pistol)", "AK47 from More Guns", "rough"),
+        ("Uzi", "SMG from More Guns", "close"),
+        ("Mac-10", "SMG from More Guns", "rough"),
+        ("ARP (AR pistol)", "SMG from More Guns", "rough"),
+        ("Oldhead (marksman rifle)", "Sniper from More Guns (semi-auto)", "rough"),
+        (".308 Sniper", "Sniper from More Guns", "close"),
+        ("Pump Shotty", "Schedule I's pump shotgun", "close"),
+        ("Glock", "Schedule I's M1911 pistol", "rough"),
+        ("The Nine (burst pistol)", "Schedule I's M1911 pistol (no burst fire)", "rough"),
+        ("Blade", "Schedule I's machete", "close"),
+        ("Extra: minigun and RPG", "From More Guns", "close"),
+    ],
 }
 
 
@@ -1178,9 +1200,20 @@ class Api:
 
     AUTO_ORDER = ("Thunderstore", "Modrinth", "CurseForge", "Nexus Mods")
 
-    def _auto_pick(self, r, search, loader=None, version=None, skip=()):
-        """The best mod for a search that Frankenstein can download by itself: [(name, path)], hit; or ([], None)."""
-        found = self.mod_search(r.id, search, "all", loader, version)["results"]
+    def _auto_pick(self, r, search, loader=None, version=None, skip=(), prefer="", mono=None):
+        """The best mod for a search that Frankenstein can download by itself: [(name, path)], hit; or ([], None).
+        prefer: a mod picked by hand, matched by name and tried first. mono: for Unity games that ship separate
+        Mono and IL2CPP builds of a mod, which one this copy of the game needs (None if it doesn't matter)."""
+        found = self.mod_search(r.id, prefer or search, "all", loader, version)["results"]
+        if prefer:
+            key = re.sub(r"[^a-z0-9]", "", prefer.lower())
+            mine = [x for x in found if re.sub(r"[^a-z0-9]", "", x["name"].lower()).startswith(key)]
+            found = mine + [x for x in self.mod_search(r.id, search, "all", loader, version)["results"] if x not in mine]
+        if mono is False:
+            # "... Mono" packages are for the Mono (beta) build only; this is the normal IL2CPP build
+            found = [x for x in found if "mono" not in x["name"].lower()]
+        elif mono:
+            found.sort(key=lambda x: "mono" not in x["name"].lower())
         premium = bool(self._settings.get("nexus_key") and self._settings.get("nexus_premium"))
         for src in self.AUTO_ORDER:
             if src == "Nexus Mods" and not premium:
@@ -1220,7 +1253,8 @@ class Api:
                     got = [(slot.name, downloader.fetch_framework(fw, log=job.write))]
                     hit = {"name": slot.name, "source": "GitHub", "page": "https://github.com/%s" % gh}
                 else:
-                    got, hit = self._auto_pick(r, slot.search, loader, version)
+                    got, hit = self._auto_pick(r, slot.search, loader, version, prefer=getattr(slot, "prefer", ""),
+                                               mono=self._unity_mono(m.target_path))
             except Exception as e:
                 got, hit = [], None
                 job.write("✖ Search failed: %s" % e)
@@ -1250,6 +1284,15 @@ class Api:
         m.data["adds"] = adds
         m.save()
         return adds
+
+    @staticmethod
+    def _unity_mono(folder):
+        """True for a Unity game's Mono build, False for IL2CPP, None if it isn't a Unity game."""
+        if os.path.isfile(os.path.join(folder, "GameAssembly.dll")):
+            return False
+        if glob.glob(os.path.join(folder, "*_Data", "Managed", "Assembly-CSharp.dll")):
+            return True
+        return None
 
     def merge_autofill(self, merge_id):
         """Fill an existing merge the same way a new one is: the best mod for every part of the other game."""
@@ -1281,8 +1324,9 @@ class Api:
         builtin = []
         if r and r.id in BUILTIN:
             builtin = [BUILTIN[r.id]["what"]]
+        arsenal = [{"gun": g, "as": a, "match": q} for g, a, q in ARSENALS.get(m.data.get("theme_id"), [])]
         return {"source": m.data.get("source_name") or m.data.get("theme_name", ""), "adds": m.data.get("adds", []),
-                "builtin": builtin, "mods": [i["label"] for i in m.data.get("installs", [])]}
+                "builtin": builtin, "arsenal": arsenal, "mods": [i["label"] for i in m.data.get("installs", [])]}
 
     def _install_builtin(self, m, r, log):
         """Frankenstein's own mod for this game (the item menu, story mode), if it has one."""

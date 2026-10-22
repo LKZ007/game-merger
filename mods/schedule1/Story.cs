@@ -196,6 +196,7 @@ namespace Frankenstein
         {
             if (Player.Local == null) return;
             if (!_dumped) DumpWorld();
+            Rename();
             var p = P;
             if (p == null) return;
             GiveKit(p);
@@ -385,12 +386,13 @@ namespace Frankenstein
             var got = new List<string>();
             foreach (var entry in Plugin.Kit)
             {
-                var parts = entry.Split('*');  // "M1911*1"
+                var parts = entry.Split('*');  // "M1911*1", or "M1911=Glock*1" to show it under the merged game's name
                 int qty = parts.Length > 1 && int.TryParse(parts[1], out var q) ? q : 1;
-                var id = ItemId(parts[0]);
-                if (id == null) { Melon<Plugin>.Logger.Msg("Starter kit: the game has no \"" + parts[0] + "\"; skipped."); continue; }
+                var name = parts[0].Split('=')[0];
+                var id = ItemId(name);
+                if (id == null) { Melon<Plugin>.Logger.Msg("Starter kit: the game has no \"" + name + "\"; skipped."); continue; }
                 ConsoleHelper.AddItemToInventory(id, qty);
-                got.Add(parts[0]);
+                got.Add(name);
             }
             if (got.Count == 0)
             {
@@ -399,6 +401,29 @@ namespace Frankenstein
                 if (gun != null) { ConsoleHelper.AddItemToInventory(gun, 1); got.Add(gun); }
             }
             Melon<Plugin>.Logger.Msg(Plugin.KitName + ": " + string.Join(", ", got.ToArray()));
+        }
+
+        static bool _renamed;
+
+        /// <summary>The merged game's names on the host game's items ("M1911=Glock" shows the M1911 as "Glock"),
+        /// every session, so the item menu and inventory use them.</summary>
+        public static void Rename()
+        {
+            if (_renamed) return;
+            _renamed = true;
+            foreach (var entry in Plugin.Kit)
+            {
+                var pair = entry.Split('*')[0].Split('=');
+                if (pair.Length < 2) continue;
+                var id = ItemId(pair[0]);
+                if (id == null) continue;
+                try
+                {
+                    var def = ItemManager.GetDefinition(id);
+                    if (def != null && !def.Name.StartsWith(pair[1])) def.Name = pair[1] + " (" + def.Name + ")";
+                }
+                catch (Exception) { }
+            }
         }
 
         /// <summary>Every item that looks like a gun.</summary>
@@ -496,7 +521,8 @@ namespace Frankenstein
             {
                 var all = ItemManager.GetAllItemDefinitions();
                 var hit = all.FirstOrDefault(d => Squash(d.ID) == want) ?? all.FirstOrDefault(d => Squash(d.Name) == want)
-                          ?? all.FirstOrDefault(d => Squash(d.Name).Contains(want) || want.Contains(Squash(d.Name)) && Squash(d.Name).Length > 3);
+                          ?? all.FirstOrDefault(d => Squash(d.Name).Contains(want) || Squash(d.ID).Contains(want))
+                          ?? all.FirstOrDefault(d => want.Contains(Squash(d.Name)) && Squash(d.Name).Length > 3);
                 return hit?.ID;
             }
             catch (Exception) { return null; }

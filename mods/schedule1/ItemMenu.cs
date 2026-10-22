@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.InteropServices;
 using MelonLoader;
 using S1API.Console;
 using S1API.Items;
@@ -8,9 +9,10 @@ using UnityEngine;
 
 namespace Frankenstein
 {
-    /// <summary>F6 (or Back + Y on a controller): every item in the game, mods' items included, searchable
-    /// and by category. Click one to get it. Only GUI calls without option arrays are used, so the same
-    /// mod works on the Mono and IL2CPP builds of the game.</summary>
+    /// <summary>F6 (or Back + Y on a controller): every item in the game, mods' items included, as a grid of
+    /// tiles with the game's own icons. Click a tile to grab one, right-click for a full stack. Search and
+    /// categories at the top. Only GUI calls without option arrays are used, so the same mod works on the
+    /// Mono and IL2CPP builds of the game.</summary>
     internal static class ItemMenu
     {
         class Entry
@@ -23,17 +25,20 @@ namespace Frankenstein
         static bool _open;
         static List<Entry> _all = new List<Entry>();
         static List<string> _cats = new List<string>();
-        static string _cat = "All";
+        static int _cat;
         static string _search = "";
-        static string _lastSearch = null, _lastCat = null;
+        static string _lastSearch = null;
+        static int _lastCat = -1;
         static List<Entry> _shown = new List<Entry>();
         static Vector2 _scroll;
+        static int _sel;
         static string _toast = "";
         static float _toastUntil;
         static CursorLockMode _oldLock;
         static bool _oldVisible;
+        static int _cols = 1;
 
-        const float W = 760, H = 560, Row = 44;
+        const float W = 940, H = 660, Tile = 104, TileH = 120, Gap = 8;
 
         public static void Load() { }
 
@@ -48,7 +53,7 @@ namespace Frankenstein
                         Id = d.ID, Name = string.IsNullOrEmpty(d.Name) ? d.ID : d.Name, Category = d.Category.ToString(),
                         Icon = d.Icon, Stack = Math.Max(1, d.StackLimit),
                     })
-                    .OrderBy(e => e.Name).ToList();
+                    .OrderBy(e => e.Category).ThenBy(e => e.Name).ToList();
                 foreach (var e in _all) e.Search = (e.Name + " " + e.Id + " " + e.Category).ToLowerInvariant();
                 _cats = new[] { "All" }.Concat(_all.Select(e => e.Category).Distinct().OrderBy(c => c)).ToList();
             }
@@ -59,35 +64,113 @@ namespace Frankenstein
             _lastSearch = null;
         }
 
+        // ---------- controller (XInput, read directly so it works whatever the game's own input does) ----------
+
+        [StructLayout(LayoutKind.Sequential)]
+        struct XState
+        {
+            public uint Packet;
+            public ushort Buttons;
+            public byte LT, RT;
+            public short LX, LY, RX, RY;
+        }
+
+        [DllImport("xinput1_4.dll", EntryPoint = "XInputGetState")]
+        static extern int XInputGetState(int user, out XState state);
+
+        const ushort Up = 0x0001, Down = 0x0002, Left = 0x0004, Right = 0x0008, Back = 0x0020,
+                     LB = 0x0100, RB = 0x0200, A = 0x1000, B = 0x2000, X = 0x4000, Y = 0x8000;
+        static ushort _prev;
+        static bool _padOk = true;
+        static float _repeatAt;
+
+        static ushort Pad()
+        {
+            if (!_padOk) return 0;
+            try
+            {
+                if (XInputGetState(0, out var s) != 0) return 0;
+                ushort b = s.Buttons;
+                // the left stick moves the selection like the d-pad
+                if (s.LY > 16000) b |= Up;
+                if (s.LY < -16000) b |= Down;
+                if (s.LX < -16000) b |= Left;
+                if (s.LX > 16000) b |= Right;
+                return b;
+            }
+            catch (Exception) { _padOk = false; return 0; } // no XInput on this PC
+        }
+
         public static void Update()
         {
-            bool pad = Input.GetKey(KeyCode.JoystickButton6) && Input.GetKeyDown(KeyCode.JoystickButton3);
-            if (Input.GetKeyDown(KeyCode.F6) || pad)
+            ushort now = Pad();
+            ushort pressed = (ushort)(now & ~_prev);
+            // held direction repeats, so you can scroll through a long list
+            const ushort dirs = Up | Down | Left | Right;
+            if ((now & dirs) != 0 && (now & dirs) == (_prev & dirs) && Time.unscaledTime > _repeatAt)
+            {
+                pressed |= (ushort)(now & dirs);
+                _repeatAt = Time.unscaledTime + 0.09f;
+            }
+            else if ((pressed & dirs) != 0) _repeatAt = Time.unscaledTime + 0.35f;
+            _prev = now;
+
+            bool toggle = Input.GetKeyDown(KeyCode.F6) || ((now & Back) != 0 && (pressed & Y) != 0);
+            if (toggle)
             {
                 if (!Plugin.MenuAllowed && !_open)
                 {
                     Toast("The item menu is off for normal play. Turn it on in Frankenstein > Settings, or play in Creative.");
                     return;
                 }
-                _open = !_open;
-                if (_open)
-                {
-                    Refresh();
-                    _oldLock = Cursor.lockState;
-                    _oldVisible = Cursor.visible;
-                }
-                else
-                {
-                    Cursor.lockState = _oldLock;
-                    Cursor.visible = _oldVisible;
-                }
+                if (_open) Close();
+                else Open();
+                return;
             }
-            if (_open)
+            if (!_open) return;
+            Cursor.lockState = CursorLockMode.None;
+            Cursor.visible = true;
+            if (Input.GetKeyDown(KeyCode.Escape) || (pressed & B) != 0) { Close(); return; }
+
+            int n = _shown.Count;
+            if ((pressed & Left) != 0 || Input.GetKeyDown(KeyCode.LeftArrow)) Move(-1);
+            if ((pressed & Right) != 0 || Input.GetKeyDown(KeyCode.RightArrow)) Move(1);
+            if ((pressed & Up) != 0 || Input.GetKeyDown(KeyCode.UpArrow)) Move(-_cols);
+            if ((pressed & Down) != 0 || Input.GetKeyDown(KeyCode.DownArrow)) Move(_cols);
+            if ((pressed & LB) != 0 && _cats.Count > 0) _cat = (_cat + _cats.Count - 1) % _cats.Count;
+            if ((pressed & RB) != 0 && _cats.Count > 0) _cat = (_cat + 1) % _cats.Count;
+            if (n > 0 && _sel < n)
             {
-                Cursor.lockState = CursorLockMode.None;
-                Cursor.visible = true;
-                if (Input.GetKeyDown(KeyCode.Escape)) { _open = false; Cursor.lockState = _oldLock; Cursor.visible = _oldVisible; }
+                if ((pressed & A) != 0 || Input.GetKeyDown(KeyCode.Return)) Give(_shown[_sel], 1);
+                if ((pressed & X) != 0) Give(_shown[_sel], Math.Min(10, _shown[_sel].Stack));
+                if ((pressed & Y) != 0 && (now & Back) == 0) Give(_shown[_sel], _shown[_sel].Stack);
             }
+        }
+
+        static void Move(int by)
+        {
+            if (_shown.Count == 0) return;
+            _sel = Math.Max(0, Math.Min(_shown.Count - 1, _sel + by));
+            // keep the selected tile in view
+            float rowTop = (_sel / _cols) * (TileH + Gap);
+            float viewH = H - 190;
+            if (rowTop < _scroll.y) _scroll.y = rowTop;
+            if (rowTop + TileH > _scroll.y + viewH) _scroll.y = rowTop + TileH - viewH;
+        }
+
+        static void Open()
+        {
+            Refresh();
+            _open = true;
+            _oldLock = Cursor.lockState;
+            _oldVisible = Cursor.visible;
+        }
+
+        static void Close()
+        {
+            _open = false;
+            Cursor.lockState = _oldLock;
+            Cursor.visible = _oldVisible;
         }
 
         static void Toast(string text)
@@ -109,6 +192,18 @@ namespace Frankenstein
             }
         }
 
+        static void DrawIcon(Entry e, Rect at)
+        {
+            if (e.Icon == null) return;
+            try
+            {
+                var t = e.Icon.texture;
+                var r = e.Icon.textureRect;
+                GUI.DrawTextureWithTexCoords(at, t, new Rect(r.x / t.width, r.y / t.height, r.width / t.width, r.height / t.height));
+            }
+            catch (Exception) { e.Icon = null; }
+        }
+
         public static void Draw()
         {
             if (!_open && Time.unscaledTime < _toastUntil)
@@ -118,58 +213,71 @@ namespace Frankenstein
             float x = (Screen.width - W) / 2f, y = (Screen.height - H) / 2f;
             GUI.Box(new Rect(x - 6, y - 6, W + 12, H + 12), "");
             GUI.Box(new Rect(x, y, W, H), "");
-            GUI.Label(new Rect(x + 16, y + 10, 400, 24), "FRANKENSTEIN  ·  Every item in this merge (" + _all.Count + ")");
-            if (GUI.Button(new Rect(x + W - 40, y + 8, 28, 26), "X")) { _open = false; Cursor.lockState = _oldLock; Cursor.visible = _oldVisible; return; }
+            GUI.Box(new Rect(x, y, W, H), "");
+            GUI.Label(new Rect(x + 16, y + 10, 600, 24), "FRANKENSTEIN  ·  Every item in this merge (" + _all.Count + ")");
+            if (GUI.Button(new Rect(x + W - 40, y + 8, 28, 26), "X")) { Close(); return; }
 
             GUI.Label(new Rect(x + 16, y + 42, 60, 24), "Search");
-            _search = GUI.TextField(new Rect(x + 76, y + 40, 300, 26), _search ?? "");
+            _search = GUI.TextField(new Rect(x + 76, y + 40, 320, 26), _search ?? "");
+            GUI.Label(new Rect(x + 410, y + 42, W - 426, 24), "Click: grab 1   ·   Right-click: full stack   ·   Pad: A / X (10) / Y (stack), LB RB category");
 
             // categories, as a row of buttons that wraps
             float cx = x + 16, cy = y + 76;
-            foreach (var c in _cats)
+            for (int i = 0; i < _cats.Count; i++)
             {
-                float w = 14 + c.Length * 8;
+                var c = _cats[i];
+                float w = 16 + c.Length * 8;
                 if (cx + w > x + W - 16) { cx = x + 16; cy += 30; }
-                if (GUI.Toggle(new Rect(cx, cy, w, 26), _cat == c, c, GUI.skin.button)) _cat = c;
+                if (GUI.Toggle(new Rect(cx, cy, w, 26), _cat == i, c, GUI.skin.button)) _cat = i;
                 cx += w + 6;
             }
 
             if (_search != _lastSearch || _cat != _lastCat)
             {
                 var words = (_search ?? "").ToLowerInvariant().Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
-                _shown = _all.Where(e => (_cat == "All" || e.Category == _cat) && words.All(w => e.Search.Contains(w))).ToList();
+                var cat = _cat < _cats.Count ? _cats[_cat] : "All";
+                _shown = _all.Where(e => (cat == "All" || e.Category == cat) && words.All(w => e.Search.Contains(w))).ToList();
                 _lastSearch = _search;
                 _lastCat = _cat;
                 _scroll = Vector2.zero;
+                _sel = 0;
             }
 
-            float top = cy + 38, listH = y + H - top - 34;
-            var view = new Rect(0, 0, W - 48, Math.Max(listH, _shown.Count * Row));
-            _scroll = GUI.BeginScrollView(new Rect(x + 16, top, W - 32, listH), _scroll, view);
-            int first = Math.Max(0, (int)(_scroll.y / Row) - 1), last = Math.Min(_shown.Count, first + (int)(listH / Row) + 3);
-            for (int i = first; i < last; i++)
+            float top = cy + 38, listH = y + H - top - 34, listW = W - 32;
+            _cols = Math.Max(1, (int)((listW - 16) / (Tile + Gap)));
+            int rows = (_shown.Count + _cols - 1) / _cols;
+            var view = new Rect(0, 0, listW - 20, Math.Max(listH, rows * (TileH + Gap)));
+            _scroll = GUI.BeginScrollView(new Rect(x + 16, top, listW, listH), _scroll, view);
+            int firstRow = Math.Max(0, (int)(_scroll.y / (TileH + Gap)) - 1);
+            int lastRow = Math.Min(rows, firstRow + (int)(listH / (TileH + Gap)) + 3);
+            var ev = Event.current;
+            for (int row = firstRow; row < lastRow; row++)
             {
-                var e = _shown[i];
-                float ry = i * Row;
-                if (e.Icon != null)
+                for (int col = 0; col < _cols; col++)
                 {
-                    try
+                    int i = row * _cols + col;
+                    if (i >= _shown.Count) break;
+                    var e = _shown[i];
+                    var r = new Rect(col * (Tile + Gap), row * (TileH + Gap), Tile, TileH);
+                    // a right-click grabs a whole stack; a left-click (the button itself) grabs one
+                    if (ev != null && ev.type == EventType.MouseDown && ev.button == 1 && r.Contains(ev.mousePosition))
                     {
-                        var t = e.Icon.texture;
-                        var r = e.Icon.textureRect;
-                        GUI.DrawTextureWithTexCoords(new Rect(4, ry + 4, 36, 36), t,
-                            new Rect(r.x / t.width, r.y / t.height, r.width / t.width, r.height / t.height));
+                        _sel = i;
+                        Give(e, e.Stack);
+                        ev.Use();
                     }
-                    catch (Exception) { e.Icon = null; }
+                    string label = e.Name.Length > 22 ? e.Name.Substring(0, 21) + "…" : e.Name;
+                    if (GUI.Button(r, "")) { _sel = i; Give(e, 1); }
+                    if (i == _sel) GUI.Box(new Rect(r.x - 2, r.y - 2, r.width + 4, r.height + 4), "");
+                    DrawIcon(e, new Rect(r.x + (Tile - 64) / 2, r.y + 8, 64, 64));
+                    if (e.Icon == null) GUI.Label(new Rect(r.x + 8, r.y + 30, Tile - 16, 24), e.Category);
+                    GUI.Label(new Rect(r.x + 6, r.y + 76, Tile - 12, 40), label);
                 }
-                if (GUI.Button(new Rect(48, ry + 4, W - 300, 36), e.Name + "   (" + e.Category + ")")) Give(e, 1);
-                if (GUI.Button(new Rect(W - 244, ry + 4, 56, 36), "x1")) Give(e, 1);
-                if (GUI.Button(new Rect(W - 184, ry + 4, 56, 36), "x10")) Give(e, Math.Min(10, e.Stack));
-                if (GUI.Button(new Rect(W - 124, ry + 4, 72, 36), "Stack")) Give(e, e.Stack);
             }
             GUI.EndScrollView();
+            var selName = _sel < _shown.Count ? _shown[_sel].Name + "  (" + _shown[_sel].Category + ")" : "";
             GUI.Label(new Rect(x + 16, y + H - 28, W - 32, 24),
-                Time.unscaledTime < _toastUntil ? _toast : _shown.Count + " shown  ·  F6 or Esc to close  ·  items go to your inventory");
+                Time.unscaledTime < _toastUntil ? _toast : _shown.Count + " shown  ·  " + selName + "  ·  F6, Esc or B to close");
         }
     }
 }

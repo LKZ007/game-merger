@@ -725,6 +725,7 @@ function addsHtml(a) {
   const line = (x) => `<li><strong>${esc(x.slot)}</strong>: ${esc(x.mod)} <span class="muted small">from ${esc(x.source)}${x.extra ? `, plus ${x.extra} mod${x.extra > 1 ? "s" : ""} it needs` : ""}${x.creative ? " · creative only" : ""}</span></li>`;
   return `<div class="adds">
     ${ok.length || a.builtin.length ? `<p class="muted">Brought over${a.source ? " from " + esc(a.source) : ""}:</p><ul>${ok.map(line).join("")}${a.builtin.map((b) => `<li><strong>Frankenstein</strong>: ${esc(b)}</li>`).join("")}</ul>` : `<p class="muted">Nothing added automatically yet. Press Auto-fill on the merge.</p>`}
+    ${(a.arsenal || []).length ? `<p class="muted">${esc(a.source)}'s guns, in this game:</p><table class="small" style="width:100%">${a.arsenal.map((g) => `<tr><td><strong>${esc(g.gun)}</strong></td><td>${esc(g.as)}</td><td><span class="tag">${g.match === "close" ? "close match" : "rough stand-in"}</span></td></tr>`).join("")}</table><p class="muted small">They're in your starter kit (renamed to ${esc(a.source)}'s names) and in the item menu. Not checked in game yet.</p>` : ""}
     ${miss.length ? `<p class="muted">Couldn't bring over:</p><ul>${miss.map((x) => `<li><strong>${esc(x.slot)}</strong>: ${esc(x.why)}. <span class="muted small">Try Add mods and search “${esc(x.search || "")}”.</span></li>`).join("")}</ul>` : ""}
     <p class="muted small">Only mods made for the main game are installed. Nothing is copied out of the other game.</p></div>`;
 }

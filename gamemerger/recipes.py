@@ -31,6 +31,10 @@ class Framework:
 class Slot:
     name: str
     search: str
+    prefer: str = ""  # a mod picked by hand for this slot (matched by name), tried before the search results
+    github: str = ""  # or a tool published on its own GitHub page
+    asset: str = ""
+    flat_root: bool = False
 
 
 @dataclass

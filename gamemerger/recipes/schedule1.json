@@ -71,8 +71,14 @@
       ],
       "slots": [
         {
-          "name": "Guns (pistols, SMGs, rifles)",
-          "search": "guns"
+          "name": "Hood Warfare guns (AK, SMG, sniper, RPG, minigun)",
+          "search": "more guns",
+          "prefer": "More Guns Forked"
+        },
+        {
+          "name": "Police that shoot back",
+          "search": "police response",
+          "prefer": "Police Response Overhaul"
         },
         {
           "name": "More weapons",
@@ -81,10 +87,6 @@
         {
           "name": "Gangs, NPCs and combat",
           "search": "combat"
-        },
-        {
-          "name": "Police and wanted level",
-          "search": "police"
         },
         {
           "name": "Vehicles",
