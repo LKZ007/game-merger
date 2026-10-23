@@ -360,6 +360,8 @@ class FeatureChecklist(unittest.TestCase):
         self.assertIn("OwnItems.IdOf(d.Key)", read(ROOT, "mods", "schedule1", "OwnGuns.cs"))      # F6 gives that item
         self.assertIn('OwnItems.IdOf("launcher")', read(ROOT, "mods", "schedule1", "Boom.cs"))
         self.assertIn("SkinnedMeshRenderer", read(ROOT, "mods", "schedule1", "Looks.cs"))          # the held model is swapped
+        self.assertIn("OwnItems.CheckGiven", read(ROOT, "mods", "schedule1", "OwnGuns.cs"))         # what really landed is written down
+        self.assertIn('Rt.Find("ScheduleOne.Registry")', own)                                        # the game's own registry, by full name
         guns = read(ROOT, "mods", "schedule1", "OwnGuns.cs")
         self.assertIn("Spread = 0.15", guns)                    # the sniper is tight
         self.assertIn("Rate = 5.5", guns)                       # the Uzi fires fastest

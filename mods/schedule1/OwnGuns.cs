@@ -55,6 +55,7 @@ namespace Frankenstein
         public static void Give(Def d)
         {
             var own = OwnItems.IdOf(d.Key);
+            OwnItems.CheckGiven(d.Key, own);
             if (own != null)
             {
                 // its own item: the hotbar shows the gun's own name and icon

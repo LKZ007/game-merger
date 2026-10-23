@@ -3,6 +3,12 @@
 Every release, newest first. Downloads are on the [releases page](https://github.com/LKZ007/game-merger/releases).
 The app was called Game Merger before 3.8.0.
 
+## v3.40.1 (2026-10-23)
+- **Own guns: a fuller check of why they still spawn as the base gun.** On 3.38 the sniper, AK, Uzi, RPG and launcher still came out as the revolver, M1911 and shotgun. That means the game didn't take Frankenstein's new items.
+  - Frankenstein now finds the game's item registry more reliably and writes every step to `UserData\Frankenstein\ownitems-debug.txt`, including where it stopped.
+  - Each time you take one of these guns from F6, it also writes what actually landed in your hotbar (item, name, icon).
+- Not tested in game yet.
+
 ## v3.40.0 (2026-10-23)
 - **Every merge is now checked against one minimum standard: everything the Schedule I merge has.** That means the main menu, loading screen, Profiles, in-game Creative, the item spawner, own weapons with real stats, a crosshair per weapon, own cars, gangs and NPCs, the controller, Save Game and debug logs.
   - Each merge card has a **Standard x/12** tag. Click it to see the checklist, with an honest note on each line: built by Frankenstein, done by the game itself, partly there, still to come, or not possible in that game.

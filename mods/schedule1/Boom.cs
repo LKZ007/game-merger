@@ -94,6 +94,7 @@ namespace Frankenstein
             Load();
             _shotgun = _shotgun ?? Story.ItemId("pumpshotgun") ?? Story.ItemId("shotgun");
             var own = OwnItems.IdOf("launcher");
+            OwnItems.CheckGiven("launcher", own);
             if (own != null)
             {
                 S1API.Console.ConsoleHelper.AddItemToInventory(own, 1);
