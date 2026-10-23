@@ -93,6 +93,48 @@ namespace Frankenstein
 
         static void Fill(Rect r, Color c) => Paint.Fill(r, c);
 
+        /// <summary>Like levy's reference: the night city, the title lockup in the middle, LOADING..., a green bar
+        /// and the tagline. One scene, painted by the app.</summary>
+        static void DrawScene(float W, float H, float t)
+        {
+            var back = MenuSkin.Backdrop();
+            float a = back.width / (float)back.height, z = 1.03f + 0.002f * Math.Min(t, 40f), bw = Mathf.Max(W, H * a) * z, bh = bw / a;
+            Paint.Picture(new Rect((W - bw) / 2 - 6f * (float)Math.Sin(t * 0.07f), (H - bh) / 2, bw, bh), back);
+            Fill(new Rect(0, 0, W, H), new Color(0, 0, 0, 0.35f));
+            var logo = MenuSkin.Logo();
+            float y = H * 0.24f;
+            if (logo != null)
+            {
+                float lh = H * 0.24f, lw = lh * logo.width / logo.height;
+                if (lw > W * 0.7f) { lw = W * 0.7f; lh = lw * logo.height / logo.width; }
+                Paint.Picture(new Rect((W - lw) / 2, y, lw, lh), logo);
+                y += lh + H * 0.08f;
+            }
+            else y = H * 0.55f;
+            if (_center == null)
+            {
+                _center = new GUIStyle(GUI.skin.label) { fontSize = Math.Max(20, (int)(H * 0.034f)), richText = true };
+                _centerSmall = new GUIStyle(GUI.skin.label) { fontSize = Math.Max(13, (int)(H * 0.02f)), richText = true };
+                foreach (var st in new[] { _center, _centerSmall })
+                {
+                    var p = st.GetType().GetProperty("alignment");
+                    try { p?.SetValue(st, System.Enum.ToObject(p.PropertyType, 4), null); } catch (Exception) { }
+                }
+            }
+            GUI.Label(new Rect(0, y, W, H * 0.05f), "<b>LOADING" + new string('.', 1 + (int)(t * 2) % 3) + "</b>", _center);
+            float bw2 = W * 0.36f, bx = (W - bw2) / 2, by = y + H * 0.065f;
+            Fill(new Rect(bx - 2, by - 2, bw2 + 4, 12), new Color(1, 1, 1, 0.35f));
+            Fill(new Rect(bx, by, bw2, 8), new Color(0.06f, 0.07f, 0.08f, 0.9f));
+            float p2 = 1f - 1f / (1f + t * 0.12f);  // eases toward full while the game loads
+            Fill(new Rect(bx, by, bw2 * p2, 8), new Color(0.27f, 0.72f, 0.29f));
+            string tag = Sub.Length > 0 ? Sub : "Build your empire. Run your block.";
+            GUI.Label(new Rect(0, by + H * 0.03f, W, H * 0.04f), "<color=#C9CDD4>" + tag + "</color>", _centerSmall);
+            if (Tips.Count > 0)
+                GUI.Label(new Rect(0, H * 0.9f, W, H * 0.04f), "<color=#9CA3AF>" + Tips[(int)(t / 6f) % Tips.Count] + "</color>", _centerSmall);
+        }
+
+        static GUIStyle _center, _centerSmall;
+
         static string Hex(Color c) => "#" + ((int)(c.r * 255)).ToString("X2") + ((int)(c.g * 255)).ToString("X2") + ((int)(c.b * 255)).ToString("X2");
 
         public static void Draw()
@@ -105,6 +147,7 @@ namespace Frankenstein
             if (!now) return;
             Art();
             float W = Screen.width, H = Screen.height, t = Time.unscaledTime - _since;
+            if (MenuSkin.Backdrop() != null) { DrawScene(W, H, t); return; }
             Fill(new Rect(0, 0, W, H), new Color(0.03f, 0.02f, 0.05f));
             if (_art != null)
             {

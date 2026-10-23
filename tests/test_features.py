@@ -2,6 +2,7 @@
 earlier update goes missing. Add a line here whenever a release adds a feature."""
 import json
 import os
+import tempfile
 import re
 import unittest
 
@@ -302,6 +303,31 @@ class FeatureChecklist(unittest.TestCase):
         self.assertIn("fold_creative", api)
         self.assertNotIn('merge_id + "~creative" if creative', api, "one set of saves")
         self.assertIn("_members", read(ROOT, "mods", "schedule1", "Rt.cs"))  # reflection cached: less lag
+
+    def test_336_menu_like_reference_profiles_skip_tutorial(self):
+        dll = open(os.path.join(PKG, "mods", "schedule1", "Frankenstein.dll"), "rb").read()
+        for word in ("menu-backdrop.jpg", "title.png", "PROFILES", "Multiplayer", "Build your empire. Run your block.",
+                     "tutorial-debug.txt", "SkipTutorial", "StartGame"):
+            self.assertIn(word.encode("utf-16-le"), dll, word)
+        skin = read(ROOT, "mods", "schedule1", "MenuSkin.cs")
+        self.assertIn("Paint.Fill(new Rect(0, 0, W, H)", skin)   # one scene over the game's own menu, nothing shows through
+        self.assertIn("Pad.Pressed & Pad.B", skin)                # controller on the profiles screen
+        self.assertIn("Skip.Scene(sceneName)", read(ROOT, "mods", "schedule1", "Plugin.cs"))
+        self.assertIn("Cursor.lockState != CursorLockMode.Locked", read(ROOT, "mods", "schedule1", "Creative.cs"))  # storage moves, doesn't copy
+        drop = read(ROOT, "mods", "schedule1", "Drop.cs")
+        self.assertIn("Pad.RB", drop)                              # pick a slot with the inventory open
+        self.assertIn("Creative.Forget()", drop)                   # a drop isn't put back
+        self.assertIn("LB / RB pick a slot".encode("utf-16-le"), dll)
+        from gamemerger import menuart
+        from PIL import Image
+        d = tempfile.mkdtemp()
+        menuart.backdrop(os.path.join(d, "b.jpg"), size=(480, 270))
+        menuart.title(os.path.join(d, "t.png"), "Schedule I", "Hood Warfare", height=120)
+        self.assertEqual(Image.open(os.path.join(d, "b.jpg")).size, (480, 270))
+        t = Image.open(os.path.join(d, "t.png"))
+        self.assertEqual(t.mode, "RGBA")
+        self.assertGreater(t.width, t.height * 2)
+        self.assertIn("_menu_art", read(PKG, "api.py"))
 
     def test_335_own_weapon_looks_cars_and_car_entry(self):
         dll = open(os.path.join(PKG, "mods", "schedule1", "Frankenstein.dll"), "rb").read()

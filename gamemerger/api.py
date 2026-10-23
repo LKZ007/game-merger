@@ -55,8 +55,8 @@ BUILTIN = {
                   "settings": "UserData/Frankenstein/settings.json", "bridge": "UserData/Frankenstein/commands.json",
                   "catalog": "UserData/Frankenstein/world.json",
                   "what": "Item menu: press F6 (or Back + Y) in game for every item, mods' items included.",
-                  "ingame": "Frankenstein's main menu: Continue, New Game, Creative (a new world with unlimited resources), Settings and Quit, "
-                            "like Minecraft; each save keeps its own mode. While you play: F8 switches this save's mode, F6 (or Back + Y) for "
+                  "ingame": "Frankenstein's main menu over a night city: Continue, New Game, Creative (a new world with unlimited resources, "
+                            "skipping the tutorial), Multiplayer, Settings, Profiles (a card per save) and Quit; each save keeps its own mode. While you play: F8 switches this save's mode, F6 (or Back + Y) for "
                             "every item, F9 for the gangs, F10 for who's who on the streets (Hood Warfare merges), T to throw a grenade. "
                             "Controller: hold View for a wheel with all of it, d-pad down drops what's in your hand."},
     "cyberpunk2077": {"label": "Frankenstein sandbox menu", "dest": "bin/x64/plugins/cyber_engine_tweaks/mods",
@@ -2480,8 +2480,36 @@ class Api:
                 except Exception:
                     pass  # no picture: the loading screen still shows the title and tips
             threading.Thread(target=art, daemon=True).start()
+        self._menu_art(m, theme, ext)
         self._moreguns_cfg(m, theme)
         return out
+
+    MENU_ART = "1"  # bump when the painted menu art changes, so merges get the new one
+
+    @staticmethod
+    def _menu_art(m, theme, ext):
+        """The in-game menu's and loading screen's own art: a night city backdrop and the title lockup."""
+        folder = os.path.join(m.target_path, "UserData", "Frankenstein")
+        mark = os.path.join(folder, "menu-art.txt")
+        key = "%s|%s|%s" % (Api.MENU_ART, m.data.get("game_name") or "Schedule I", ext)
+        try:
+            with open(mark, encoding="utf-8") as f:
+                if f.read() == key and os.path.isfile(os.path.join(folder, "title.png")):
+                    return
+        except OSError:
+            pass
+
+        def paint():
+            try:
+                from . import menuart
+                accent = (225, 29, 72) if theme == "hoodwarfare" else (139, 92, 246)
+                menuart.backdrop(os.path.join(folder, "menu-backdrop.jpg"), accent, seed=sum(map(ord, m.id)) % 97)
+                menuart.title(os.path.join(folder, "title.png"), m.data.get("game_name") or "Schedule I", ext or m.name, accent)
+                with open(mark, "w", encoding="utf-8") as f:
+                    f.write(key)
+            except Exception:
+                pass  # no Pillow: the menu draws its title in text over a dark background
+        threading.Thread(target=paint, daemon=True).start()
 
     @staticmethod
     def _moreguns_cfg(m, theme):

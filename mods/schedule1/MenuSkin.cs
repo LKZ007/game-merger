@@ -9,12 +9,13 @@ using UnityEngine;
 
 namespace Frankenstein
 {
-    /// <summary>Schedule I's main menu, redrawn: big cards (Continue "Load your world", New Game "Start a new world",
-    /// Creative "Unlimited resources", Settings, Quit) with a picture of the merge on the right, like the mockup.
-    /// Drawn by Frankenstein itself over the game's menu, so it doesn't depend on copying the game's own rows (which
-    /// this build of the game wouldn't take). The game's own list is shrunk out of sight, and each card presses the
-    /// game's own button, so Continue, New Game, Settings and Quit do exactly what the game does. Creative starts a
-    /// new world in Creative (see Mode). Mouse, keyboard (arrows, Enter) and controller (d-pad or stick, A).</summary>
+    /// <summary>Schedule I's main menu, redrawn like levy's reference: a night city backdrop over the whole screen
+    /// (the game's own title, credits and 3D scene are covered), the merge's title lockup at the top left, a flat
+    /// list with icons (Continue, New Game, Creative, Multiplayer, Settings, Profiles, Quit) where the chosen row
+    /// gets a green glow, your latest save's cash and rank at the top right, and the version at the bottom right.
+    /// Profiles shows a card per save slot. The art is painted by the app (menu-backdrop.jpg, title.png). Each row
+    /// presses the game's own button, so everything does what the game does; the game's list is shrunk out of sight.
+    /// Mouse, keyboard (arrows, Enter, Esc) and controller (d-pad or stick, A, B).</summary>
     internal static class MenuSkin
     {
         class Card
@@ -31,9 +32,8 @@ namespace Frankenstein
         static int _sel;
         static bool _found, _navOff;
         static object _eventSystem;
-        static Texture2D _art;
         static readonly Dictionary<string, Texture2D> _icons = new Dictionary<string, Texture2D>();
-        static GUIStyle _title, _sub, _chev, _cap, _capSub, _small;
+        static GUIStyle _small;
         static string _note = "";
 
         public static bool Active => _found && Showing;
@@ -48,6 +48,7 @@ namespace Frankenstein
             _anchor = null;
             _list = null;
             _sel = 0;
+            _profiles = false;
             _note = "";
             _scanAt = inMenu ? Time.unscaledTime + 0.5f : -1;
             _until = inMenu ? Time.unscaledTime + 30f : -1;
@@ -72,18 +73,19 @@ namespace Frankenstein
             var want = new[]
             {
                 new[] { "continue", "Continue", "Load your world", "play" },
-                new[] { "new game", "New Game", "Start a new world", "cube" },
+                new[] { "new game", "New Game", "Start a new world", "plus" },
                 new[] { "", "Creative", "Unlimited resources", "brush" },
+                new[] { "invite friends", "Multiplayer", "Invite friends to your game", "people" },
                 new[] { "settings", "Settings", "Adjust your game", "gear" },
-                new[] { "credits", "Credits", "Who made it", "" },
+                new[] { "", "Profiles", "Your saves", "person" },
                 new[] { "quit", "Quit", "Exit to desktop", "exit" },
             };
             var made = new List<Card>();
             GameObject anchor = null;
             foreach (var w in want)
             {
-                if (w[0].Length == 0) { made.Add(new Card { Key = "creative", Title = w[1], Sub = w[2], Icon = w[3] }); continue; }
-                var hit = texts.FirstOrDefault(x => x.s == w[0] || x.s.Replace(" ", "") == w[0].Replace(" ", ""));
+                if (w[0].Length == 0) { made.Add(new Card { Key = w[1].ToLowerInvariant(), Title = w[1], Sub = w[2], Icon = w[3] }); continue; }
+                var hit = texts.FirstOrDefault(x => x.s == w[0] || x.s.Replace(" ", "") == w[0].Replace(" ", "") || (w[0] == "invite friends" && x.s.StartsWith("invite")));
                 if (hit == null) continue;
                 var go = Rt.GameObjectOf(hit.t);
                 if (w[0] == "new game") anchor = go;
@@ -148,6 +150,7 @@ namespace Frankenstein
 
         static void Choose(Card c)
         {
+            if (c.Key == "profiles") { _profiles = true; _card = 0; Profiles.Forget(); return; }
             if (c.Key == "creative")
             {
                 // a new world in Creative: the next game you start gets it, then the game's own New Game screen
@@ -182,11 +185,42 @@ namespace Frankenstein
             if (showing != !_navOff) NavOff(showing);
             if (!showing || _cards.Count == 0) return;
             int n = _cards.Count;
-            if ((Pad.Pressed & Pad.Down) != 0 || Input.GetKeyDown(KeyCode.DownArrow) || Input.GetKeyDown(KeyCode.S)) _sel = (_sel + 1) % n;
-            if ((Pad.Pressed & Pad.Up) != 0 || Input.GetKeyDown(KeyCode.UpArrow) || Input.GetKeyDown(KeyCode.W)) _sel = (_sel + n - 1) % n;
-            if (_stickReady && Mathf.Abs(Pad.Stick.y) > 0.6f) { _sel = (_sel + (Pad.Stick.y < 0 ? 1 : n - 1)) % n; _stickReady = false; }
+            if (!_profiles && ((Pad.Pressed & Pad.Down) != 0 || Input.GetKeyDown(KeyCode.DownArrow) || Input.GetKeyDown(KeyCode.S))) _sel = (_sel + 1) % n;
+            if (!_profiles && ((Pad.Pressed & Pad.Up) != 0 || Input.GetKeyDown(KeyCode.UpArrow) || Input.GetKeyDown(KeyCode.W))) _sel = (_sel + n - 1) % n;
+            if (!_profiles && _stickReady && Mathf.Abs(Pad.Stick.y) > 0.6f) { _sel = (_sel + (Pad.Stick.y < 0 ? 1 : n - 1)) % n; _stickReady = false; }
             if (Mathf.Abs(Pad.Stick.y) < 0.3f) _stickReady = true;
-            if ((Pad.Pressed & Pad.A) != 0 || Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.KeypadEnter)) Choose(_cards[_sel]);
+            bool ok = (Pad.Pressed & Pad.A) != 0 || Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.KeypadEnter);
+            if (_profiles)
+            {
+                // the cards go left and right; B or Esc goes back to the list
+                if ((Pad.Pressed & Pad.Right) != 0 || Input.GetKeyDown(KeyCode.RightArrow) || Input.GetKeyDown(KeyCode.D)) _card = Math.Min(Profiles.Slots - 1, _card + 1);
+                if ((Pad.Pressed & Pad.Left) != 0 || Input.GetKeyDown(KeyCode.LeftArrow) || Input.GetKeyDown(KeyCode.A)) _card = Math.Max(0, _card - 1);
+                if (_stickX && Mathf.Abs(Pad.Stick.x) > 0.6f) { _card = Mathf.Clamp(_card + (Pad.Stick.x > 0 ? 1 : -1), 0, Profiles.Slots - 1); _stickX = false; }
+                if (Mathf.Abs(Pad.Stick.x) < 0.3f) _stickX = true;
+                if ((Pad.Pressed & Pad.B) != 0 || Input.GetKeyDown(KeyCode.Escape)) _profiles = false;
+                else if (ok) PlaySlot(Profiles.All()[_card]);
+                return;
+            }
+            if (ok) Choose(_cards[_sel]);
+        }
+
+        static bool _profiles, _stickX = true;
+        static int _card;
+
+        static void PlaySlot(Profiles.Slot s)
+        {
+            if (s.Empty)
+            {
+                var ng = _cards.FirstOrDefault(x => x.Key == "new game");
+                if (ng != null) Choose(ng);
+                return;
+            }
+            _note = "Loading " + s.Name + "...";
+            if (Profiles.Play(s)) return;
+            var cont = _cards.FirstOrDefault(x => x.Key == "continue");
+            _note = "Pick " + s.Name + " on the game's own screen.";
+            _profiles = false;
+            if (cont != null) Choose(cont);
         }
 
         static bool _stickReady = true;
@@ -215,6 +249,15 @@ namespace Frankenstein
                             on = Mathf.Abs(fx) + Mathf.Abs(fy) * 1.7f < 30 && (Mathf.Abs(fx) > 2 || fy > 0) && !(fy > -1 && fy < 2 && Mathf.Abs(fx) < 26);
                             break;
                         case "brush": { float d = Mathf.Abs(fx + fy) / 1.414f; on = d < 5 && fx - fy > -40 && fx - fy < 30 || (r < 9 && fx < -14 && fy < -14); } break;
+                        case "plus": on = (Mathf.Abs(fx) < 4 && Mathf.Abs(fy) < 24) || (Mathf.Abs(fy) < 4 && Mathf.Abs(fx) < 24); break;
+                        case "person": on = Mathf.Sqrt(fx * fx + (fy - 12) * (fy - 12)) < 11 || (fy < -4 && fy > -28 && Mathf.Abs(fx) < 20 - (fy + 28) * 0.15f && !(fy > -8 && Mathf.Abs(fx) > 14)); break;
+                        case "people":
+                        {
+                            float bx = fx + 9, cx2 = fx - 12;
+                            on = Mathf.Sqrt(bx * bx + (fy - 10) * (fy - 10)) < 9 || (fy < -2 && fy > -24 && Mathf.Abs(bx) < 16) ||
+                                 Mathf.Sqrt(cx2 * cx2 + (fy - 13) * (fy - 13)) < 7 || (fy < 2 && fy > -18 && cx2 > -4 && cx2 < 13);
+                        }
+                        break;
                         case "gear": { float a = Mathf.Atan2(fy, fx); float teeth = Mathf.Cos(a * 8) > 0.3f ? 29 : 23; on = r < teeth && r > 10; } break;
                         case "exit": on = (x > 10 && x < 40 && (y < 16 || y > 48 || x < 16) && y > 10 && y < 54) || (Mathf.Abs(fy) < 3 && x > 24 && x < 56) || (x > 44 && x < 56 && Mathf.Abs(fy) < (56 - x)); break;
                     }
@@ -225,24 +268,37 @@ namespace Frankenstein
             return t;
         }
 
+        static GUIStyle _row, _top, _ver, _cardName, _cardSmall, _cardBig, _btn;
+        static Texture2D _back, _logo;
+        static bool _artTried;
+
         static void Styles(float k)
         {
-            if (_title != null && _title.fontSize == (int)(30 * k)) return;
-            _title = new GUIStyle(GUI.skin.label) { fontSize = (int)(30 * k) };
-            Enum(_title, "fontStyle", 1);  // bold (the enum's assembly isn't one Frankenstein builds against)
-            _title.normal.textColor = Color.white;
-            _sub = new GUIStyle(GUI.skin.label) { fontSize = (int)(16 * k) };
-            _sub.normal.textColor = new Color(0.68f, 0.78f, 0.82f);
-            _chev = new GUIStyle(GUI.skin.label) { fontSize = (int)(30 * k) };
-            Enum(_chev, "alignment", 4);  // middle centre
-            _chev.normal.textColor = new Color(0.75f, 0.8f, 0.85f);
-            _cap = new GUIStyle(GUI.skin.label) { fontSize = (int)(22 * k), wordWrap = true };
-            Enum(_cap, "fontStyle", 1);
-            _cap.normal.textColor = Color.white;
-            _capSub = new GUIStyle(GUI.skin.label) { fontSize = (int)(15 * k), wordWrap = true };
-            _capSub.normal.textColor = new Color(0.68f, 0.78f, 0.82f);
-            _small = new GUIStyle(GUI.skin.label) { fontSize = (int)(14 * k), wordWrap = true };
-            _small.normal.textColor = new Color(0.75f, 0.85f, 0.8f);
+            if (_row != null && _row.fontSize == (int)(26 * k)) return;
+            Func<int, Color, bool, GUIStyle> make = (size, c, bold) =>
+            {
+                var st = new GUIStyle(GUI.skin.label) { fontSize = size, wordWrap = false };
+                st.normal.textColor = c;
+                if (bold) Enum(st, "fontStyle", 1);
+                return st;
+            };
+            var white = new Color(0.94f, 0.95f, 0.96f);
+            _row = make((int)(26 * k), white, false);
+            Enum(_row, "alignment", 3);  // middle left
+            _top = make((int)(18 * k), white, true);
+            Enum(_top, "alignment", 4);
+            _ver = make((int)(13 * k), new Color(0.65f, 0.67f, 0.72f), false);
+            Enum(_ver, "alignment", 5);  // middle right
+            _cardName = make((int)(24 * k), white, true);
+            Enum(_cardName, "alignment", 4);
+            _cardSmall = make((int)(15 * k), new Color(0.7f, 0.73f, 0.78f), false);
+            Enum(_cardSmall, "alignment", 4);
+            _cardBig = make((int)(46 * k), white, true);
+            Enum(_cardBig, "fontStyle", 3);  // bold italic, like the reference's PROFILES
+            _btn = make((int)(20 * k), white, true);
+            Enum(_btn, "alignment", 4);
+            _small = make((int)(15 * k), new Color(0.75f, 0.85f, 0.8f), false);
+            _small.wordWrap = true;
         }
 
         static void Enum(object o, string prop, int value)
@@ -263,76 +319,171 @@ namespace Frankenstein
             Paint.Fill(new Rect(r.xMax - th, r.y, th, r.height), line);
         }
 
+        static Texture2D Load(params string[] names)
+        {
+            foreach (var n in names)
+            {
+                var p = Path.Combine(MelonEnvironment.UserDataDirectory, "Frankenstein", n);
+                if (File.Exists(p)) try { var t = Rt.LoadImage(File.ReadAllBytes(p)); if (t != null) return t; } catch (Exception) { }
+            }
+            return null;
+        }
+
+        internal static Texture2D Backdrop() { Art(); return _back; }
+        internal static Texture2D Logo() { Art(); return _logo; }
+
+        static void Art()
+        {
+            if (_artTried) return;
+            _artTried = true;
+            _back = Load("menu-backdrop.jpg", "menu-backdrop.png");
+            _logo = Load("title.png");
+        }
+
+        static readonly Color Green = new Color(0.27f, 0.72f, 0.29f);
+
+        /// <summary>A green bar that fades out to the right, like the reference's chosen row.</summary>
+        static void Glow(Rect r)
+        {
+            const int steps = 24;
+            for (int i = 0; i < steps; i++)
+            {
+                float f = i / (float)steps;
+                Paint.Fill(new Rect(r.x + r.width * f, r.y, r.width / steps + 1, r.height), new Color(Green.r, Green.g, Green.b, 0.95f * (1f - f) * (1f - f) + 0.04f));
+            }
+        }
+
         public static void Draw()
         {
             if (!Active) return;
-            float k = Mathf.Clamp(Screen.height / 1080f, 0.6f, 2f);
+            Art();
+            float W = Screen.width, H = Screen.height, k = Mathf.Clamp(H / 1080f, 0.6f, 2f);
             Styles(k);
-            var green = new Color(0.25f, 0.86f, 0.3f);
-            float x = Screen.width * 0.06f, y = Screen.height * 0.33f, w = 560 * k, h = 82 * k, gap = 14 * k;
+            // one scene over everything: the game's title, credits and 3D menu are covered
+            Paint.Fill(new Rect(0, 0, W, H), new Color(0.03f, 0.03f, 0.06f));
+            if (_back != null)
+            {
+                float a = _back.width / (float)_back.height, bw = Mathf.Max(W, H * a), bh = bw / a;
+                Paint.Picture(new Rect((W - bw) / 2, (H - bh) / 2, bw, bh), _back);
+            }
             var m = Event.current.mousePosition;
             bool moved = (m - _lastMouse).sqrMagnitude > 1f;
             if (Event.current.type == EventType.Repaint) _lastMouse = m;
+            // the title lockup, top left
+            float x = W * 0.045f, top = H * 0.06f;
+            if (_logo != null)
+            {
+                float lh = H * 0.16f, lw = lh * _logo.width / _logo.height;
+                if (lw > W * 0.42f) { lw = W * 0.42f; lh = lw * _logo.height / _logo.width; }
+                Paint.Picture(new Rect(x, top, lw, lh), _logo);
+            }
+            else GUI.Label(new Rect(x, top, W * 0.5f, 60 * k), (World.Host.Length > 0 ? World.Host : "Schedule I").ToUpperInvariant() + "  ×  " + (MainMenu.Merge.Length > 0 ? MainMenu.Merge : "Frankenstein").ToUpperInvariant(), _cardBig);
+            if (_profiles) DrawProfiles(W, H, k, m, moved);
+            else DrawList(W, H, k, m, moved);
+            DrawTopBar(W, H, k);
+            string ver = "v" + Application.version + "  ·  Frankenstein " + Plugin.Version;
+            GUI.Label(new Rect(W - 420 * k, H - 40 * k, 400 * k, 28 * k), ver, _ver);
+        }
+
+        static void DrawList(float W, float H, float k, Vector2 m, bool moved)
+        {
+            float x = W * 0.045f, y = H * 0.3f, w = 640 * k, h = 62 * k;
             for (int i = 0; i < _cards.Count; i++)
             {
                 var c = _cards[i];
-                bool small = c.Key == "credits";
-                var r = new Rect(x, y, small ? w * 0.5f : w, small ? h * 0.55f : h);
-                y += r.height + gap;
+                var r = new Rect(x, y, w, h);
+                y += h;
                 if (moved && r.Contains(m)) _sel = i;
                 bool on = i == _sel;
-                Paint.Fill(r, on ? new Color(0.1f, 0.42f, 0.14f, 0.92f) : new Color(0.04f, 0.07f, 0.09f, 0.86f));
-                if (on) Paint.Fill(new Rect(r.x, r.y, r.width * 0.22f, r.height), new Color(0.02f, 0.05f, 0.03f, 0.55f));
-                Frame(r, on ? green : new Color(0.32f, 0.4f, 0.46f, 0.9f), on ? 3 * k : 2 * k);
-                if (small)
+                if (on) Glow(r);
+                else Paint.Fill(new Rect(r.x, r.yMax - 1, r.width * 0.8f, 1), new Color(1, 1, 1, 0.1f));
+                var ic = Icon(c.Icon);
+                if (ic != null) Paint.Picture(new Rect(r.x + 20 * k, r.y + (h - 30 * k) / 2, 30 * k, 30 * k), ic);
+                string title = c.Title;
+                if (c.Key == "creative" && Mode.Pending == "creative") title += "  ·  next game";
+                GUI.Label(new Rect(r.x + 72 * k, r.y, w - 90 * k, h), title, _row);
+                if (GUI.Button(r, "", GUIStyle.none)) { _sel = i; Choose(c); }
+            }
+            string hint = _sel < _cards.Count ? _cards[_sel].Sub : "";
+            if (_note.Length > 0) hint = _note;
+            GUI.Label(new Rect(x + 20 * k, y + 16 * k, w, 40 * k), hint, _small);
+            if (Pad.InUse) GUI.Label(new Rect(x + 20 * k, H - 50 * k, w, 30 * k), "A  select   ·   d-pad  move", _small);
+        }
+
+        static void DrawTopBar(float W, float H, float k)
+        {
+            var last = Profiles.Latest();
+            float bh = 46 * k, y = 26 * k, gear = 46 * k;
+            float x = W - 30 * k - gear;
+            var g = new Rect(x, y, gear, bh);
+            Paint.Fill(g, new Color(0.08f, 0.09f, 0.12f, 0.85f));
+            Paint.Picture(new Rect(g.x + 10 * k, g.y + 9 * k, 28 * k, 28 * k), Icon("gear"));
+            if (GUI.Button(g, "", GUIStyle.none)) { var st = _cards.FirstOrDefault(c => c.Key == "settings"); if (st != null) Choose(st); }
+            if (last == null) return;
+            string cash = Profiles.Money(last.Cash), rank = double.IsNaN(last.Rank) ? (last.Mode == "creative" ? "CREATIVE" : "SURVIVAL") : "LV " + (int)last.Rank;
+            float bw = 330 * k;
+            var bar = new Rect(x - 12 * k - bw, y, bw, bh);
+            Paint.Fill(bar, new Color(0.08f, 0.09f, 0.12f, 0.85f));
+            GUI.Label(new Rect(bar.x, bar.y, bw * 0.55f, bh), cash, _top);
+            Paint.Fill(new Rect(bar.x + bw * 0.55f, bar.y + 10 * k, 1, bh - 20 * k), new Color(1, 1, 1, 0.2f));
+            GUI.Label(new Rect(bar.x + bw * 0.55f, bar.y, bw * 0.45f, bh), rank, _top);
+        }
+
+        static void DrawProfiles(float W, float H, float k, Vector2 m, bool moved)
+        {
+            float x0 = W * 0.045f, y0 = H * 0.26f;
+            GUI.Label(new Rect(x0, y0, W * 0.5f, 70 * k), "PROFILES", _cardBig);
+            var slots = Profiles.All();
+            float gap = 22 * k, cw = Mathf.Min(300 * k, (W - x0 * 2 - gap * (slots.Count - 1)) / slots.Count), ch = Mathf.Min(430 * k, H * 0.52f);
+            float y = y0 + 90 * k;
+            for (int i = 0; i < slots.Count; i++)
+            {
+                var s = slots[i];
+                var r = new Rect(x0 + i * (cw + gap), y, cw, ch);
+                if (moved && r.Contains(m)) _card = i;
+                bool on = i == _card;
+                Paint.Fill(r, new Color(0.07f, 0.08f, 0.1f, 0.92f));
+                Frame(r, on ? Green : new Color(1, 1, 1, 0.12f), on ? 3 * k : 1);
+                // the avatar: a hooded figure in the save's colour (Creative violet, Survival green)
+                var tint = s.Empty ? new Color(0.24f, 0.26f, 0.3f) : s.Mode == "creative" ? new Color(0.55f, 0.36f, 0.95f) : Green;
+                float ax = r.x + cw / 2, ay = r.y + 40 * k;
+                var oldc = GUI.color;
+                GUI.color = tint;
+                Paint.Picture(new Rect(ax - 64 * k, ay, 128 * k, 128 * k), Icon("person"));
+                GUI.color = oldc;
+                if (s.Empty)
                 {
-                    GUI.Label(new Rect(r.x + 18 * k, r.y + 6 * k, r.width, r.height), c.Title, _sub);
+                    GUI.Label(new Rect(r.x, ay + 150 * k, cw, 34 * k), "Empty slot " + s.Number, _cardName);
+                    GUI.Label(new Rect(r.x, ay + 190 * k, cw, 50 * k), "Start a new world here", _cardSmall);
+                    var plus = new Rect(ax - 22 * k, r.yMax - 70 * k, 44 * k, 44 * k);
+                    Frame(plus, new Color(1, 1, 1, 0.6f), 2);
+                    Paint.Picture(new Rect(plus.x + 8 * k, plus.y + 8 * k, 28 * k, 28 * k), Icon("plus"));
                 }
                 else
                 {
-                    var ic = Icon(c.Icon);
-                    if (ic != null)
+                    GUI.Label(new Rect(r.x, ay + 136 * k, cw, 34 * k), s.Name.ToUpperInvariant(), _cardName);
+                    GUI.Label(new Rect(r.x, ay + 170 * k, cw, 24 * k), (s.Mode == "creative" ? "Creative" : "Survival") + (double.IsNaN(s.Rank) ? "" : "  ·  Level " + (int)s.Rank), _cardSmall);
+                    float ly = ay + 210 * k;
+                    foreach (var row in new[] { new[] { "Cash", Profiles.Money(s.Cash) }, new[] { "Properties", Profiles.Count(s.Properties) },
+                                                new[] { "Last played", s.Played.ToString("d MMM") } })
                     {
-                        var old = GUI.color;
-                        GUI.color = on ? green : Color.white;
-                        Paint.Picture(new Rect(r.x + 26 * k, r.y + (h - 46 * k) / 2, 46 * k, 46 * k), ic);
-                        GUI.color = old;
+                        GUI.Label(new Rect(r.x + 18 * k, ly, cw * 0.6f, 24 * k), row[0], _small);
+                        var right = new GUIStyle(_small);
+                        Enum(right, "alignment", 5);
+                        GUI.Label(new Rect(r.x + cw * 0.4f - 18 * k, ly, cw * 0.6f, 24 * k), row[1], right);
+                        ly += 28 * k;
                     }
-                    string sub = c.Sub;
-                    if (c.Key == "creative" && Mode.Pending == "creative") sub = "Next game: Creative";
-                    GUI.Label(new Rect(r.x + 100 * k, r.y + 8 * k, w - 160 * k, 40 * k), c.Title, _title);
-                    GUI.Label(new Rect(r.x + 102 * k, r.y + 46 * k, w - 160 * k, 26 * k), sub, _sub);
-                    GUI.Label(new Rect(r.xMax - 60 * k, r.y, 50 * k, h), on ? "" : ">", _chev);
-                    if (on && Pad.InUse) GUI.Label(new Rect(r.xMax - 60 * k, r.y, 50 * k, h), "A", _chev);
+                    var play = new Rect(r.x + 18 * k, r.yMax - 62 * k, cw - 36 * k, 42 * k);
+                    Paint.Fill(play, on ? new Color(0.3f, 0.78f, 0.32f) : new Color(0.2f, 0.55f, 0.22f));
+                    GUI.Label(play, "Play", _btn);
                 }
-                if (GUI.Button(r, "", GUIStyle.none)) { _sel = i; Choose(c); }
+                if (GUI.Button(r, "", GUIStyle.none)) { _card = i; PlaySlot(s); }
             }
-            if (_note.Length > 0) GUI.Label(new Rect(x, y + 4 * k, w, 40 * k), _note, _small);
-            DrawPreview(k, green);
-        }
-
-        static void DrawPreview(float k, Color green)
-        {
-            float pw = Mathf.Min(560 * k, Screen.width * 0.36f), px = Screen.width - pw - Screen.width * 0.06f, py = Screen.height * 0.38f;
-            float ph = pw * 0.52f;
-            if (_art == null)
-                foreach (var n in new[] { "loading.jpg", "loading.png" })
-                {
-                    var p = Path.Combine(MelonEnvironment.UserDataDirectory, "Frankenstein", n);
-                    if (_art == null && File.Exists(p)) try { _art = Rt.LoadImage(File.ReadAllBytes(p)); } catch (Exception) { }
-                }
-            var box = new Rect(px, py, pw, ph + 130 * k);
-            Paint.Fill(box, new Color(0.03f, 0.06f, 0.07f, 0.9f));
-            Frame(box, new Color(0.2f, 0.55f, 0.45f, 0.9f), 2 * k);
-            if (_art != null) Paint.Picture(new Rect(px + 3, py + 3, pw - 6, ph - 3), _art);
-            else Paint.Fill(new Rect(px + 3, py + 3, pw - 6, ph - 3), new Color(0.1f, 0.2f, 0.16f));
-            Paint.Fill(new Rect(px + 18 * k, py + ph + 20 * k, 52 * k, 52 * k), green);
-            Paint.Fill(new Rect(px + 18 * k, py + ph + 44 * k, 52 * k, 28 * k), new Color(0.45f, 0.3f, 0.18f));
-            string name = MainMenu.Merge.Length > 0 ? MainMenu.Merge : "Your world awaits";
-            GUI.Label(new Rect(px + 86 * k, py + ph + 12 * k, pw - 100 * k, 30 * k), name, _cap);
-            string line = MainMenu.RundownLine();
-            GUI.Label(new Rect(px + 86 * k, py + ph + 44 * k, pw - 100 * k, 80 * k),
-                      (line.Length > 0 ? line : "Build, explore, survive or just create. The choice is yours.") + "\n" + MainMenu.SavesLine(), _capSub);
+            var back = new Rect(x0, y + ch + 30 * k, 200 * k, 44 * k);
+            Paint.Fill(back, new Color(0.08f, 0.09f, 0.12f, 0.85f));
+            GUI.Label(back, Pad.InUse ? "B  Back" : "Esc  Back", _btn);
+            if (GUI.Button(back, "", GUIStyle.none)) _profiles = false;
+            if (_note.Length > 0) GUI.Label(new Rect(x0 + 230 * k, y + ch + 38 * k, W * 0.6f, 30 * k), _note, _small);
         }
     }
 }

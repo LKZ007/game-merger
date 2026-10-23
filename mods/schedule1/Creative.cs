@@ -8,7 +8,8 @@ using UnityEngine;
 namespace Frankenstein
 {
     /// <summary>Creative is unlimited, like Minecraft's: the gun in your hand never runs dry, and whatever you
-    /// place, use or sell from your hotbar comes straight back. Only in Creative (its own saves).
+    /// place or use from your hotbar comes straight back. Moving items into storage, selling them or dropping them
+    /// moves them (nothing comes back while a menu is open, or after a drop). Only in Creative saves.
     /// Reads the game's own hotbar and gun by name on either build; what it can't reach is logged once.</summary>
     internal static class Creative
     {
@@ -91,6 +92,9 @@ namespace Frankenstein
             var inv = _inv.GetProperty("Instance", BindingFlags.Public | BindingFlags.Static | BindingFlags.FlattenHierarchy)?.GetValue(null, null)
                       ?? Rt.All(_inv).FirstOrDefault();
             var slots = Each(Rt.Get(inv, "hotbarSlots", "HotbarSlots")).ToList();
+            // a menu is open (inventory, a storage rack, a shop, the phone): items moved there are moved, not used,
+            // so nothing comes back; the hotbar is read afresh once you're playing again
+            if (Cursor.lockState != CursorLockMode.Locked || Cursor.visible) { _had.Clear(); return; }
             for (int i = 0; i < slots.Count; i++)
             {
                 var item = Rt.Get(slots[i], "ItemInstance");

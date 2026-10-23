@@ -3,6 +3,20 @@
 Every release, newest first. Downloads are on the [releases page](https://github.com/LKZ007/game-merger/releases).
 The app was called Game Merger before 3.8.0.
 
+## v3.36.0 (2026-10-23)
+- **Schedule I's main menu, redone like your reference.**
+  - A night city backdrop covers the whole screen, so the game's old title, Credits button and RV scene don't show through any more.
+  - The "SCHEDULE 1 × HOOD WARFARE" title sits at the top left.
+  - A clean list with icons: Continue, New Game, Creative, Multiplayer (the game's Invite Friends), Settings, Profiles and Quit. The chosen row gets a green glow.
+  - Your latest save's cash and level show at the top right, with a settings button. The version is at the bottom right.
+  - The backdrop and title are painted by Frankenstein, not copied from either game.
+- **Profiles:** a card for each save slot, with its name, Creative or Survival, level, cash, properties, last played and a green Play button. Empty slots have a + to start a new world. On a controller: d-pad left and right, A to play, B to go back.
+- **Loading screen like the reference:** the title in the middle of the night city, LOADING..., a green bar and "Build your empire. Run your block."
+- **Storage moves items now.** Putting things in a storage rack (or a shop, or anywhere through a menu) in Creative used to leave a copy in your hotbar. Creative only refills what you use or place while playing. Dropped items don't come back either.
+- **Drop from the inventory with a controller.** With the inventory or a storage rack open, LB and RB pick a hotbar slot (shown at the bottom of the screen) and d-pad down drops that slot's items. While playing, d-pad down still drops what's in your hand.
+- **Creative skips the tutorial.** A new Creative world goes straight to town instead of the RV in the desert. If this build won't let it, it tells you and writes `UserData\Frankenstein\tutorial-debug.txt` so it can be fixed.
+- Not tested in game yet.
+
 ## v3.35.0 (2026-10-23)
 - **Every added weapon has its own look now,** in your hands and in the F6 Weapons tab:
   - AK-47: wooden stock and handguard, curved magazine, long barrel.
