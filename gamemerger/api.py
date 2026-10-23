@@ -972,6 +972,9 @@ class Api:
                 pass
         return out
 
+    def model_packs(self):
+        return assetpacks.status()
+
     def download_models(self):
         """Download the free model packs now (Settings > Graphics and models), shown in a job log."""
         def work(job):

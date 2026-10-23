@@ -34,7 +34,7 @@ KEEP = (".glb", ".gltf", ".bin", ".png", ".jpg", ".jpeg")
 MODELS_DIR = ("UserData", "Frankenstein", "Models")
 
 _lock = threading.Lock()
-_state = {"running": False, "log": []}
+_state = {"running": False, "log": [], "tried": False}
 
 
 def root():
@@ -137,6 +137,7 @@ def fetch(pack, log=lambda *_: None):
 def fetch_all(log=lambda *_: None):
     """Every pack, one after another. A pack that fails is logged and skipped: the game starts without it."""
     got, failed = [], []
+    _state["tried"] = True  # Play tries once per app start: a pack that can't download doesn't hold up every Play
     for p in PACKS:
         try:
             fetch(p, log)
@@ -167,7 +168,7 @@ def fetch_in_background(log=lambda *_: None):
 
 def status():
     man = manifest()
-    return {"running": _state["running"], "log": _state["log"][-20:],
+    return {"running": _state["running"], "tried": _state["tried"], "log": _state["log"][-20:],
             "packs": [dict(p, ready=p["id"] in man and os.path.isdir(pack_dir(p["id"])), files=(man.get(p["id"]) or {}).get("files", 0))
                       for p in PACKS]}
 

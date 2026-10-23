@@ -607,5 +607,13 @@ class FeatureChecklist(unittest.TestCase):
         for word in ("Test city block: build here", "selftest.txt", "Frankenstein look"):
             self.assertIn(word.encode("utf-16-le"), dll, word)
 
+    def test_3461_models_download_on_play(self):
+        app = read(PKG, "web", "app.js")
+        self.assertIn('call("model_packs")', app)
+        self.assertIn('"Downloading the free 3D model packs for "', app)
+        self.assertIn("Downloading)/", app)  # shown in the merge terminal too
+        from gamemerger import assetpacks
+        self.assertIn("tried", assetpacks.status())
+
 if __name__ == "__main__":
     unittest.main()

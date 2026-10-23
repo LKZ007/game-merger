@@ -1,4 +1,8 @@
-## Frankenstein 3.46.0
+## Frankenstein 3.46.1
+
+- **The free 3D model packs now download by themselves when you press Play** on the Schedule I merge, the first time, with the download shown in a window and in the merge terminal. No button needed. If a pack can't download, the game still starts, and Play tries again the next time you open the app. The button is still in Settings > Graphics and models, under Performance.
+
+### Also in 3.46.0
 
 - **The Schedule I x Hood Warfare restart, milestone 1: the foundation.** The old work is kept on its own branch and in release 3.45.1.
   - **Real 3D models in the game.** Frankenstein's mod now reads standard .glb and .gltf models (meshes, textures, colours, glowing lights) and puts them in the game. Models are read in the background, so the game doesn't stall.
