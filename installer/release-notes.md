@@ -1,4 +1,12 @@
-## Frankenstein 3.43.0
+## Frankenstein 3.43.1
+
+- **Getting to the city island:** a "Go to the city island" button at the top of F6, "City island" on the controller wheel, and a "Go to the island" button on the F4 map.
+- **Fixed:** gang names and HQ labels in the world no longer draw over F6, the map or other menus.
+- **The island moves past Schedule I's hills and mountains** if they rise where it would go (the town's terrain wasn't counted before, so the island could end up buried). Then it lays its own sea there.
+- **island-debug.txt** (in the merge's UserData\Frankenstein folder) says where the island was built, the town's measured size, the terrain it checked, and what was built.
+- Not tested in game yet.
+
+### Also in 3.43.0
 
 - **A whole new city island, laid out from your map (experimental).** It sits off the east coast of Schedule I's town, about 1.3 by 1 km, and a highway bridge crosses the water to it.
   - **Districts:** Downtown with its towers, Uptown Hills with mansions, Lake Park, the Suburbs, the Airport (runway, terminal, control tower, planes), Shopping & Nightlife with neon, the Construction Zone with cranes, the Trailer Park, the Farms (fields, barn, silo), and the Port and South Docks (containers, gantry cranes, piers and ships).

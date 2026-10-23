@@ -577,5 +577,13 @@ class FeatureChecklist(unittest.TestCase):
         for word in ("ref-map.jpg", "THE CITY", "Out of the water"):
             self.assertIn(word.encode("utf-16-le"), dll, word)
 
+    def test_3431_island_reachable(self):
+        exp = read(ROOT, "mods", "schedule1", "Expansion.cs")
+        for x in ("GoToIsland", "island-debug.txt", "SampleHeight", "Plugin.MenuUp"):
+            self.assertIn(x, exp)
+        self.assertIn("GoToIsland", read(ROOT, "mods", "schedule1", "ItemMenu.cs"))
+        self.assertIn("GoToIsland", read(ROOT, "mods", "schedule1", "Wheel.cs"))
+        self.assertIn("Plugin.MenuUp", read(ROOT, "mods", "schedule1", "Gangs.cs"))  # labels never over menus
+
 if __name__ == "__main__":
     unittest.main()

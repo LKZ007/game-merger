@@ -427,7 +427,7 @@ namespace Frankenstein
         static void Arrow(Vector3 world, string text)
         {
             var cam = Camera.main;
-            if (cam == null) return;
+            if (cam == null || Plugin.MenuUp) return;
             var p = cam.WorldToScreenPoint(world + Vector3.up * 2);
             if (p.z < 0) return;
             GUI.Label(new Rect(p.x - 90, Screen.height - p.y - 12, 180, 24), text);

@@ -1,5 +1,5 @@
 "use strict";
-window.APP_BUILD = "3.43.0";  // must match index.html: a mixed-up install is caught at start
+window.APP_BUILD = "3.43.1";  // must match index.html: a mixed-up install is caught at start
 
 // ---------- talking to the Python side ----------
 const TOKEN = document.querySelector('meta[name="gm-token"]')?.content;

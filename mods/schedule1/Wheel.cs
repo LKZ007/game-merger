@@ -12,8 +12,8 @@ namespace Frankenstein
         static int _sel = -1;
         static bool _inTown;
 
-        static readonly string[] Names = { "Items", "Frankenstein menu", "Gangs", "Who's who", "Throw grenade", "Rob", "Game Mode", "Fly", "Speed", "Car: in or out", "Drop item", "City map" };
-        static readonly string[] Keys = { "F6", "F8", "F9", "F10", "T", "G", "", "A A", "F7", "E / X", "D-pad down", "F4" };
+        static readonly string[] Names = { "Items", "Frankenstein menu", "Gangs", "Who's who", "Throw grenade", "Rob", "Game Mode", "Fly", "Speed", "Car: in or out", "Drop item", "City map", "City island" };
+        static readonly string[] Keys = { "F6", "F8", "F9", "F10", "T", "G", "", "A A", "F7", "E / X", "D-pad down", "F4", "" };
 
         public static void Scene(bool inTown) { _inTown = inTown; Open = false; _heldSince = -1; }
 
@@ -33,6 +33,7 @@ namespace Frankenstein
                 case 9: Vehicles.GetInOrOut(); break;
                 case 10: Drop.Now(); break;
                 case 11: CityMap.Toggle(); break;
+                case 12: Expansion.GoToIsland(); break;
             }
         }
 

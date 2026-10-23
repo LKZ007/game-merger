@@ -65,6 +65,7 @@ namespace Frankenstein
                     Paint.Fill(new Rect(mx + d.Px.x * sc, my + d.Px.y * sc, d.Px.width * sc, d.Px.height * sc), new Color(0.24f, 0.32f, 0.2f));
             }
             GUI.Label(new Rect(mx, my - 34 * k, mw, 30 * k), "<b>THE CITY</b>   ·   F4 or B to close   ·   " + (Pad.InUse ? "d-pad: pick a district, A: go there" : "click a district to go there"), _small);
+            if (Pad.Button(new Rect(mx + mw - 230 * k, my - 36 * k, 230 * k, 30 * k), Expansion.Built ? "Go to the island (Downtown)" : "Island: " + Expansion.Status)) { Open = false; Expansion.GoToIsland(); return; }
             // the way back to town
             var link = at(new Vector2(0, 455));
             Paint.Fill(new Rect(link.x - 60 * k, link.y - 3 * k, 60 * k, 6 * k), new Color(0.9f, 0.9f, 0.9f, 0.8f));

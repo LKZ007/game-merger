@@ -107,6 +107,33 @@ namespace Frankenstein
         static Vector3 _townEdge;
         public static string Note = "";
 
+        static readonly List<string> _log = new List<string>();
+
+        /// <summary>What the island did, for island-debug.txt (and the town's measured size, to compare).</summary>
+        static void Say(string line)
+        {
+            Melon<Plugin>.Logger.Msg("Expansion: " + line);
+            _log.Add(DateTime.Now.ToString("HH:mm:ss") + " " + line);
+            try
+            {
+                var dir = System.IO.Path.Combine(MelonLoader.Utils.MelonEnvironment.UserDataDirectory, "Frankenstein");
+                System.IO.Directory.CreateDirectory(dir);
+                System.IO.File.WriteAllLines(System.IO.Path.Combine(dir, "island-debug.txt"), new[] { "Frankenstein " + Plugin.Version }.Concat(_log.Skip(Math.Max(0, _log.Count - 200))).ToArray());
+            }
+            catch (Exception) { }
+        }
+
+        /// <summary>How far along the island is, for the menus.</summary>
+        public static string Status => _built ? "ready" : _step >= 0 ? "being built (" + (_step * 100 / Plan.Length) + "%)" : Note.Length > 0 ? Note : _buildAt > 0 ? "starts building a few seconds after the town loads" : "not started";
+
+        /// <summary>Straight to the island (Downtown), from the wheel, F6 or F8.</summary>
+        public static void GoToIsland()
+        {
+            if (!On) { ItemMenu.Notify("This merge has no city island."); return; }
+            if (!_built) { ItemMenu.Notify("The city island is " + Status + "."); return; }
+            Travel(1);
+        }
+
         public static bool On => Gangs.On;
         public static bool Built => _built;
         public static int Count => _built ? Plan.Length : 0;
@@ -181,7 +208,7 @@ namespace Frankenstein
             {
                 _buildAt = -1;
                 try { Begin(); }
-                catch (Exception e) { Note = "The island couldn't be built: " + e.Message; Melon<Plugin>.Logger.Warning("Expansion: " + e); }
+                catch (Exception e) { Note = "The island couldn't be built: " + e.Message; Say(Note + "\n" + e); }
             }
             if (_step >= 0)
             {
@@ -260,13 +287,14 @@ namespace Frankenstein
             bool first = true;
             var roads = new List<MeshRenderer>();
             float sea = float.NaN;
+            var seaBounds = new Bounds();
             foreach (var r in all)
             {
                 var b = r.bounds;
                 var n = r.gameObject.name.ToLowerInvariant();
                 if (Huge(b))
                 {
-                    if (n.Contains("ocean") || n.Contains("water") || n.Contains("sea")) sea = b.max.y;
+                    if (n.Contains("ocean") || n.Contains("water") || n.Contains("sea")) { sea = b.max.y; seaBounds = b; }
                     continue;
                 }
                 if (first) { town = b; first = false; } else town.Encapsulate(b);
@@ -285,13 +313,59 @@ namespace Frankenstein
                         .GroupBy(r => r.gameObject.name).Select(g => g.First().gameObject).Take(6).ToList();
             // the island starts across a channel east of town, its highway in line with the town's middle
             _townEdge = new Vector3(town.max.x, _ground, town.center.z);
+            Say("the town measures " + town.size.x.ToString("0") + " x " + town.size.z.ToString("0") + " m (" + (town.size.x * town.size.z / 1e6f).ToString("0.00") +
+                " km2 as a rectangle); the island's land is about 1.07 km2. Its west shore is at x " + (town.max.x + 90f + 20f * S).ToString("0") + ", the town's east edge at x " + town.max.x.ToString("0"));
             _origin = new Vector3(town.max.x + 90f, _ground, town.center.z + 455f * S);
+            Clear(seaBounds, sea);
             foreach (var d in Plan) d.Centre = ToWorld(d.Px.center.x, d.Px.center.y, _ground + d.Lift);
             _windows = Windows();
             BuildBase();
             _step = 0;
-            Melon<Plugin>.Logger.Msg("Expansion: building the island (" + _shells.Count + " building shapes, " + _trees.Count + " trees, ground at " + _ground.ToString("0.#") +
+            Say("building the island (" + _shells.Count + " building shapes, " + _trees.Count + " trees, ground at " + _ground.ToString("0.#") +
                                      ", water at " + _water.ToString("0.#") + (_ownSea ? " (Frankenstein's)" : " (the game's)") + ").");
+        }
+
+        /// <summary>Schedule I's town sits in hills and mountains (Unity terrain, which isn't counted in the town's
+        /// size). If the terrain rises over where the island would be, the island goes past the terrain's edge so it
+        /// isn't buried; the bridge is longer then. Where the game's own sea doesn't reach, Frankenstein lays its own.</summary>
+        static void Clear(Bounds seaBounds, float sea)
+        {
+            try
+            {
+                var tt = Rt.Find("UnityEngine.Terrain");
+                var sample = tt?.GetMethods().FirstOrDefault(m => m.Name == "SampleHeight" && m.GetParameters().Length == 1);
+                var terrains = tt != null ? Rt.All(tt) : new List<object>();
+                float edge = float.MinValue, highest = float.MinValue;
+                foreach (var t in terrains)
+                {
+                    var c = t as Component;
+                    var size = Rt.Get(Rt.Get(t, "terrainData"), "size");
+                    if (c == null || !(size is Vector3 sz)) continue;
+                    var pos = c.transform.position;
+                    Say("terrain " + c.gameObject.name + ": x " + pos.x.ToString("0") + ".." + (pos.x + sz.x).ToString("0") + ", z " + pos.z.ToString("0") + ".." + (pos.z + sz.z).ToString("0") + ", up to " + (pos.y + sz.y).ToString("0") + " m");
+                    edge = Mathf.Max(edge, pos.x + sz.x);
+                    for (float px = 0; px <= PW; px += 120f)
+                        for (float py = 0; py <= PH; py += 120f)
+                        {
+                            var w = ToWorld(px, py, 0);
+                            if (w.x < pos.x || w.x > pos.x + sz.x || w.z < pos.z || w.z > pos.z + sz.z || sample == null) continue;
+                            var h = (float)sample.Invoke(t, new object[] { w }) + pos.y;
+                            highest = Mathf.Max(highest, h);
+                        }
+                }
+                if (highest > _ground + 0.5f)
+                {
+                    Say("the terrain rises to " + highest.ToString("0") + " m where the island would go (its ground is " + _ground.ToString("0") + "): moving it past the terrain's east edge at x " + edge.ToString("0"));
+                    _origin.x = edge + 120f;
+                }
+                else Say(terrains.Count + " terrain(s); the island's spot is clear");
+            }
+            catch (Exception e) { Say("couldn't check the terrain: " + (e.InnerException ?? e).Message); }
+            var west = ToWorld(0, 0, 0);
+            var east = ToWorld(PW, PH, 0);
+            bool inSea = !float.IsNaN(sea) && seaBounds.min.x <= west.x && seaBounds.max.x >= east.x && seaBounds.min.z <= east.z && seaBounds.max.z >= west.z;
+            if (!_ownSea && !inSea) { _ownSea = true; Say("the game's sea doesn't reach the island: Frankenstein lays its own at the same level"); }
+            Say("the island: x " + west.x.ToString("0") + ".." + east.x.ToString("0") + ", z " + east.z.ToString("0") + ".." + west.z.ToString("0") + ", ground " + _ground.ToString("0.#") + ", water " + _water.ToString("0.#"));
         }
 
         static void Shells(List<MeshRenderer> all)
@@ -620,7 +694,7 @@ namespace Frankenstein
             _step = -1;
             _built = true;
             Note = "The island: " + Plan.Count(p => p.Done) + " districts, " + _pieces + " pieces. F4 for the map.";
-            Melon<Plugin>.Logger.Msg("Expansion: " + Note);
+            Say(Note);
         }
 
         static Vector3 Spot(District d, float fx, float fy) => ToWorld(d.Px.x + d.Px.width * fx, d.Px.y + d.Px.height * fy, _ground + d.Lift);
@@ -981,7 +1055,7 @@ namespace Frankenstein
                 GUI.Box(new Rect(Screen.width / 2f - 200, 80, 400, 30), _here.ToUpperInvariant());
             var cam = Camera.main;
             var me = Player.Local;
-            if (cam == null || me == null || MenuSkin.Active || Loading.Showing) return;
+            if (cam == null || me == null || Plugin.MenuUp) return;
             foreach (var d in Plan)
             {
                 if (d.Gang.Length == 0 || d.Root == null || !d.Root.activeSelf) continue;
