@@ -3,6 +3,16 @@
 Every release, newest first. Downloads are on the [releases page](https://github.com/LKZ007/game-merger/releases).
 The app was called Game Merger before 3.8.0.
 
+## v3.43.0 (2026-10-23)
+- **A whole new city island, laid out from your map (experimental).** It sits off the east coast of Schedule I's town, about 1.3 by 1 km, and a highway bridge crosses the water to it.
+  - **Districts:** Downtown with its towers, Uptown Hills with mansions, Lake Park, the Suburbs, the Airport (runway, terminal, control tower, planes), Shopping & Nightlife with neon, the Construction Zone with cranes, the Trailer Park, the Farms (fields, barn, silo), and the Port and South Docks (containers, gantry cranes, piers and ships).
+  - **Every gang HQ is where your map has it:** London, Mafia, Crips, Bloods and Yakuza, plus the East London Firm in the Trailer Park. Each HQ is a walled compound in the gang's colours with a glowing crown sign, and the gang's name shows over it when you're near.
+  - **Two new gangs:** the Cartel (Cartel Point, with its tanks) and the Outlaw MC (up on the bluff by the lighthouse). Each has six ranks, its own prices and guns, and four named crew members who hold their HQ. Their districts are real turf in F9.
+  - **F4 is the city map** (also on the controller wheel and in F8). It's your map with you on it. Click a district, or pick one with the d-pad and press A, to go there.
+  - **No lag:** the island is built a few milliseconds a frame, each district's pieces are batched together, and districts far from you switch off. They switch off sooner when Frankenstein turns its extras down. Fall in the water and you're put back on the nearest road.
+  - Honest limits: Schedule I has no skyscraper models, so the towers are blocks with lit windows. The buildings copied from town are shells with no insides. The game's townspeople have no walking paths on the island, so only the gangs' crews are there. It replaces the old row of districts east of town.
+- Not tested in game yet.
+
 ## v3.42.2 (2026-10-23)
 - **Merged games shouldn't lag. "No lag" is now part of the minimum standard for every merge.**
   - **A budget for Frankenstein's own Schedule I mod:** everything it does in a frame (its updates, menus and HUD) should take under 2 ms. It times itself, and the player's inventory is now found once and kept instead of being searched for several times a second.

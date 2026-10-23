@@ -260,6 +260,12 @@ namespace Frankenstein
             Melon<Plugin>.Logger.Msg("Crew: " + _lives.Count + " gang members, " + found + " landmark(s) found for their routes.");
         }
 
+        /// <summary>An island gang's own turf (Expansion): its crew start from and hold its HQ there.</summary>
+        public static void Island(string region, List<Vector3> pts)
+        {
+            if (region.Length > 0 && pts.Count > 0) _points[region] = pts;
+        }
+
         static List<Vector3> Route(string gang, Life l)
         {
             List<Vector3> pts;

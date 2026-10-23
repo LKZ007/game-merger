@@ -14,7 +14,9 @@ namespace Frankenstein
     internal static class RefArt
     {
         static bool _tried;
-        public static Texture2D Menu, Profiles, Loading, Avatar;
+        public static Texture2D Menu, Profiles, Loading, Avatar, Map_;
+        /// <summary>levy's city map (Expansion's island is laid out on it).</summary>
+        public static Texture2D Map { get { Load(); return Map_; } }
         static readonly Dictionary<string, Texture2D> _icons = new Dictionary<string, Texture2D>();
         static readonly Dictionary<string, GUIStyle> _styles = new Dictionary<string, GUIStyle>();
 
@@ -28,6 +30,7 @@ namespace Frankenstein
             Profiles = Tex("ref-profiles.jpg");
             Loading = Tex("ref-loading.jpg");
             Avatar = Tex("ref-avatar.jpg");
+            Map_ = Tex("ref-map.jpg");
             foreach (var n in new[] { "rep", "cash", "empire", "house", "money", "crown" })
             {
                 var t = Tex("ref-icon-" + n + ".png");

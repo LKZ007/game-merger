@@ -198,16 +198,13 @@ namespace Frankenstein
             GUI.Label(new Rect(px + 12, py + 186, pw - 24, 56), _built ? "Untested in game: tell Frankenstein's maker how it looks." : "F8 closes this.");
         }
 
-        /// <summary>EXPERIMENTAL: the new districts past the edge of town (Expansion), one button each.</summary>
+        /// <summary>EXPERIMENTAL: the city island off the east coast (Expansion): its map, to see it and go there.</summary>
         static void DrawTravel(float x, float y, float w)
         {
             if (!Expansion.On) return;
-            int n = Expansion.Count;
-            GUI.Box(new Rect(x, y, w, 34 + Math.Max(n, 1) * 30), "");
-            GUI.Label(new Rect(x + 12, y + 6, w - 24, 22), "TRAVEL  ·  new districts (experimental)");
-            if (n == 0) { GUI.Label(new Rect(x + 12, y + 30, w - 24, 26), Expansion.Note.Length > 0 ? Expansion.Note : "Being built, a few seconds after the town loads..."); return; }
-            for (int i = 0; i < n; i++)
-                if (Pad.Button(new Rect(x + 12, y + 30 + i * 30, w - 24, 26), Expansion.NameAt(i))) { Expansion.Travel(i); _open = false; }
+            GUI.Box(new Rect(x, y, w, 68), "");
+            GUI.Label(new Rect(x + 12, y + 6, w - 24, 22), "TRAVEL  ·  the city island (experimental)");
+            if (Pad.Button(new Rect(x + 12, y + 32, w - 24, 28), Expansion.Built ? "City map (F4): go anywhere on the island" : "City map (F4): the island is being built...")) { _open = false; CityMap.Toggle(); }
         }
 
         static void Warn(Exception e) => Melon<Plugin>.Logger.Warning("World: " + e.Message);

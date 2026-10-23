@@ -236,6 +236,8 @@ namespace Frankenstein
             var me = Player.Local;
             if (me == null) return;
             try { _region = me.CurrentRegion.ToString(); } catch (Exception) { _region = ""; }
+            var island = Expansion.RegionAt(me.Position);  // the Cartel's point and the Outlaw's bluff are turf too
+            if (island.Length > 0) _region = island;
             if (_built_at > 0 && Time.unscaledTime >= _built_at) { _built_at = -1; foreach (var kv in _hq) BuildHq(G(kv.Key), kv.Value); }
             var owner = OwnerGang(_region);
             // a gang's headquarters goes up the first time you walk into its district

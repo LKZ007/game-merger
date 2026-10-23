@@ -15,7 +15,7 @@ namespace Frankenstein
     {
         /// <summary>The Frankenstein release this mod came with (equal to gamemerger/version.py; a test checks).
         /// Shown on F6's title and in MelonLoader's log, where the app reads it back for the merge's card.</summary>
-        public const string Version = "3.42.2";
+        public const string Version = "3.43.0";
         float _next;
         public static bool MenuAllowed = true;
         public static System.Collections.Generic.List<string> Kit = new System.Collections.Generic.List<string>();
@@ -111,6 +111,7 @@ namespace Frankenstein
             try { Carry.Update(); } catch (Exception e) { Melon<Plugin>.Logger.Warning("Carry: " + e.Message); }
             try { World.Update(); } catch (Exception e) { Melon<Plugin>.Logger.Warning("World: " + e.Message); }
             try { Expansion.Update(); } catch (Exception e) { Melon<Plugin>.Logger.Warning("Expansion: " + e.Message); }
+            try { CityMap.Update(); } catch (Exception e) { Melon<Plugin>.Logger.Warning("City map: " + e.Message); }
             if (Time.unscaledTime < _next) return;
             _next = Time.unscaledTime + 1f;
             try { Story.Tick(); }
@@ -152,6 +153,7 @@ namespace Frankenstein
             try { Boom.Draw(); } catch (Exception) { }
             try { Crew.Draw(); } catch (Exception) { }
             try { Expansion.Draw(); } catch (Exception) { }
+            try { CityMap.Draw(); } catch (Exception) { }
             try { Gangs.Draw(); } catch (Exception e) { Melon<Plugin>.Logger.Warning("Gangs: " + e.Message); }
             try { Loading.Draw(); } catch (Exception e) { Melon<Plugin>.Logger.Warning("Loading screen: " + e.Message); Loading.Tips.Clear(); Loading.Extension = ""; }
         }

@@ -403,7 +403,7 @@ class FeatureChecklist(unittest.TestCase):
         import tempfile
         from gamemerger.api import Api
         with tempfile.TemporaryDirectory() as d:
-            self.assertEqual(Api._ref_art(d, "hoodwarfare"), 10)   # a Hood Warfare merge gets the reference screens
+            self.assertEqual(Api._ref_art(d, "hoodwarfare"), 11)   # a Hood Warfare merge gets the reference screens and the city map
             self.assertEqual(Api._ref_art(d, "hoodwarfare"), 0)    # once
             self.assertEqual(Api._ref_art(d, "other"), 0)          # other merges keep the painted menu
         own = read(ROOT, "mods", "schedule1", "OwnItems.cs")
@@ -519,7 +519,7 @@ class FeatureChecklist(unittest.TestCase):
 
     def test_3311_new_districts(self):
         dll = open(os.path.join(PKG, "mods", "schedule1", "Frankenstein.dll"), "rb").read()
-        for word in ("Frankenstein ground ", "TRAVEL", "Entering "):
+        for word in ("Frankenstein island", "TRAVEL", "Entering "):
             self.assertIn(word.encode("utf-16-le"), dll, word)
         from gamemerger.api import GANGS
         for g in GANGS["hoodwarfare"]:
@@ -550,6 +550,32 @@ class FeatureChecklist(unittest.TestCase):
         self.assertIn("gameOn(true)", js)
         self.assertIn("perfLevel", js)
         self.assertIn("body.game-on", read(PKG, "web", "app.css"))
+
+    def test_343_city_island(self):
+        # levy's map: a city island with every district and gang HQ where the map has them, an in-game map, no lag
+        exp = read(ROOT, "mods", "schedule1", "Expansion.cs")
+        for name in ("Downtown", "Uptown Hills", "Lake Park", "Suburbs", "Airport", "Shopping & Nightlife", "Construction Zone",
+                     "Trailer Park", "Farms", "Port", "South Docks", "Cartel Point", "Outlaw Bluff"):
+            self.assertIn('"%s"' % name, exp, name)
+        for gang in ("london", "mafia", "crips", "bloods", "yakuza", "cartel", "outlaw", "eastlondon"):
+            self.assertIn('"%s"' % gang, exp, gang)
+        for x in ("StaticBatchingUtility.Combine", "Stream(", "Perf.Level", "_jobs", "Rescue(", "Crew.Island("):
+            self.assertIn(x, exp)  # batched, streamed by distance, built a few ms a frame, out of the water
+        from gamemerger.api import GANGS
+        ids = {g["id"] for g in GANGS["hoodwarfare"]}
+        self.assertTrue({"cartel", "outlaw"} <= ids)
+        crew = read(ROOT, "mods", "schedule1", "CrewPeople.cs")
+        for key in ("cartel_boss", "outlaw_boss"):
+            self.assertIn('"%s"' % key, crew)
+        self.assertTrue(os.path.isfile(os.path.join(PKG, "mods", "_art", "hoodwarfare", "ref-map.jpg")))
+        cm = read(ROOT, "mods", "schedule1", "CityMap.cs")
+        for x in ("KeyCode.F4", "RefArt.Map", "Expansion.Travel", "Pad.A"):
+            self.assertIn(x, cm)
+        self.assertIn("CityMap.Toggle()", read(ROOT, "mods", "schedule1", "Wheel.cs"))
+        self.assertIn("Expansion.RegionAt", read(ROOT, "mods", "schedule1", "Gangs.cs"))
+        dll = open(os.path.join(PKG, "mods", "schedule1", "Frankenstein.dll"), "rb").read()
+        for word in ("ref-map.jpg", "THE CITY", "Out of the water"):
+            self.assertIn(word.encode("utf-16-le"), dll, word)
 
 if __name__ == "__main__":
     unittest.main()

@@ -222,6 +222,13 @@ GANGS = {
         {"id": "eastlondon", "district": "Bow Road", "name": "East London Firm", "region": "Suburbia", "color": "#16A34A", "weapon": "Avatar/Equippables/BrokenBottle",
          "rival": "london", "product": "Granddaddy Purple", "drug_price": 1.2, "gun_price": 1.15,
          "ranks": ["Tiny", "Youngen", "Shotter", "Elder", "Top Boy", "Guv'nor"], "guns": ["Pump Shotgun@1800", "SMG@2300"]},
+        # the city island's own gangs (Expansion.cs): their turf is their island district, not one of the town's
+        {"id": "cartel", "district": "Cartel Point", "name": "Cartel", "region": "Cartel Point", "color": "#65A30D", "weapon": "Avatar/Equippables/M1911",
+         "rival": "outlaw", "product": "Cocaine", "drug_price": 1.5, "gun_price": 1.3, "island": True,
+         "ranks": ["Halcon", "Sicario", "Jefe de Plaza", "Lugarteniente", "Capo", "El Patron"], "guns": ["AK47@3600", "Revolver@1250"]},
+        {"id": "outlaw", "district": "Outlaw Bluff", "name": "Outlaw MC", "region": "Outlaw Bluff", "color": "#D4A017", "weapon": "Avatar/Equippables/Revolver",
+         "rival": "cartel", "product": "Meth", "drug_price": 1.25, "gun_price": 1.1, "island": True,
+         "ranks": ["Prospect", "Patched", "Road Captain", "Sergeant at Arms", "Vice President", "President"], "guns": ["Pump Shotgun@1850", "Revolver@1150"]},
     ],
 }
 LOADING_TIPS = {
@@ -232,7 +239,9 @@ LOADING_TIPS = {
                     "F9: the gangs. Join one and climb the ranks, or start your own and take their districts.",
                     "Rival dealers work their gang's corners. Knock one out and press G to rob them.",
                     "F10: who's who. Every gang's boss, lieutenant, enforcer and dealer, and what they're doing right now.",
-                    "Creative: press F6 for every item, every gun included."],
+                    "Creative: press F6 for every item, every gun included.",
+                    "F4: the city map. Take the highway bridge east of town to the island, or click a district to go there.",
+                    "The Cartel runs Cartel Point and the Outlaw MC holds the bluff in the south-east of the island."],
 }
 
 # The merged game's guns and what stands in for each in the Host game. "close": the same kind of gun, works

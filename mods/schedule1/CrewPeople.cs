@@ -31,6 +31,14 @@ namespace Frankenstein
             new Person("eastlondon", "lieutenant", "Terry", "Mason", "Tel", 0, new Color32(228, 190, 164, 255)),
             new Person("eastlondon", "enforcer", "Danny", "Shaw", "Mad Dog", 0, new Color32(224, 186, 158, 255)),
             new Person("eastlondon", "gunrunner", "Lee", "Whitlock", "Wheels", 0, new Color32(220, 182, 152, 255)),
+            new Person("cartel", "boss", "Rafael", "Ochoa", "El Patron", 0, new Color32(176, 124, 88, 255)),
+            new Person("cartel", "lieutenant", "Mateo", "Ruiz", "El Flaco", 0, new Color32(184, 132, 96, 255)),
+            new Person("cartel", "enforcer", "Hector", "Salas", "El Toro", 0, new Color32(168, 116, 82, 255)),
+            new Person("cartel", "dealer", "Lucia", "Vargas", "La Reina", 1, new Color32(190, 140, 104, 255)),
+            new Person("outlaw", "boss", "Wade", "Colter", "Preacher", 0, new Color32(226, 184, 150, 255)),
+            new Person("outlaw", "lieutenant", "Jesse", "Harlan", "Road Dog", 0, new Color32(220, 178, 142, 255)),
+            new Person("outlaw", "enforcer", "Boone", "McCray", "Tank", 0, new Color32(214, 170, 136, 255)),
+            new Person("outlaw", "gunrunner", "Dixie", "Malone", "Lucky", 1, new Color32(230, 190, 158, 255)),
         };
     }
 
@@ -58,4 +66,12 @@ namespace Frankenstein
     public sealed class Crew_eastlondon_lieutenant : CrewNpc { public Crew_eastlondon_lieutenant() : base() { } protected override string Key => "eastlondon_lieutenant"; }
     public sealed class Crew_eastlondon_enforcer : CrewNpc { public Crew_eastlondon_enforcer() : base() { } protected override string Key => "eastlondon_enforcer"; }
     public sealed class Crew_eastlondon_gunrunner : CrewNpc { public Crew_eastlondon_gunrunner() : base() { } protected override string Key => "eastlondon_gunrunner"; }
+    public sealed class Crew_cartel_boss : CrewNpc { public Crew_cartel_boss() : base() { } protected override string Key => "cartel_boss"; }
+    public sealed class Crew_cartel_lieutenant : CrewNpc { public Crew_cartel_lieutenant() : base() { } protected override string Key => "cartel_lieutenant"; }
+    public sealed class Crew_cartel_enforcer : CrewNpc { public Crew_cartel_enforcer() : base() { } protected override string Key => "cartel_enforcer"; }
+    public sealed class Crew_cartel_dealer : CrewNpc { public Crew_cartel_dealer() : base() { } protected override string Key => "cartel_dealer"; }
+    public sealed class Crew_outlaw_boss : CrewNpc { public Crew_outlaw_boss() : base() { } protected override string Key => "outlaw_boss"; }
+    public sealed class Crew_outlaw_lieutenant : CrewNpc { public Crew_outlaw_lieutenant() : base() { } protected override string Key => "outlaw_lieutenant"; }
+    public sealed class Crew_outlaw_enforcer : CrewNpc { public Crew_outlaw_enforcer() : base() { } protected override string Key => "outlaw_enforcer"; }
+    public sealed class Crew_outlaw_gunrunner : CrewNpc { public Crew_outlaw_gunrunner() : base() { } protected override string Key => "outlaw_gunrunner"; }
 }
