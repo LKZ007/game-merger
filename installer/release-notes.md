@@ -1,4 +1,14 @@
-## Frankenstein 3.33.0
+## Frankenstein 3.34.0
+
+- **Schedule I has a new main menu,** drawn by Frankenstein like the picture you sent. It has big cards for Continue ("Load your world"), New Game ("Start a new world"), **Creative ("Unlimited resources")**, Settings and Quit, with the merge's picture, its name and your saves (with their game modes) on the right.
+  - Creative starts a new world in Creative.
+  - Use the mouse, the arrow keys and Enter, or a controller (d-pad or stick, then A).
+  - The game's own buttons still do the work behind each card, so loading, new games and settings work as before.
+  - Copying a row into the game's own list never worked on this build, which is why Creative didn't show before. This menu doesn't depend on that.
+- **Drop with a controller:** press d-pad down to drop what's in your hand ("Drop item" is on the wheel too). It uses the game's own drop. If this build doesn't have one, it tells you to drag the item out of the inventory instead.
+- Not tested in game yet.
+
+### Also in 3.33.0
 
 - **See your other PCs.** Every PC signed in to the same Frankenstein account now shows the others in Settings > Accounts > Your devices, with what's installed and merged on each one, when it was last seen and which Frankenstein version it runs. PCs find each other on the same Wi-Fi, and through your cloud folder (OneDrive, Google Drive or Dropbox) when they're apart. A PC only shares its list with PCs on the same account.
 - **Put a PC on your account in two clicks.** Open Frankenstein on both PCs on the same Wi-Fi. On the new PC, go to Settings > Accounts and press **Use levy's account on this PC** next to the other PC's name. Then press **Yes, it's mine** on the other PC. If the account has a PIN, you have to be signed in to it to say yes. The link code still works too.

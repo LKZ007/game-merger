@@ -55,10 +55,10 @@ BUILTIN = {
                   "settings": "UserData/Frankenstein/settings.json", "bridge": "UserData/Frankenstein/commands.json",
                   "catalog": "UserData/Frankenstein/world.json",
                   "what": "Item menu: press F6 (or Back + Y) in game for every item, mods' items included.",
-                  "ingame": "On the main menu: Game Mode under New Game picks Survival or Creative for the game you start or load, "
+                  "ingame": "Frankenstein's main menu: Continue, New Game, Creative (a new world with unlimited resources), Settings and Quit, "
                             "like Minecraft; each save keeps its own mode. While you play: F8 switches this save's mode, F6 (or Back + Y) for "
                             "every item, F9 for the gangs, F10 for who's who on the streets (Hood Warfare merges), T to throw a grenade. "
-                            "Controller: hold View for a wheel with all of it."},
+                            "Controller: hold View for a wheel with all of it, d-pad down drops what's in your hand."},
     "cyberpunk2077": {"label": "Frankenstein sandbox menu", "dest": "bin/x64/plugins/cyber_engine_tweaks/mods",
                       "settings": "bin/x64/plugins/cyber_engine_tweaks/mods/frankenstein_items/settings.json",
                       "bridge": "bin/x64/plugins/cyber_engine_tweaks/mods/frankenstein_items/commands.json",

@@ -257,7 +257,7 @@ class FeatureChecklist(unittest.TestCase):
 
     def test_331_living_gangs_and_menu_creative(self):
         dll = open(os.path.join(PKG, "mods", "schedule1", "Frankenstein.dll"), "rb").read()
-        for word in ("frankenstein_", "Avatar/Layers/Top/T-Shirt", "patrolling ", "THE STREETS", "_gameBuilding", "gave up after 30 seconds"):
+        for word in ("frankenstein_", "Avatar/Layers/Top/T-Shirt", "patrolling ", "THE STREETS", "_gameBuilding", "couldn't find New Game in 30 seconds"):
             self.assertIn(word.encode("utf-16-le"), dll, word)
         people = read(ROOT, "mods", "schedule1", "CrewPeople.cs")
         for gang in ("crips", "bloods", "london", "yakuza", "mafia", "eastlondon"):
@@ -300,6 +300,17 @@ class FeatureChecklist(unittest.TestCase):
         self.assertIn("fold_creative", api)
         self.assertNotIn('merge_id + "~creative" if creative', api, "one set of saves")
         self.assertIn("_members", read(ROOT, "mods", "schedule1", "Rt.cs"))  # reflection cached: less lag
+
+    def test_334_new_main_menu_and_drop(self):
+        dll = open(os.path.join(PKG, "mods", "schedule1", "Frankenstein.dll"), "rb").read()
+        for word in ("Load your world", "Start a new world", "Unlimited resources", "Adjust your game", "Exit to desktop",
+                     "Frankenstein's menu is up", "sendNavigationEvents", "D-pad down: drop"):
+            self.assertIn(word.encode("utf-16-le"), dll, word)
+        skin = read(ROOT, "mods", "schedule1", "MenuSkin.cs")
+        self.assertIn("localScale = Vector3.zero", skin)   # the game's list is hidden, its buttons still pressed
+        self.assertIn('"Invoke"', skin)
+        self.assertIn("Pad.Pressed & Pad.A", skin)          # controller
+        self.assertIn("MenuSkin.Update()", read(ROOT, "mods", "schedule1", "MainMenu.cs"))
 
     def test_3321_heavier_swing(self):
         dll = open(os.path.join(PKG, "mods", "schedule1", "Frankenstein.dll"), "rb").read()

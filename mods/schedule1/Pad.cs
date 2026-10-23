@@ -82,6 +82,9 @@ namespace Frankenstein
             _fire = false;  // A with nothing on screen does nothing
         }
 
+        /// <summary>A Frankenstein panel with buttons is on screen (the d-pad is moving through it).</summary>
+        public static bool PanelsOpen => _total > 0;
+
         public static bool Button(Rect r, string label)
         {
             int me = _idx++;

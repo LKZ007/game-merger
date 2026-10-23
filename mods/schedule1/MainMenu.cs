@@ -35,9 +35,16 @@ namespace Frankenstein
             _entry = null;
             _lookUntil = _inMenu ? Time.unscaledTime + 30f : 0;
             if (_inMenu) _saves = Mode.Saves();
+            MenuSkin.Scene(_inMenu);
         }
 
         static bool NextCreative => Mode.Pending == "creative";
+
+        /// <summary>The merge in one line, for the main menu's picture card.</summary>
+        public static string RundownLine() => Rundown.Count > 1 ? Rundown[1] : Rundown.Count > 0 ? Rundown[0] : "";
+
+        /// <summary>Your saves and their game modes, in one line.</summary>
+        public static string SavesLine() => _saves.Length == 0 ? "" : "Saves: " + string.Join(", ", _saves.Select(s => s[0] + " " + (s[1] == "creative" ? "Creative" : "Survival")).ToArray());
         static string Label() => (Pad.InUse ? "(Y) " : "") + "Game Mode: " + (NextCreative ? "Creative" : "Survival");
 
         static int _tries;
@@ -216,20 +223,10 @@ namespace Frankenstein
 
         public static void Update()
         {
-            if (_inMenu && !_injected && Time.unscaledTime < _lookUntil && Time.unscaledTime >= _nextLook)
-            {
-                _nextLook = Time.unscaledTime + 0.5f;
-                try { Inject(); }
-                catch (Exception e)
-                {
-                    Say("couldn't add Creative: " + e.GetType().Name + ": " + e.Message);  // tried again until the 30 seconds are up
-                    if (_entry != null) { UnityEngine.Object.Destroy(_entry); _entry = null; }
-                }
-                if (Time.unscaledTime + 0.5f >= _lookUntil && !_injected) Say("gave up after 30 seconds; Frankenstein's small panel shows instead");
-            }
-            if (_inMenu && _entry == null && _injected) { _injected = false; _lookUntil = Time.unscaledTime + 30f; }  // the menu was rebuilt
+            // Frankenstein's own menu (MenuSkin) replaces the copied row: the game wouldn't take the copy
+            try { MenuSkin.Update(); } catch (Exception e) { Say("menu: " + e.Message); }
             try { Hover(); } catch (Exception e) { Say("click: " + e.Message); }
-            if (_inMenu && (Pad.Pressed & Pad.Y) != 0) Click();  // controller: Y picks the mode
+            if (_inMenu && !MenuSkin.Found && (Pad.Pressed & Pad.Y) != 0) Click();  // controller: Y picks the mode
             if (_inMenu && _injected && _entryText != null && Time.unscaledTime >= _nextLabel)
             {
                 _nextLabel = Time.unscaledTime + 1f;
@@ -244,6 +241,7 @@ namespace Frankenstein
                 if (Who.Length > 0) GUI.Label(new Rect(16, Screen.height - 34, 600, 24), "Playing as " + Who);
                 return;
             }
+            if (MenuSkin.Found) { MenuSkin.Draw(); return; }
             // the corner: your saves with their modes, and the merge's rundown. If the game's list couldn't take
             // the Game Mode entry, its button is here instead.
             float w = 340, x = Screen.width - w - 24, y = 24;
