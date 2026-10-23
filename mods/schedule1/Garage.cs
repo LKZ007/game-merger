@@ -20,7 +20,8 @@ namespace Frankenstein
             public string Key, Name, Base, Kind, Kit, Category = "Custom";
             public Color Paint, Trim, Lights, Glow;
             public S1API.Vehicles.VehicleColor Fallback;
-            public float Wing = 1f, Mph = 120f, ZeroSixty = 6f;  // top speed and 0-60, as on levy's sheet (Drive keeps them)
+            public float Wing = 1f, Mph = 120f, ZeroSixty = 6f;
+            public string[] Models = new string[0];  // the 3D models it wears, best first (names in the model catalogue)  // top speed and 0-60, as on levy's sheet (Drive keeps them)
         }
 
         static Style S(string key, string name, string bas, string kit, string cat, Color paint, S1API.Vehicles.VehicleColor fb, float mph, float z60, float glowA = 0)
@@ -31,6 +32,10 @@ namespace Frankenstein
                 Key = key, Name = name, Base = bas, Kit = kit, Kind = box ? "gwagon" : "super", Category = cat, Paint = paint, Fallback = fb, Mph = mph, ZeroSixty = z60,
                 Trim = box ? new Color(0.75f, 0.76f, 0.8f) : new Color(0.05f, 0.05f, 0.06f), Lights = new Color(0.88f, 0.93f, 1f),
                 Glow = glowA > 0 ? new Color(paint.r, paint.g, paint.b, glowA) : new Color(0, 0, 0, 0),
+                Models = cat == "Supercars" ? new[] { "race-future", "race", "sedan-sports" }
+                       : cat == "Sports Cars" ? new[] { "sedan-sports", "hatchback-sports", "race" }
+                       : box ? (kit == "gwagon" ? new[] { "suv", "suv-luxury" } : new[] { "suv-luxury", "suv" })
+                       : new[] { "sedan-sports", "sedan" },
             };
         }
 
@@ -169,31 +174,40 @@ namespace Frankenstein
             var renderers = Rt.Comps(go, typeof(MeshRenderer), true).OfType<Renderer>()
                               .Concat(Rt.Comps(go, typeof(SkinnedMeshRenderer), true).OfType<Renderer>())
                               .Where(r => r != null && r.enabled && !r.transform.IsChildOf(root.transform)).ToList();
-            var template = renderers.OrderByDescending(r => r.bounds.size.sqrMagnitude).Select(r => r.sharedMaterial).FirstOrDefault();
-            var glass = new Color(0.04f, 0.05f, 0.07f);
-            var b = Body.Make(root.transform, fit, Body.Shapes[s.Kit], template, s.Paint, glass);
-            if (b.Parts == 0) { UnityEngine.Object.Destroy(root); Tint(car, s.Paint); return; }
-            // the base body goes; its wheels (and anything on them) stay. The game's own list of body panels goes
-            // too, whatever their names, and they're hidden again if the game shows them (Update)
+            // a real 3D model over the base car: its body (and its wheels, when the model has its own) hidden,
+            // its physics, seats and driving kept. Until the model packs are on this PC the car keeps its own body, painted.
+            var entry = global::Frankenstein.Models.Pick("cars", s.Models);
+            var model = global::Frankenstein.Models.Spawn(entry, car.transform.position, car.transform.rotation, root.transform);
+            if (model == null)
+            {
+                UnityEngine.Object.Destroy(root);
+                Tint(car, s.Paint);
+                // while the model is still loading this runs again every second (Update), until it's on
+                if (entry == null && _told.Add(s.Key)) Debug(new List<string> { s.Name + ": no car model on this PC yet (the app downloads the model packs), so it keeps the " + s.Base + "'s own body, painted" });
+                return;
+            }
+            var log = new List<string> { s.Name + " on the " + s.Base + " (" + car.name + "): model " + entry.Name + " from " + entry.Pack + "; wheels at " + string.Join(" ", fit.Wheels.Select(w => w.ToString("0.00")).ToArray()) };
+            int fitted = FitModel(model, car.transform, fit, log);
+            bool ownWheels = Rt.Comps(model, typeof(Transform), true).OfType<Transform>().Any(t => t.name.IndexOf("wheel", StringComparison.OrdinalIgnoreCase) >= 0);
             var hide = new List<Renderer>();
-            var log = new List<string> { s.Name + " on the " + s.Base + " (" + car.name + "): wheels at " + string.Join(" ", fit.Wheels.Select(w => w.ToString("0.00")).ToArray()) + ", r " + fit.R.ToString("0.00") };
             foreach (var r in renderers)
             {
-                bool wheel = IsWheel(r, fit, car.transform);
-                log.Add((wheel ? "  kept   " : "  hidden ") + Path_(r.transform, car.transform) + "  size " + r.bounds.size.ToString("0.00"));
-                if (!wheel) hide.Add(r);
+                bool keep = !ownWheels && IsWheel(r, fit, car.transform);
+                log.Add((keep ? "  kept   " : "  hidden ") + Path_(r.transform, car.transform));
+                if (!keep) hide.Add(r);
             }
             foreach (var bm in Creative.Each(Rt.Get(car, "BodyMeshes", "bodyMeshes")))
             {
                 var r = Rt.Get(bm, "Renderer", "renderer", "Mesh") as Renderer;
-                if (r != null && !hide.Contains(r)) { hide.Add(r); log.Add("  hidden (body panel) " + Path_(r.transform, car.transform)); }
+                if (r != null && !hide.Contains(r)) hide.Add(r);
             }
             foreach (var r in hide) r.enabled = false;
             _hidden[car.GetInstanceID()] = new KeyValuePair<Component, List<Renderer>>(car, hide);
             int hidden = hide.Count;
+            if (ownWheels) _spin[car.GetInstanceID()] = new KeyValuePair<Component, List<Transform>>(car, Rt.Comps(model, typeof(Transform), true).OfType<Transform>()
+                .Where(t => t.name.IndexOf("wheel", StringComparison.OrdinalIgnoreCase) >= 0 && t.GetComponent<MeshFilter>() != null).ToList());
             Debug(log);
-            var parts = Details(s, fit, b);
-            foreach (var p in parts) Looks.Build(p, root.transform, template);
+            Lights(root.transform, car.transform, fit);
             if (s.Glow.a > 0)
             {
                 try
@@ -209,8 +223,69 @@ namespace Frankenstein
                 }
                 catch (Exception) { }
             }
-            Melon<Plugin>.Logger.Msg("Garage: " + s.Name + (loaded ? " (from your save)" : "") + ": new body (" + b.Parts + " meshes, " + parts.Count +
-                                     " details) on the " + s.Base + ", " + hidden + " of its parts hidden, wheels kept.");
+            Melon<Plugin>.Logger.Msg("Garage: " + s.Name + (loaded ? " (from your save)" : "") + ": wears the " + entry.Name + " model (" + fitted + " meshes) on the " + s.Base + ", " + hidden + " of its parts hidden" + (ownWheels ? ", the model's own wheels turn" : ", its wheels kept") + ".");
+        }
+
+        static readonly HashSet<string> _told = new HashSet<string>();
+        static readonly Dictionary<int, KeyValuePair<Component, List<Transform>>> _spin = new Dictionary<int, KeyValuePair<Component, List<Transform>>>();
+
+        /// <summary>The model sized to the base car: as long as its wheelbase allows, centred on its wheels, standing on
+        /// the ground under them, and turned to face the way the car does.</summary>
+        static int FitModel(GameObject model, Transform car, Body.Fit fit, List<string> log)
+        {
+            var t = model.transform;
+            t.localPosition = Vector3.zero;
+            t.localRotation = Quaternion.identity;
+            t.localScale = Vector3.one;
+            var b = global::Frankenstein.Models.LocalBounds(model, car);
+            if (b.size.x > b.size.z * 1.2f) { t.localRotation = Quaternion.Euler(0, 90, 0); b = global::Frankenstein.Models.LocalBounds(model, car); }
+            float wheelbase = fit.FrontZ - fit.RearZ;
+            float want = wheelbase * 1.62f;  // overall length is about 1.6 wheelbases on most cars
+            float k = b.size.z > 0.01f ? want / b.size.z : 1f;
+            t.localScale = Vector3.one * k;
+            b = global::Frankenstein.Models.LocalBounds(model, car);
+            float midZ = (fit.FrontZ + fit.RearZ) / 2, midX = fit.Wheels.Average(w => w.x);
+            t.localPosition += new Vector3(midX - b.center.x, fit.Ground - b.min.y, midZ - b.center.z);
+            log.Add("  model scaled x" + k.ToString("0.00") + " to " + (b.size.z).ToString("0.00") + " m long (wheelbase " + wheelbase.ToString("0.00") + ")");
+            return Rt.Comps(model, typeof(MeshFilter), true).Count;
+        }
+
+        /// <summary>Head and tail lights that really light the road, on any model.</summary>
+        static void Lights(Transform root, Transform car, Body.Fit fit)
+        {
+            try
+            {
+                foreach (var front in new[] { true, false })
+                {
+                    var go = new GameObject(front ? "headlights" : "taillights");
+                    go.transform.SetParent(root, false);
+                    go.transform.localPosition = new Vector3(0, fit.Ground + fit.R * 1.6f, front ? fit.FrontZ + fit.R * 2.2f : fit.RearZ - fit.R * 2.2f);
+                    go.transform.localRotation = Quaternion.Euler(8, front ? 0 : 180, 0);
+                    var l = go.AddComponent<Light>();
+                    l.type = front ? LightType.Spot : LightType.Point;
+                    l.color = front ? new Color(1f, 0.96f, 0.88f) : new Color(1f, 0.08f, 0.05f);
+                    l.range = front ? 32f : 3f;
+                    if (front) l.spotAngle = 70f;
+                    l.intensity = front ? 2.2f : 1.4f;
+                }
+            }
+            catch (Exception) { }
+        }
+
+        /// <summary>A model's own wheels turn with the car's speed.</summary>
+        public static void Spin()
+        {
+            foreach (var id in _spin.Keys.ToList())
+            {
+                var kv = _spin[id];
+                if (kv.Key == null) { _spin.Remove(id); continue; }
+                var rb = Rt.Comp(kv.Key.gameObject, Rt.Find("UnityEngine.Rigidbody"));
+                var vel = Rt.Get(rb, "linearVelocity", "velocity");
+                if (!(vel is Vector3 v)) continue;
+                float speed = Vector3.Dot(v, kv.Key.transform.forward);
+                float deg = speed / 0.35f * Mathf.Rad2Deg * Time.deltaTime;
+                foreach (var w in kv.Value) if (w != null) w.Rotate(deg, 0, 0, Space.Self);
+            }
         }
 
         static readonly Dictionary<int, KeyValuePair<Component, List<Renderer>>> _hidden = new Dictionary<int, KeyValuePair<Component, List<Renderer>>>();

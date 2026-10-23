@@ -3,6 +3,17 @@
 Every release, newest first. Downloads are on the [releases page](https://github.com/LKZ007/game-merger/releases).
 The app was called Game Merger before 3.8.0.
 
+## v3.46.0 (2026-10-23)
+- **The Schedule I x Hood Warfare restart, milestone 1: the foundation.** The old work is kept on its own branch and in release 3.45.1.
+  - **Real 3D models in the game.** Frankenstein's mod now reads standard .glb and .gltf models (meshes, textures, colours, glowing lights) and puts them in the game. Models are read in the background, so the game doesn't stall.
+  - **Free model packs, downloaded by your PC.** The app gets Kenney's CC0 car and city packs from kenney.nl the first time you press Play, or from Settings > Graphics and models. It keeps them on your PC and puts them into the merge with a licence list. You can also drop your own .glb files into the merge's UserData\Frankenstein\Models\Mine folder.
+  - **Cars wear real models.** The F3 cars (and any you spawn from the sheet) wear a 3D car model fitted to the game's car. The model's own wheels turn, and the headlights and tail lights really light up. Until the packs are on your PC, a car keeps the game's own body, painted.
+  - **The look, towards the concept art.** There's a new Graphics setting: Cinematic, High (the default), Balanced or Performance. It adds bloom, cinematic tone mapping, warm and teal colour grading, a vignette, longer shadows and sharper far detail. A golden-hour grade follows the game's clock at sunset and a blue grade at night. If the game drops under 40 FPS, the look steps down.
+  - **A test city block** (F8 > Test city block: build here) built from real city models with collision. It streams out when you're far away and shows simpler buildings at a distance. It also checks whether the game's NPCs could walk there. It stays with your save.
+  - **selftest.txt** in UserData\Frankenstein says what loaded: models, graphics, FPS and the test block.
+- **Retired in the restart:** the code-built city island, Hood City, the F4 island map, the island gangs (Cartel, Outlaw MC) and the code-built car bodies. Guns, gangs, Creative, the menus and the controller stay until their milestones rebuild them.
+- Honest limits: Kenney's models are clean low-poly ones, not the photoreal cars from your sheet. Those need licensed models, and they come in milestone 2. Schedule I's own characters and terrain keep their look. Not tested in game yet.
+
 ## v3.45.1 (2026-10-23)
 - **Fixed: Play on a packed merge stopped with "...is in the way and isn't a Frankenstein copy".** An earlier rebuild that was cut off left a half-made copy behind without Frankenstein's marker, so the next Play didn't recognise it. Now Frankenstein marks a rebuild as its own before it starts copying. When it finds a leftover with only the game's files and the merge's own files in it, it clears that leftover and rebuilds. If the folder has anything else in it, the folder is moved aside (renamed, nothing deleted) and the copy is rebuilt. The installed game is still only read.
 - **Fixed: your own guns registering (the AK-47 "Ambiguous match found" error).** The game has two members whose names differ only in case ("ID" and "id"), and Frankenstein's lookup tripped over that, so every gun fell back to its base gun. The lookup now picks the exact name and the nearest type. Singletons are found the same safe way everywhere.

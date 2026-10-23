@@ -1,5 +1,5 @@
 "use strict";
-window.APP_BUILD = "3.45.1";  // must match index.html: a mixed-up install is caught at start
+window.APP_BUILD = "3.46.0";  // must match index.html: a mixed-up install is caught at start
 
 // ---------- talking to the Python side ----------
 const TOKEN = document.querySelector('meta[name="gm-token"]')?.content;
@@ -1944,6 +1944,13 @@ async function loadSettings() {
       <div class="field"><label for="perfLevel">In-game extras</label>
         <select class="input" id="perfLevel">${[["auto", "Automatic (recommended)"], ["quality", "Always full"], ["balanced", "Lighter"], ["performance", "Lightest, for slower PCs"]].map(([v, n]) => `<option value="${v}" ${(s.performance || "auto") === v ? "selected" : ""}>${n}</option>`).join("")}</select></div>
     </div>
+    <div class="card"><h2>Graphics and models</h2>
+      <p class="muted">How the Schedule I merge looks: colour grading, bloom, lighting and fog. Cinematic aims at the concept art; Frankenstein still steps it down if the game drops under 40 FPS. The free 3D model packs (cars and city buildings, all CC0) download from their makers' pages onto this PC and go into the merge when you press Play.</p>
+      <div class="field"><label for="gfxLevel">Graphics</label>
+        <select class="input" id="gfxLevel">${[["cinematic", "Cinematic (closest to the concept art)"], ["high", "High (recommended)"], ["balanced", "Balanced"], ["performance", "Performance, for slower PCs"]].map(([v, n]) => `<option value="${v}" ${(s.graphics || "high") === v ? "selected" : ""}>${n}</option>`).join("")}</select></div>
+      <p class="muted" id="modelPacks">${((s.models || {}).packs || []).map(p => `${p.ready ? "✓" : "○"} ${esc(p.name)} by ${esc(p.author)}${p.ready ? ` (${p.files} files)` : ""}`).join("<br>")}</p>
+      <button class="btn" id="getModels">Download model packs now</button>
+    </div>
     <div class="card"><h2>Save space</h2>
       <p class="muted">After you close a merged game, Frankenstein packs it away. It keeps only the files the merge changed (mods, their settings) and zips its saves, then deletes the copy. When you press Play it rebuilds the copy from your own installed game first. That takes about as long as copying the game: seconds for small games, several minutes for big ones like Cyberpunk. Your original game is only ever read.</p>
       <label class="row"><input type="checkbox" id="packAfterPlay" ${s.pack_after_play !== false ? "checked" : ""}> Pack merges away after playing</label>
@@ -1995,6 +2002,8 @@ async function loadSettings() {
   $("#checkUpdate").onclick = async () => offerUpdate(await call("check_update").catch(() => null), true);
   $("#selfCheck").onclick = async () => { toast("Checking everything…"); try { showSelfCheck(await call("self_check_result", true)); } catch (e) { toast(errText(e)); } };
   $("#perfLevel").onchange = async () => { state.settings = await call("save_settings", { performance: $("#perfLevel").value }); };
+  $("#gfxLevel").onchange = async () => { state.settings = await call("save_settings", { graphics: $("#gfxLevel").value }); };
+  $("#getModels").onclick = async () => { const j = await followJob(await call("download_models"), "Downloading the free model packs"); if (j) loadSettings(); };
   $("#packAfterPlay").onchange = async () => { state.settings = await call("save_settings", { pack_after_play: $("#packAfterPlay").checked }); };
   $("#itemMenuNormal").onchange = async () => { state.settings = await call("save_settings", { item_menu_normal: $("#itemMenuNormal").checked }); };
   $("#funStyle").onchange = async () => { state.settings = await call("save_settings", { fun_style: $("#funStyle").value }); applyFun(); };

@@ -54,7 +54,7 @@ namespace Frankenstein
             Carry.Scene(_inTown);
             Gangs.Scene(_inTown);
             Crew.Scene(_inTown);
-            Expansion.Scene(_inTown);
+            Districts.Scene(_inTown);
             Creative.Forget();
             if (!_inTown || Style.Length == 0) return;
             _cardUntil = Time.unscaledTime + 6f;  // the merged title card
@@ -168,20 +168,14 @@ namespace Frankenstein
                 if (Pad.Button(new Rect(px + 12, cy + 58, (pw - 30) / 2, 28), "Yes, switch")) { _confirm = ""; Mode.Set(to); }
                 if (Pad.Button(new Rect(px + 18 + (pw - 30) / 2, cy + 58, (pw - 30) / 2, 28), "Cancel")) _confirm = "";
             }
-            else if (_confirm == "world")
-            {
-                bool hood = Mode.HoodCity;
-                GUI.Label(new Rect(px + 12, cy + 22, pw - 24, 36), hood ? "This save goes back to Schedule I's original town. A copy of it is kept first." : "This save becomes Hood City: levy's map over the town, its real shops and buildings kept. A copy of it is kept first.");
-                if (Pad.Button(new Rect(px + 12, cy + 58, (pw - 30) / 2, 28), "Yes, switch")) { _confirm = ""; Mode.SetLayout(hood ? "original" : "hoodcity"); }
-                if (Pad.Button(new Rect(px + 18 + (pw - 30) / 2, cy + 58, (pw - 30) / 2, 28), "Cancel")) _confirm = "";
-            }
             else
             {
                 if (Pad.Button(new Rect(px + 12, cy + 26, (pw - 30) / 2, 30), "Game Mode: " + (MainMenu.Creative ? "Creative" : "Survival"))) _confirm = to;
-                if (Expansion.On && Pad.Button(new Rect(px + 18 + (pw - 30) / 2, cy + 26, (pw - 30) / 2, 30), "World: " + (Mode.HoodCity ? "Hood City" : "Original town"))) _confirm = "world";
+                // milestone 1's test of the new world: a block of real city models, streamed and kept with this save
+                if (Pad.Button(new Rect(px + 18 + (pw - 30) / 2, cy + 26, (pw - 30) / 2, 30), Districts.Has ? "Test city block: move here" : "Test city block: build here")) Districts.PlaceHere();
+                if (Districts.Note.Length > 0) GUI.Label(new Rect(px + 12, cy + 58, pw - 24, 22), Districts.Note);
             }
             Carry.Draw(px + pw + 12, py - top + 64, 420);
-            DrawTravel(px, py + (Style.Length > 0 ? 250 : 0) + 8, pw);
             if (Style.Length == 0) return;
             GUI.Label(new Rect(px + 12, py + 8, pw - 24, 22), Title + " in " + Host);
             GUI.Label(new Rect(px + 12, py + 32, pw - 24, 40), Zone);
@@ -207,15 +201,6 @@ namespace Frankenstein
                 else { _holdStart = Time.unscaledTime; _offSince = -1; _note = ""; }
             }
             GUI.Label(new Rect(px + 12, py + 186, pw - 24, 56), _built ? "Untested in game: tell Frankenstein's maker how it looks." : "F8 closes this.");
-        }
-
-        /// <summary>EXPERIMENTAL: the city island off the east coast (Expansion): its map, to see it and go there.</summary>
-        static void DrawTravel(float x, float y, float w)
-        {
-            if (!Expansion.On) return;
-            GUI.Box(new Rect(x, y, w, 68), "");
-            GUI.Label(new Rect(x + 12, y + 6, w - 24, 22), "TRAVEL  ·  the city island (experimental)");
-            if (Pad.Button(new Rect(x + 12, y + 32, w - 24, 28), Expansion.Built ? "City map (F4): go anywhere on the island" : "City map (F4): the island is being built...")) { _open = false; CityMap.Toggle(); }
         }
 
         static void Warn(Exception e) => Melon<Plugin>.Logger.Warning("World: " + e.Message);

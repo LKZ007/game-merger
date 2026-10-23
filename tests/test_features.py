@@ -435,15 +435,13 @@ class FeatureChecklist(unittest.TestCase):
 
     def test_337_cars_fully_remodelled(self):
         dll = open(os.path.join(PKG, "mods", "schedule1", "Frankenstein.dll"), "rb").read()
-        for word in ("UnityEngine.WheelCollider", "new body (", "wheels kept"):
+        for word in ("UnityEngine.WheelCollider", "wears the ", "its wheels kept"):
             self.assertIn(word.encode("utf-16-le"), dll, word)
-        body = read(ROOT, "mods", "schedule1", "Body.cs")
-        for shape in ("super", "wedge", "gt", "gwagon"):
-            self.assertIn('["%s"] = new Shape' % shape, body)   # every car has its own body
-        self.assertIn('Rt.SetArray(mesh, "vertices"', body)      # a real mesh, built on either build of the game
         garage = read(ROOT, "mods", "schedule1", "Garage.cs")
         self.assertIn("r.enabled = false", garage)               # the base car's body is hidden
-        self.assertIn("IsWheel(", garage)                        # its wheels aren't
+        self.assertIn("IsWheel(", garage)                        # its wheels aren't, unless the model has its own
+        self.assertIn("Models.Pick(\"cars\"", garage)            # a real 3D model, since 3.46 (no code-built bodies)
+        self.assertNotIn("Body.Make(", garage)
         self.assertIn("CalcSize", read(ROOT, "mods", "schedule1", "Vehicles.cs"))  # the prompt fits the name
 
     def test_336_menu_like_reference_profiles_skip_tutorial(self):
@@ -518,9 +516,7 @@ class FeatureChecklist(unittest.TestCase):
         self.assertIn("SHChangeNotify", nsi)
 
     def test_3311_new_districts(self):
-        dll = open(os.path.join(PKG, "mods", "schedule1", "Frankenstein.dll"), "rb").read()
-        for word in ("Frankenstein island", "TRAVEL", "Entering "):
-            self.assertIn(word.encode("utf-16-le"), dll, word)
+        # the old island's districts were retired in the 3.46 restart; the gangs keep their turf names
         from gamemerger.api import GANGS
         for g in GANGS["hoodwarfare"]:
             self.assertTrue(g.get("district"), "every gang gets a new district")
@@ -551,40 +547,6 @@ class FeatureChecklist(unittest.TestCase):
         self.assertIn("perfLevel", js)
         self.assertIn("body.game-on", read(PKG, "web", "app.css"))
 
-    def test_343_city_island(self):
-        # levy's map: a city island with every district and gang HQ where the map has them, an in-game map, no lag
-        exp = read(ROOT, "mods", "schedule1", "Expansion.cs")
-        for name in ("Downtown", "Uptown Hills", "Lake Park", "Suburbs", "Airport", "Shopping & Nightlife", "Construction Zone",
-                     "Trailer Park", "Farms", "Port", "South Docks", "Cartel Point", "Outlaw Bluff"):
-            self.assertIn('"%s"' % name, exp, name)
-        for gang in ("london", "mafia", "crips", "bloods", "yakuza", "cartel", "outlaw", "eastlondon"):
-            self.assertIn('"%s"' % gang, exp, gang)
-        for x in ("StaticBatchingUtility.Combine", "Stream(", "Perf.Level", "_jobs", "Rescue(", "Crew.Island("):
-            self.assertIn(x, exp)  # batched, streamed by distance, built a few ms a frame, out of the water
-        from gamemerger.api import GANGS
-        ids = {g["id"] for g in GANGS["hoodwarfare"]}
-        self.assertTrue({"cartel", "outlaw"} <= ids)
-        crew = read(ROOT, "mods", "schedule1", "CrewPeople.cs")
-        for key in ("cartel_boss", "outlaw_boss"):
-            self.assertIn('"%s"' % key, crew)
-        self.assertTrue(os.path.isfile(os.path.join(PKG, "mods", "_art", "hoodwarfare", "ref-map.jpg")))
-        cm = read(ROOT, "mods", "schedule1", "CityMap.cs")
-        for x in ("KeyCode.F4", "RefArt.Map", "Expansion.Travel", "Pad.A"):
-            self.assertIn(x, cm)
-        self.assertIn("CityMap.Toggle()", read(ROOT, "mods", "schedule1", "Wheel.cs"))
-        self.assertIn("Expansion.RegionAt", read(ROOT, "mods", "schedule1", "Gangs.cs"))
-        dll = open(os.path.join(PKG, "mods", "schedule1", "Frankenstein.dll"), "rb").read()
-        for word in ("ref-map.jpg", "THE CITY", "Out of the water"):
-            self.assertIn(word.encode("utf-16-le"), dll, word)
-
-    def test_3431_island_reachable(self):
-        exp = read(ROOT, "mods", "schedule1", "Expansion.cs")
-        for x in ("GoToIsland", "island-debug.txt", "SampleHeight", "Plugin.MenuUp"):
-            self.assertIn(x, exp)
-        self.assertIn("GoToIsland", read(ROOT, "mods", "schedule1", "ItemMenu.cs"))
-        self.assertIn("GoToIsland", read(ROOT, "mods", "schedule1", "Wheel.cs"))
-        self.assertIn("Plugin.MenuUp", read(ROOT, "mods", "schedule1", "Gangs.cs"))  # labels never over menus
-
     def test_344_cars_like_the_sheet(self):
         garage = read(ROOT, "mods", "schedule1", "Garage.cs")
         for name, mph, z in (("Velocci P-One", "240", "2.4f"), ("Vitesse Centaur", "261", "2.3f"), ("Highland Sport", "150", "5f"),
@@ -607,18 +569,6 @@ class FeatureChecklist(unittest.TestCase):
         for word in ("Vehicle Spawner", "Velocci P-One", "MPH"):
             self.assertIn(word.encode("utf-16-le"), dll, word)
 
-    def test_345_hood_city(self):
-        exp = read(ROOT, "mods", "schedule1", "Expansion.cs")
-        for x in ("Mode.HoodCity", "NPCEnterableBuilding", "ShopInterface", "Settle(", "Outside(", "Rebuild()", "Hood City"):
-            self.assertIn(x, exp)
-        mode = read(ROOT, "mods", "schedule1", "Mode.cs")
-        for x in ("world.txt", "SetLayout(", "PendingLayout", "HoodCity"):
-            self.assertIn(x, mode)
-        self.assertIn('"World"', read(ROOT, "mods", "schedule1", "MenuSkin.cs"))  # chosen per save on the main menu
-        self.assertIn("World: ", read(ROOT, "mods", "schedule1", "World.cs"))   # and from F8
-        dll = open(os.path.join(PKG, "mods", "schedule1", "Frankenstein.dll"), "rb").read()
-        self.assertIn("Hood City".encode("utf-16-le"), dll)
-
     def test_3451_unpack_leftover_and_gun_ambiguity(self):
         inst = read(PKG, "installer.py")
         for x in ("_leftover_is_ours", "_move_aside", "moved aside"):
@@ -629,6 +579,33 @@ class FeatureChecklist(unittest.TestCase):
         self.assertIn("public static object Instance(Type t)", rt)
         for f in ("OwnItems.cs", "Boom.cs", "Vehicles.cs"):
             self.assertNotIn('GetProperty("Instance"', read(ROOT, "mods", "schedule1", f))
+
+    def test_346_restart_milestone1(self):
+        mod = os.path.join(ROOT, "mods", "schedule1")
+        for gone in ("Expansion.cs", "CityMap.cs"):
+            self.assertFalse(os.path.exists(os.path.join(mod, gone)), gone + " was retired in the restart")
+        self.assertNotIn("HoodCity", read(ROOT, "mods", "schedule1", "Mode.cs"))
+        models = read(ROOT, "mods", "schedule1", "Models.cs")
+        for x in ("Gltf.Load(", "new Thread(", "Rt.SetArray(mesh, \"vertices\"", "_EmissionColor", "MeshCollider", "models-debug.txt", "Mine"):
+            self.assertIn(x, models)
+        gfx = read(ROOT, "mods", "schedule1", "Gfx.cs")
+        for x in ("Bloom", "Tonemapping", "WhiteBalance", "SplitToning", "Vignette", "sharedProfile", "Perf.Level", "sunset", "night", "gfx-debug.txt"):
+            self.assertIn(x, gfx)
+        dist = read(ROOT, "mods", "schedule1", "Districts.cs")
+        for x in ("Stream()", "low-detail", "NavProbe", "Mode.DataFile(\"district\")", "districts-debug.txt"):
+            self.assertIn(x, dist)
+        self.assertIn("selftest.txt", read(ROOT, "mods", "schedule1", "SelfTest.cs"))
+        plugin = read(ROOT, "mods", "schedule1", "Plugin.cs")
+        for x in ("Gfx.Read(", "Gfx.Update()", "Districts.Update()", "SelfTest.Update()", "Garage.Spin()"):
+            self.assertIn(x, plugin)
+        from gamemerger import assetpacks
+        from gamemerger.api import GRAPHICS_LEVELS
+        self.assertEqual(GRAPHICS_LEVELS, ("cinematic", "high", "balanced", "performance"))
+        self.assertTrue(all(p["licence"].startswith("CC0") for p in assetpacks.PACKS))
+        self.assertIn("assetpacks.install_into(m.target_path)", read(PKG, "api.py"))
+        dll = open(os.path.join(PKG, "mods", "schedule1", "Frankenstein.dll"), "rb").read()
+        for word in ("Test city block: build here", "selftest.txt", "Frankenstein look"):
+            self.assertIn(word.encode("utf-16-le"), dll, word)
 
 if __name__ == "__main__":
     unittest.main()

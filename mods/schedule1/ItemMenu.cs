@@ -315,13 +315,6 @@ namespace Frankenstein
             Paint.Fill(new Rect(x, y, W, H), new Color(0.07f, 0.05f, 0.11f, 1f));
             GUI.Label(new Rect(x + 16, y + 10, 580, 24), "FRANKENSTEIN " + Plugin.Version + "  ·  Every item in this merge (" + _all.Count + ")" + (_cats.Count > _cat && _cats[_cat] == "Weapons" ? "  ·  " + OwnGuns.Source : ""));
             if (GUI.Button(new Rect(x + W - 40, y + 8, 28, 26), "X")) { Close(); return; }
-            if (Expansion.On)
-            {
-                // the city island: straight there, or its map
-                if (global::Frankenstein.Pad.Button(new Rect(x + W - 330, y + 8, 160, 26), global::Frankenstein.Expansion.Built ? "Go to the city island" : "City island: " + (global::Frankenstein.Expansion.Status.Length > 18 ? "building" : global::Frankenstein.Expansion.Status))) { Close(); global::Frankenstein.Expansion.GoToIsland(); return; }
-                if (global::Frankenstein.Pad.Button(new Rect(x + W - 164, y + 8, 116, 26), "City map (F4)")) { Close(); CityMap.Toggle(); return; }
-            }
-
             GUI.Label(new Rect(x + 16, y + 42, 60, 24), "Search");
             bool blink = ((int)(Time.unscaledTime * 2)) % 2 == 0;
             GUI.Box(new Rect(x + 76, y + 40, 280, 26), "");

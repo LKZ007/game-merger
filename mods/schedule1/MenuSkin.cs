@@ -76,7 +76,6 @@ namespace Frankenstein
                 new[] { "continue", "Continue", "Load your world", "play" },
                 new[] { "new game", "New Game", "Start a new world", "plus" },
                 new[] { "", "Creative", "Unlimited resources", "brush" },
-                new[] { "", "World", "Hood City (levy's map) or Schedule I's original town", "play" },
                 new[] { "invite friends", "Multiplayer", "Invite friends to your game", "people" },
                 new[] { "settings", "Settings", "Adjust your game", "gear" },
                 new[] { "", "Profiles", "Your saves", "person" },
@@ -150,8 +149,6 @@ namespace Frankenstein
             return false;
         }
 
-        static string WorldTitle() => Mode.PendingLayout == "hoodcity" ? "World: Hood City  ·  next game" : Mode.PendingLayout == "original" ? "World: Original town  ·  next game" : "World: as each save has it";
-
         static void Choose(Card c)
         {
             if (c.Key == "profiles") { _profiles = true; _card = 0; Profiles.Forget(); return; }
@@ -162,13 +159,6 @@ namespace Frankenstein
                 var ng = _cards.FirstOrDefault(x => x.Key == "new game");
                 _note = "Creative: the new world you start now is Creative.";
                 if (ng == null || !Press(ng.Button)) _note = "Creative is on for the next game you start or load.";
-                return;
-            }
-            if (c.Key == "world")
-            {
-                // as saved -> Hood City -> the original town -> as saved, for the next game you start or load
-                Mode.PendingLayout = Mode.PendingLayout == "" ? "hoodcity" : Mode.PendingLayout == "hoodcity" ? "original" : "";
-                _note = Mode.PendingLayout == "hoodcity" ? "The next game you start or load plays in Hood City." : Mode.PendingLayout == "original" ? "The next game you start or load plays in the original town." : "Each save keeps its own world.";
                 return;
             }
             if (c.Key == "new game" && Mode.Pending == "creative") Mode.Pending = "";  // New Game itself is Survival
@@ -418,7 +408,6 @@ namespace Frankenstein
                 if (ic != null) Paint.Picture(new Rect(r.x + 20 * k, r.y + (h - 30 * k) / 2, 30 * k, 30 * k), ic);
                 string title = c.Title;
                 if (c.Key == "creative" && Mode.Pending == "creative") title += "  ·  next game";
-                if (c.Key == "world") title = WorldTitle();
                 GUI.Label(new Rect(r.x + 72 * k, r.y, w - 90 * k, h), title, _row);
                 if (GUI.Button(r, "", GUIStyle.none)) { _sel = i; Choose(c); }
             }
@@ -546,7 +535,6 @@ namespace Frankenstein
                 if (icon != null) Paint.Picture(new Rect(r.x + 15 * S, r.y + (r.height - ic * S) / 2, ic * S, ic * S), icon);
                 string title = c.Title;
                 if (c.Key == "creative" && Mode.Pending == "creative") title += "  ·  next game";
-                if (c.Key == "world") title = WorldTitle();
                 GUI.Label(new Rect(r.x + 54 * S, r.y, r.width - 60 * S, r.height), title, RefArt.Style(font * S, Ink, 3, false));
                 if (GUI.Button(r, "", GUIStyle.none))
                 {

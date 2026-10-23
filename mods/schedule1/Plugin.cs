@@ -15,11 +15,11 @@ namespace Frankenstein
     {
         /// <summary>The Frankenstein release this mod came with (equal to gamemerger/version.py; a test checks).
         /// Shown on F6's title and in MelonLoader's log, where the app reads it back for the merge's card.</summary>
-        public const string Version = "3.45.1";
+        public const string Version = "3.46.0";
         float _next;
         public static bool MenuAllowed = true;
         /// <summary>A Frankenstein or game menu is on screen: labels over the world stay hidden so they never draw over it.</summary>
-        public static bool MenuUp => ItemMenu.IsOpen || CityMap.Open || Showroom.Open || Wheel.Open || Character.Open || MenuSkin.Active || Loading.Showing || PauseSave.Showing;
+        public static bool MenuUp => ItemMenu.IsOpen || Showroom.Open || Wheel.Open || Character.Open || MenuSkin.Active || Loading.Showing || PauseSave.Showing;
         public static System.Collections.Generic.List<string> Kit = new System.Collections.Generic.List<string>();
         public static string KitName = "";
         public static System.Collections.Generic.List<string> Shop = new System.Collections.Generic.List<string>();
@@ -63,7 +63,7 @@ namespace Frankenstein
                 World.Host = J.S(s, "host", "Schedule I");
                 Loading.Read(J.O(s, "loading"));
                 Guns.Read(J.O(s, "guns"));
-                Perf.Read(J.S(s, "performance", "auto"));
+                Perf.Read(J.S(s, "performance", "auto")); Gfx.Read(J.S(s, "graphics", "high"));
                 Gangs.Read(J.O(s, "gangs"));
                 Carry.Read(s is System.Collections.Generic.Dictionary<string, object> d3 && d3.TryGetValue("carry", out var cv) ? cv : null);
                 if (pa != null && J.S(pa, "style").Length > 0)
@@ -94,6 +94,10 @@ namespace Frankenstein
             try { Vehicles.Update(); } catch (Exception e) { Melon<Plugin>.Logger.Warning("Vehicles: " + e.Message); }
             try { Skip.Update(); } catch (Exception e) { Melon<Plugin>.Logger.Warning("Skip tutorial: " + e.Message); }
             try { Garage.Update(); } catch (Exception e) { Melon<Plugin>.Logger.Warning("Garage: " + e.Message); }
+            try { Garage.Spin(); } catch (Exception) { }
+            try { Districts.Update(); } catch (Exception e) { Melon<Plugin>.Logger.Warning("Districts: " + e.Message); }
+            try { SelfTest.Update(); } catch (Exception) { }
+            try { Gfx.Update(); } catch (Exception e) { Melon<Plugin>.Logger.Warning("Graphics: " + e.Message); }
             try { Melee.Update(); } catch (Exception e) { Melon<Plugin>.Logger.Warning("Swing: " + e.Message); }
             try { Drop.Update(); } catch (Exception e) { Melon<Plugin>.Logger.Warning("Drop: " + e.Message); }
             try { Fly.Update(); } catch (Exception e) { Melon<Plugin>.Logger.Warning("Fly: " + e.Message); }
@@ -112,10 +116,8 @@ namespace Frankenstein
             try { Boom.Update(); } catch (Exception e) { Melon<Plugin>.Logger.Warning("Explosives: " + e.Message); }
             try { Carry.Update(); } catch (Exception e) { Melon<Plugin>.Logger.Warning("Carry: " + e.Message); }
             try { World.Update(); } catch (Exception e) { Melon<Plugin>.Logger.Warning("World: " + e.Message); }
-            try { Expansion.Update(); } catch (Exception e) { Melon<Plugin>.Logger.Warning("Expansion: " + e.Message); }
             try { Showroom.Update(); } catch (Exception e) { Melon<Plugin>.Logger.Warning("Vehicle spawner: " + e.Message); }
             try { Drive.Update(); } catch (Exception e) { Melon<Plugin>.Logger.Warning("Drive: " + e.Message); }
-            try { CityMap.Update(); } catch (Exception e) { Melon<Plugin>.Logger.Warning("City map: " + e.Message); }
             if (Time.unscaledTime < _next) return;
             _next = Time.unscaledTime + 1f;
             try { Story.Tick(); }
@@ -156,8 +158,6 @@ namespace Frankenstein
             World.Draw();
             try { Boom.Draw(); } catch (Exception) { }
             try { Crew.Draw(); } catch (Exception) { }
-            try { Expansion.Draw(); } catch (Exception) { }
-            try { CityMap.Draw(); } catch (Exception) { }
             try { Drive.Draw(); } catch (Exception) { }
             try { Showroom.Draw(); } catch (Exception) { }
             try { Gangs.Draw(); } catch (Exception e) { Melon<Plugin>.Logger.Warning("Gangs: " + e.Message); }

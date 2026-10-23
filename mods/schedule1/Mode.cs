@@ -17,9 +17,6 @@ namespace Frankenstein
         /// <summary>Chosen on the main menu (or by Frankenstein's app): the mode the next game you start or load
         /// gets. "" keeps each save's own mode.</summary>
         public static string Pending = "";
-        /// <summary>The world the next game you start or load gets, from the main menu: "hoodcity", "original",
-        /// or "" to keep each save's own (a save without one is the original town).</summary>
-        public static string PendingLayout = "";
         public static string SavePath = "";
         static float _next;
         static object _lm;
@@ -27,33 +24,6 @@ namespace Frankenstein
         public static string Key => SavePath.Length > 0 ? new DirectoryInfo(SavePath).Name : "";
 
         static string ModeFile(string save) => Path.Combine(save, "Modded", "Frankenstein", "gamemode.txt");
-        static string LayoutFile(string save) => Path.Combine(save, "Modded", "Frankenstein", "world.txt");
-
-        /// <summary>Which world this save plays in: levy's Hood City map, or Schedule I's original town.</summary>
-        public static string LayoutOf(string save)
-        {
-            try { return File.Exists(LayoutFile(save)) && File.ReadAllText(LayoutFile(save)).Trim() == "hoodcity" ? "hoodcity" : "original"; }
-            catch (Exception) { return "original"; }
-        }
-
-        public static bool HoodCity => SavePath.Length > 0 ? LayoutOf(SavePath) == "hoodcity" : PendingLayout == "hoodcity";
-
-        /// <summary>Switches the loaded save's world. A copy of the save is put aside the first time; the town
-        /// changes over right away.</summary>
-        public static void SetLayout(string layout, bool tell = true)
-        {
-            if (SavePath.Length == 0) { PendingLayout = layout; return; }
-            if (LayoutOf(SavePath) == layout) return;
-            Backup(SavePath);
-            try
-            {
-                Directory.CreateDirectory(Path.GetDirectoryName(LayoutFile(SavePath)));
-                File.WriteAllText(LayoutFile(SavePath), layout);
-            }
-            catch (Exception e) { Melon<Plugin>.Logger.Warning("World: couldn't write it to the save: " + e.Message); }
-            if (tell) ItemMenu.Notify(layout == "hoodcity" ? "Hood City: the town changes over now. Saved with this game." : "The original town is back. Saved with this game.");
-            Expansion.Rebuild();
-        }
 
         public static string Of(string save)
         {
@@ -108,8 +78,6 @@ namespace Frankenstein
             try { p = Loaded(); } catch (Exception) { _lm = null; return; }
             if (string.IsNullOrEmpty(p) || p == SavePath) return;
             SavePath = p;
-            if (PendingLayout.Length > 0) { SetLayout(PendingLayout, false); PendingLayout = ""; }
-            Melon<Plugin>.Logger.Msg("World: " + Path.GetFileName(SavePath) + " is " + (LayoutOf(SavePath) == "hoodcity" ? "Hood City" : "the original town") + ".");
             if (Pending.Length > 0)
             {
                 if (Pending == "creative" && Of(SavePath) != "creative") Creative.StartEmpty = true;  // a new Creative world: empty hotbar

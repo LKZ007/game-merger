@@ -19,12 +19,13 @@ import webbrowser
 from . import installer, storymode, accounts, devices, achievements, ai, autorecipe, controller, covers, minecraft, modsources, storeinfo, discord, profiles, detect, downloader, gallery, network, nexus, paths, permissions, saves, scan, sharing, updater, standard
 from .version import VERSION
 from .installer import MODE_COPY, MODE_HARDLINK, MODE_INPLACE, Merge, MergeError, find_clashes, preview
-from . import carryover, eldenring, mergeplan, playas, recipes
+from . import assetpacks, carryover, eldenring, mergeplan, playas, recipes
 from .recipes import load_recipes, resource_dir
 
 SHARE_TYPES = ("Shared merges (*.gmerge)", "All files (*.*)")
 # Settings > Performance: auto turns Frankenstein's in-game extras down by itself when the game drops frames
 PERF_LEVELS = ("auto", "quality", "balanced", "performance")
+GRAPHICS_LEVELS = ("cinematic", "high", "balanced", "performance")  # the look; the mod still steps down under 40 FPS
 MOD_TYPES = ("Mod files (*.zip;*.7z;*.rar;*.archive;*.dll;*.asi;*.reds;*.lua;*.yaml;*.xl)", "All files (*.*)")
 
 
@@ -222,13 +223,6 @@ GANGS = {
         {"id": "eastlondon", "district": "Bow Road", "name": "East London Firm", "region": "Suburbia", "color": "#16A34A", "weapon": "Avatar/Equippables/BrokenBottle",
          "rival": "london", "product": "Granddaddy Purple", "drug_price": 1.2, "gun_price": 1.15,
          "ranks": ["Tiny", "Youngen", "Shotter", "Elder", "Top Boy", "Guv'nor"], "guns": ["Pump Shotgun@1800", "SMG@2300"]},
-        # the city island's own gangs (Expansion.cs): their turf is their island district, not one of the town's
-        {"id": "cartel", "district": "Cartel Point", "name": "Cartel", "region": "Cartel Point", "color": "#65A30D", "weapon": "Avatar/Equippables/M1911",
-         "rival": "outlaw", "product": "Cocaine", "drug_price": 1.5, "gun_price": 1.3, "island": True,
-         "ranks": ["Halcon", "Sicario", "Jefe de Plaza", "Lugarteniente", "Capo", "El Patron"], "guns": ["AK47@3600", "Revolver@1250"]},
-        {"id": "outlaw", "district": "Outlaw Bluff", "name": "Outlaw MC", "region": "Outlaw Bluff", "color": "#D4A017", "weapon": "Avatar/Equippables/Revolver",
-         "rival": "cartel", "product": "Meth", "drug_price": 1.25, "gun_price": 1.1, "island": True,
-         "ranks": ["Prospect", "Patched", "Road Captain", "Sergeant at Arms", "Vice President", "President"], "guns": ["Pump Shotgun@1850", "Revolver@1150"]},
     ],
 }
 LOADING_TIPS = {
@@ -240,8 +234,7 @@ LOADING_TIPS = {
                     "Rival dealers work their gang's corners. Knock one out and press G to rob them.",
                     "F10: who's who. Every gang's boss, lieutenant, enforcer and dealer, and what they're doing right now.",
                     "Creative: press F6 for every item, every gun included.",
-                    "F4: the city map. Take the highway bridge east of town to the island, or click a district to go there.",
-                    "The Cartel runs Cartel Point and the Outlaw MC holds the bluff in the south-east of the island."],
+                    "F8: build the test city block where you stand. It's made from real 3D models and stays with your save."],
 }
 
 # The merged game's guns and what stands in for each in the Host game. "close": the same kind of gun, works
@@ -978,6 +971,14 @@ class Api:
             except OSError:
                 pass
         return out
+
+    def download_models(self):
+        """Download the free model packs now (Settings > Graphics and models), shown in a job log."""
+        def work(job):
+            got = assetpacks.fetch_all(job.write)
+            job.write("%d of %d packs ready." % (len(got["got"]), len(assetpacks.PACKS)))
+            return dict(got, status=assetpacks.status())
+        return self._run(work)
 
     def unpack_room(self, merge_id):
         """Before rebuilding a packed merge: is there room, and if not, which other drives have it."""
@@ -2563,6 +2564,7 @@ class Api:
                      "world": mergeplan.settings(r.id, m.data.get("theme_id", ""), source.split(" /")[0]),
                      "host": m.data.get("game_name", ""),
                      "performance": self._settings.get("performance", "auto"),
+                     "graphics": self._settings.get("graphics", "high"),
                      "carry": carryover.settings(r.id, m.data.get("carry"))}
         if r.id == "schedule1":
             extra_all.update(self._schedule1_extras(m, r, source))
@@ -3167,6 +3169,12 @@ class Api:
                 self._install_builtin(m, r, lambda *_: None)  # Frankenstein's own mod: added if missing, kept up to date
             except Exception as e:
                 m.data["builtin_error"] = str(e)[:300]
+        if r and r.id == "schedule1":
+            try:  # the free model packs this PC already downloaded go into the copy; missing ones download meanwhile
+                m.data["models"] = assetpacks.install_into(m.target_path)
+            except OSError as e:
+                m.data["models"] = {"error": str(e)[:200]}
+            assetpacks.fetch_in_background()
         self._builtin_settings(m, r, creative)
         m.data["plays"] = m.data.get("plays", 0) + 1
         m.save()
@@ -3699,6 +3707,8 @@ class Api:
                 "item_menu_normal": bool(self._settings.get("item_menu_normal")),
                 "pack_after_play": self._settings.get("pack_after_play", True),
                 "performance": self._settings.get("performance", "auto"),
+                "graphics": self._settings.get("graphics", "high"),
+                "models": assetpacks.status(),
                 "has_curseforge": bool(self._settings.get("curseforge_key")),
                 "cloud_folder": self._settings.get("cloud_folder", ""),
                 "cloud_options": saves.cloud_folders()}
@@ -3709,7 +3719,9 @@ class Api:
             raise MergeError("Only the admin account can change keys and where copies go.")
         if "performance" in values and values["performance"] not in PERF_LEVELS:
             raise MergeError("Performance is one of: %s." % ", ".join(PERF_LEVELS))
-        for k in ("mode", "destination", "cloud_folder", "fun_style", "item_menu_normal", "pack_after_play", "performance"):
+        if "graphics" in values and values["graphics"] not in GRAPHICS_LEVELS:
+            raise MergeError("Graphics is one of: %s." % ", ".join(GRAPHICS_LEVELS))
+        for k in ("mode", "destination", "cloud_folder", "fun_style", "item_menu_normal", "pack_after_play", "performance", "graphics"):
             if k in values:
                 self._settings[k] = values[k]
         if values.get("claude_api_key") is not None:
