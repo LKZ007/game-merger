@@ -295,10 +295,12 @@ namespace Frankenstein
             string text = inCar ? "Get out" : "Get in the " + _nearName;
             if (_promptStyle == null)
             {
-                _promptStyle = new GUIStyle(GUI.skin.label) { fontSize = 18 };
+                _promptStyle = new GUIStyle(GUI.skin.label) { fontSize = 18, wordWrap = false, clipping = TextClipping.Overflow };
                 _promptStyle.normal.textColor = Color.white;
             }
-            float w = 360, h = 44, x = Screen.width / 2f - w / 2, y = Screen.height * 0.7f;
+            float tw = 11f * text.Length;  // the box fits the car's name (it was cut off at "Get in the")
+            try { tw = _promptStyle.CalcSize(new GUIContent(text)).x; } catch (Exception) { }
+            float w = Mathf.Max(300, tw + 110), h = 44, x = Screen.width / 2f - w / 2, y = Screen.height * 0.7f;
             if (inCar) y = Screen.height - 70;
             Paint.Fill(new Rect(x, y, w, h), new Color(0.07f, 0.04f, 0.12f, 0.82f));
             Paint.Fill(new Rect(x, y, 4, h), new Color(0.62f, 0.36f, 1f));
@@ -309,7 +311,7 @@ namespace Frankenstein
             var dark = new GUIStyle(_promptStyle);
             dark.normal.textColor = new Color(0.1f, 0.1f, 0.12f);
             GUI.Label(new Rect(x + 53, y + 9, 26, 26), "E", dark);
-            GUI.Label(new Rect(x + 84, y + 10, w - 90, 28), text, _promptStyle);
+            GUI.Label(new Rect(x + 84, y + 10, w - 84, 28), text, _promptStyle);
         }
 
         static MethodInfo _line, _box, _ray;

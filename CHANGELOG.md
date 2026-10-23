@@ -3,6 +3,16 @@
 Every release, newest first. Downloads are on the [releases page](https://github.com/LKZ007/game-merger/releases).
 The app was called Game Merger before 3.8.0.
 
+## v3.37.0 (2026-10-23)
+- **The new cars are fully remodelled.** Each now has a whole new body of its own instead of the base car with parts stuck on: the side profile, hood, cabin, roof, tail, wheel arches cut around the wheels, tinted glass and a painted roof.
+  - **Velocci 720:** low and curved, with a teardrop cabin, fenders that rise over the wheels and a small ducktail.
+  - **Toro Furioso:** a sharp wedge with a flat roof and a long windshield.
+  - **Notte GT:** a long hood, the cabin set back and a fastback.
+  - **Gelände G63 and G Desert:** the upright box: flat roof, near-vertical windshield, round headlights, grille bars, spare wheel, step bars, roof rails and a light bar.
+  - The base car's body is hidden and its wheels, seats and driving stay, so they drive just like before. The floating spoiler parts are gone.
+- The car prompt shows the whole name now (it was cut off at "Get in the").
+- Not tested in game yet.
+
 ## v3.36.0 (2026-10-23)
 - **Schedule I's main menu, redone like your reference.**
   - A night city backdrop covers the whole screen, so the game's old title, Credits button and RV scene don't show through any more.

@@ -9,9 +9,9 @@ namespace Frankenstein
 {
     /// <summary>Frankenstein's own cars in the F6 Vehicles tab: two supercars and a GT in the style of McLaren and
     /// Lamborghini, and a boxy luxury off-roader in the style of the G-Class (unbranded: the names are made up).
-    /// Each is one of the game's own drivable cars underneath (Cheetah, Hounddog, Bruiser), so it drives, parks and
-    /// saves like any car, with its own paint, a body kit (splitter, skirts, wing, diffuser or spare wheel, light
-    /// bar, grille, step bars), its own lights and more top speed. Which of your cars is which is kept per save
+    /// Each has a whole new body (Body: a lofted mesh with its own profile, glass cabin, wheel arches) over one of
+    /// the game's own drivable cars (Cheetah, Hounddog, Bruiser), whose body is hidden; its wheels, seats and driving
+    /// stay, so it drives, parks and saves like any car. Plus its own lights, details and more top speed. Which of your cars is which is kept per save
     /// (UserData/Frankenstein/cars-&lt;save&gt;.json, by the car's id), so the kit comes back when you load.</summary>
     internal static class Garage
     {
@@ -28,10 +28,10 @@ namespace Frankenstein
             new Style { Key = "velocci", Name = "Velocci 720", Base = "cheetah", Kind = "super", Kit = "super", Paint = new Color(1f, 0.42f, 0.04f),
                         Trim = new Color(0.06f, 0.06f, 0.07f), Lights = new Color(0.85f, 0.92f, 1f), Glow = new Color(1f, 0.45f, 0.1f),
                         Fallback = S1API.Vehicles.VehicleColor.Orange, Speed = 1.45f },
-            new Style { Key = "toro", Name = "Toro Furioso", Base = "cheetah", Kind = "super", Kit = "super", Paint = new Color(0.98f, 0.78f, 0.02f),
+            new Style { Key = "toro", Name = "Toro Furioso", Base = "cheetah", Kind = "super", Kit = "wedge", Paint = new Color(0.98f, 0.78f, 0.02f),
                         Trim = new Color(0.05f, 0.05f, 0.05f), Lights = new Color(1f, 0.85f, 0.55f), Fallback = S1API.Vehicles.VehicleColor.Yellow,
                         Speed = 1.55f, Wing = 1.35f },
-            new Style { Key = "notte", Name = "Notte GT", Base = "hounddog", Kind = "super", Kit = "super", Paint = new Color(0.32f, 0.1f, 0.56f),
+            new Style { Key = "notte", Name = "Notte GT", Base = "hounddog", Kind = "super", Kit = "gt", Paint = new Color(0.32f, 0.1f, 0.56f),
                         Trim = new Color(0.07f, 0.06f, 0.09f), Lights = new Color(0.8f, 0.7f, 1f), Glow = new Color(0.6f, 0.3f, 1f),
                         Fallback = S1API.Vehicles.VehicleColor.Purple, Speed = 1.4f, Wing = 0.8f },
             new Style { Key = "gelande", Name = "Gelände G63", Base = "bruiser", Kind = "gwagon", Kit = "gwagon", Paint = new Color(0.04f, 0.04f, 0.05f),
@@ -130,84 +130,38 @@ namespace Frankenstein
         static Looks.Part P(char shape, float x, float y, float z, float sx, float sy, float sz, Color c, float shine = 0.5f, bool glow = false) =>
             new Looks.Part { Shape = shape, Pos = new Vector3(x, y, z), Size = new Vector3(sx, sy, sz), Color = c, Shine = shine, Glow = glow };
 
-        /// <summary>The body kit, fitted to the car's own size (its model's bounds, in the car's own space).</summary>
+        /// <summary>The new body over the base car: its body hidden, its wheels kept, the new one fitted to them.</summary>
         static void Kit(Component car, Style s, bool loaded)
         {
             if (StyleOf(car) != null) return;
+            var fit = Body.Measure(car);
+            if (fit == null) { Melon<Plugin>.Logger.Warning("Garage: couldn't find the " + s.Base + "'s wheels, so it keeps its own body (painted)."); Tint(car, s.Paint); return; }
             var go = car.gameObject;
-            var filters = Rt.Comps(go, typeof(MeshFilter), true).OfType<MeshFilter>().Where(f => f != null && f.sharedMesh != null).ToList();
-            if (filters.Count == 0) { Melon<Plugin>.Logger.Warning("Garage: the " + s.Base + " has no model to fit a kit to."); return; }
-            var min = new Vector3(float.MaxValue, float.MaxValue, float.MaxValue);
-            var max = -min;
-            foreach (var f in filters)
-            {
-                var b = f.sharedMesh.bounds;
-                for (int i = 0; i < 8; i++)
-                {
-                    var corner = b.center + Vector3.Scale(b.extents, new Vector3((i & 1) == 0 ? -1 : 1, (i & 2) == 0 ? -1 : 1, (i & 4) == 0 ? -1 : 1));
-                    var p = car.transform.InverseTransformPoint(f.transform.TransformPoint(corner));
-                    min = Vector3.Min(min, p);
-                    max = Vector3.Max(max, p);
-                }
-            }
-            var size = max - min;
-            if (size.z < 1.5f || size.z > 12f) { Melon<Plugin>.Logger.Warning("Garage: the " + s.Base + "'s size looks wrong (" + size + "), no kit."); return; }
             var root = new GameObject(Marker + s.Key);
             root.transform.SetParent(car.transform, false);
             root.layer = go.layer;
-            var body = Rt.Comps(go, typeof(MeshRenderer), true).OfType<MeshRenderer>().Where(r => r != null)
-                         .OrderByDescending(r => r.bounds.size.sqrMagnitude).FirstOrDefault();
-            var template = body != null ? body.sharedMaterial : null;
-            float W = size.x, H = size.y, L = size.z, cx = (min.x + max.x) / 2, cz = (min.z + max.z) / 2, y0 = min.y;
-            var parts = new List<Looks.Part>();
-            var red = new Color(1f, 0.08f, 0.05f);
-            if (s.Kit == "super")
+            var renderers = Rt.Comps(go, typeof(MeshRenderer), true).OfType<MeshRenderer>().Where(r => r != null && r.enabled).ToList();
+            var template = renderers.OrderByDescending(r => r.bounds.size.sqrMagnitude).Select(r => r.sharedMaterial).FirstOrDefault();
+            var glass = new Color(0.04f, 0.05f, 0.07f);
+            var b = Body.Make(root.transform, fit, Body.Shapes[s.Kit], template, s.Paint, glass);
+            if (b.Parts == 0) { UnityEngine.Object.Destroy(root); Tint(car, s.Paint); return; }
+            // the base body goes; its wheels (and anything on them) stay
+            int hidden = 0;
+            foreach (var r in renderers)
             {
-                float wing = s.Wing;
-                parts.Add(P('c', cx, y0 + 0.14f * H, max.z - 0.04f, W * 0.96f, 0.035f, 0.18f, s.Trim, 0.8f));             // front splitter
-                foreach (var side in new[] { -1f, 1f })
-                {
-                    parts.Add(P('c', cx + side * (W / 2 - 0.03f), y0 + 0.2f * H, cz, 0.07f, 0.07f, L * 0.52f, s.Trim, 0.8f));     // side skirt
-                    parts.Add(P('c', cx + side * W * 0.3f, y0 + 0.66f * H, min.z + 0.1f * L, 0.04f, 0.16f * wing, 0.07f, s.Trim, 0.7f));  // wing post
-                    parts.Add(P('c', cx + side * W * 0.3f, y0 + 0.46f * H, max.z - 0.015f, W * 0.24f, 0.035f, 0.03f, s.Lights, 1f, true));  // LED headlight
-                    parts.Add(P('c', cx + side * W * 0.42f, y0 + 0.3f * H, max.z - 0.06f * L, 0.05f, 0.12f, 0.04f, s.Trim, 0.6f));     // intake
-                }
-                parts.Add(P('c', cx, y0 + 0.66f * H + 0.09f * wing, min.z + 0.1f * L, W * (0.82f + 0.08f * wing), 0.03f, 0.26f * wing, wing > 1.2f ? s.Trim : s.Paint, 0.9f));  // rear wing
-                parts.Add(P('c', cx, y0 + 0.17f * H, min.z + 0.03f, W * 0.82f, 0.1f, 0.14f, s.Trim, 0.8f));               // diffuser
-                for (int i = -2; i <= 2; i++) parts.Add(P('c', cx + i * W * 0.15f, y0 + 0.13f * H, min.z + 0.05f, 0.015f, 0.09f, 0.16f, s.Trim, 0.8f));  // its fins
-                parts.Add(P('c', cx, y0 + 0.54f * H, min.z + 0.012f, W * 0.86f, 0.035f, 0.03f, red, 1f, true));             // tail light bar
-                parts.Add(P('z', cx - W * 0.12f, y0 + 0.24f * H, min.z + 0.02f, 0.08f, 0.08f, 0.06f, new Color(0.7f, 0.7f, 0.72f), 1f));  // exhausts
-                parts.Add(P('z', cx + W * 0.12f, y0 + 0.24f * H, min.z + 0.02f, 0.08f, 0.08f, 0.06f, new Color(0.7f, 0.7f, 0.72f), 1f));
+                if (IsWheel(r, fit, car.transform)) continue;
+                r.enabled = false;
+                hidden++;
             }
-            else
-            {
-                parts.Add(P('z', cx, y0 + 0.5f * H, min.z - 0.1f, 0.72f, 0.72f, 0.24f, new Color(0.06f, 0.06f, 0.06f), 0.2f));  // spare wheel on the back
-                parts.Add(P('z', cx, y0 + 0.5f * H, min.z - 0.225f, 0.42f, 0.42f, 0.02f, s.Trim, 0.9f));                    // its cover
-                parts.Add(P('c', cx, max.y + 0.05f, max.z - 0.3f * L, W * 0.78f, 0.08f, 0.12f, new Color(0.05f, 0.05f, 0.05f), 0.5f));  // roof light bar
-                parts.Add(P('c', cx, max.y + 0.05f, max.z - 0.3f * L + 0.065f, W * 0.72f, 0.04f, 0.01f, s.Lights, 1f, true));
-                foreach (var side in new[] { -1f, 1f })
-                {
-                    parts.Add(P('c', cx + side * W * 0.38f, max.y + 0.03f, cz - 0.05f * L, 0.04f, 0.04f, L * 0.5f, s.Trim, 0.8f));     // roof rails
-                    parts.Add(P('c', cx + side * (W / 2 + 0.02f), y0 + 0.17f * H, cz, 0.14f, 0.04f, L * 0.42f, s.Trim, 0.8f));     // step bars
-                    parts.Add(P('z', cx + side * W * 0.37f, y0 + 0.5f * H, max.z + 0.005f, 0.22f, 0.22f, 0.04f, new Color(0.85f, 0.86f, 0.9f), 1f));  // round headlight ring
-                    parts.Add(P('z', cx + side * W * 0.37f, y0 + 0.5f * H, max.z + 0.03f, 0.17f, 0.17f, 0.02f, s.Lights, 1f, true));  // and lamp
-                    parts.Add(P('c', cx + side * W * 0.37f, y0 + 0.38f * H, max.z + 0.01f, 0.2f, 0.025f, 0.02f, new Color(1f, 0.6f, 0.1f), 1f, true));  // indicator
-                    parts.Add(P('c', cx + side * (W / 2 - 0.02f), y0 + 0.62f * H, min.z + 0.01f, 0.08f, 0.22f, 0.03f, red, 1f, true));  // tail lights
-                }
-                for (int i = 0; i < 3; i++)
-                    parts.Add(P('c', cx, y0 + (0.44f + i * 0.05f) * H, max.z + 0.01f, W * 0.42f, 0.025f, 0.03f, s.Trim, 1f));  // grille bars
-                parts.Add(P('c', cx, y0 + 0.22f * H, max.z + 0.06f, W * 0.9f, 0.1f, 0.1f, new Color(0.07f, 0.07f, 0.07f), 0.4f));  // front bumper
-            }
-            int made = 0;
-            foreach (var p in parts)
-                if (Looks.Build(p, root.transform, template) != null) made++;
+            var parts = Details(s, fit, b);
+            foreach (var p in parts) Looks.Build(p, root.transform, template);
             if (s.Glow.a > 0)
             {
                 try
                 {
                     var lgo = new GameObject("underglow");
                     lgo.transform.SetParent(root.transform, false);
-                    lgo.transform.localPosition = new Vector3(cx, y0 + 0.05f, cz);
+                    lgo.transform.localPosition = new Vector3(0, fit.Ground + 0.1f, (fit.FrontZ + fit.RearZ) / 2);
                     var light = lgo.AddComponent<Light>();
                     light.type = LightType.Point;
                     light.color = s.Glow;
@@ -216,8 +170,77 @@ namespace Frankenstein
                 }
                 catch (Exception) { }
             }
-            Tint(car, s.Paint);
-            Melon<Plugin>.Logger.Msg("Garage: " + s.Name + (loaded ? " (from your save)" : "") + ": " + made + " kit parts on the " + s.Base + ", size " + size.ToString("0.0"));
+            Melon<Plugin>.Logger.Msg("Garage: " + s.Name + (loaded ? " (from your save)" : "") + ": new body (" + b.Parts + " meshes, " + parts.Count +
+                                     " details) on the " + s.Base + ", " + hidden + " of its parts hidden, wheels kept.");
+        }
+
+        static bool IsWheel(Renderer r, Body.Fit fit, Transform car)
+        {
+            for (var t = r.transform; t != null && t != car; t = t.parent)
+            {
+                var n = t.name.ToLowerInvariant();
+                if (n.Contains("wheel") || n.Contains("tire") || n.Contains("tyre") || n.Contains("rim") || n.Contains("caliper")) return true;
+            }
+            var c = car.InverseTransformPoint(r.bounds.center);
+            return fit.Wheels.Any(w => (w - c).magnitude < fit.R * 0.9f) && r.bounds.size.magnitude < fit.R * 4f;
+        }
+
+        /// <summary>Lights, intakes and the rest, placed on the new body's own surface.</summary>
+        static List<Looks.Part> Details(Style s, Body.Fit f, Body.Built b)
+        {
+            var parts = new List<Looks.Part>();
+            float k = f.K, nose = b.NoseZ, tail = b.TailZ;
+            float wN = b.WidthAtZ(nose - 0.12f * k) / 2, wT = b.WidthAtZ(tail + 0.1f * k) / 2;
+            var red = new Color(1f, 0.08f, 0.05f);
+            var black = new Color(0.04f, 0.04f, 0.05f);
+            Func<char, float, float, float, float, float, float, Color, float, bool, Looks.Part> P = (shape, x, y, z, sx, sy, sz, c, shine, glow) =>
+                new Looks.Part { Shape = shape, Pos = new Vector3(x, y, z), Size = new Vector3(sx, sy, sz), Color = c, Shine = shine, Glow = glow };
+            if (s.Kit != "gwagon")
+            {
+                float yN = b.BeltAtZ(nose - 0.2f * k) - 0.005f, yT = b.BeltAtZ(tail) - 0.1f * k;
+                foreach (var side in new[] { -1f, 1f })
+                {
+                    // slim LED headlights swept back along the nose, and the tail lights
+                    parts.Add(P('c', side * wN * 0.62f, yN, nose - 0.2f * k, wN * 0.55f, 0.035f * k, 0.22f * k, s.Lights, 1f, true));
+                    parts.Add(P('c', side * wT * 0.6f, yT, tail - 0.005f, wT * 0.6f, 0.04f * k, 0.03f * k, red, 1f, true));
+                    // side intake behind the door
+                    float zi = f.Z(0.08f);
+                    parts.Add(P('c', side * (b.WidthAtZ(zi) / 2 - 0.01f), f.Ground + (b.BeltAtZ(zi) - f.Ground) * 0.6f, zi, 0.04f, 0.18f * k, 0.5f * k, black, 0.4f, false));
+                    // mirror
+                    float zm = f.Z(Body.Shapes[s.Kit].C3 - 0.05f);
+                    parts.Add(P('c', side * (b.WidthAtZ(zm) / 2 + 0.06f * k), b.BeltAtZ(zm) + 0.12f * k, zm, 0.14f * k, 0.07f * k, 0.1f * k, s.Paint, 0.85f, false));
+                }
+                parts.Add(P('c', 0, f.Ground + 0.12f * k, nose - 0.08f * k, wN * 1.7f, 0.03f * k, 0.2f * k, black, 0.6f, false));      // splitter
+                parts.Add(P('c', 0, f.Ground + 0.2f * k, tail + 0.02f * k, wT * 1.5f, 0.1f * k, 0.18f * k, black, 0.6f, false));      // diffuser
+                parts.Add(P('c', 0, yT, tail - 0.005f, wT * 1.2f, 0.025f * k, 0.03f * k, red, 1f, true));                          // light bar
+                parts.Add(P('z', -0.12f * k, f.Ground + 0.26f * k, tail + 0.03f * k, 0.09f * k, 0.09f * k, 0.08f * k, new Color(0.7f, 0.7f, 0.72f), 1f, false));
+                parts.Add(P('z', 0.12f * k, f.Ground + 0.26f * k, tail + 0.03f * k, 0.09f * k, 0.09f * k, 0.08f * k, new Color(0.7f, 0.7f, 0.72f), 1f, false));
+                if (s.Kit == "super")  // a small ducktail lip in the body colour
+                    parts.Add(P('c', 0, b.BeltAtZ(tail + 0.15f * k) + 0.03f * k, tail + 0.15f * k, wT * 1.6f, 0.03f * k, 0.18f * k, s.Paint, 0.85f, false));
+            }
+            else
+            {
+                float belt = b.BeltAtZ(nose), roof = b.RoofAtZ(f.Z(0.3f));
+                foreach (var side in new[] { -1f, 1f })
+                {
+                    parts.Add(P('z', side * wN * 0.72f, belt - 0.16f * k, nose + 0.01f, 0.22f * k, 0.22f * k, 0.05f * k, new Color(0.85f, 0.86f, 0.9f), 1f, false));  // headlight ring
+                    parts.Add(P('z', side * wN * 0.72f, belt - 0.16f * k, nose + 0.035f, 0.17f * k, 0.17f * k, 0.02f * k, s.Lights, 1f, true));                    // lamp
+                    parts.Add(P('c', side * wN * 0.9f, belt - 0.03f * k, nose - 0.25f * k, 0.08f * k, 0.05f * k, 0.14f * k, new Color(1f, 0.6f, 0.1f), 1f, true));  // indicators on the wings
+                    parts.Add(P('c', side * (wT - 0.03f), belt - 0.25f * k, tail - 0.005f, 0.1f * k, 0.3f * k, 0.03f * k, red, 1f, true));                       // tail lights
+                    parts.Add(P('c', side * (b.WidthAtZ(f.Z(0.5f)) / 2 + 0.06f * k), f.Ground + 0.32f * k, f.Z(0.5f), 0.14f * k, 0.04f * k, (f.FrontZ - f.RearZ) * 0.6f, s.Trim, 0.8f, false));  // step bars
+                    parts.Add(P('c', side * wN * 0.88f, roof + 0.03f, f.Z(0.3f), 0.04f, 0.04f, (f.FrontZ - f.RearZ) * 0.8f, s.Trim, 0.8f, false));  // roof rails
+                    parts.Add(P('c', side * (b.WidthAtZ(f.Z(0.45f)) / 2 + 0.02f), belt - 0.02f * k, f.Z(0.45f), 0.025f, 0.03f * k, (f.FrontZ - f.RearZ) * 1.1f, s.Trim, 0.9f, false));  // chrome belt strip
+                }
+                for (int i = 0; i < 3; i++)
+                    parts.Add(P('c', 0, belt - (0.1f + i * 0.07f) * k, nose + 0.012f, wN * 0.8f, 0.025f * k, 0.03f * k, s.Trim, 1f, false));  // grille bars
+                parts.Add(P('c', 0, f.Ground + 0.42f * k, nose + 0.06f, wN * 1.9f, 0.14f * k, 0.12f * k, black, 0.4f, false));                   // bumper
+                parts.Add(P('c', 0, f.Ground + 0.42f * k, tail - 0.05f, wT * 1.9f, 0.14f * k, 0.1f * k, black, 0.4f, false));
+                parts.Add(P('z', 0, belt + 0.05f * k, tail - 0.16f * k, 0.74f * k, 0.74f * k, 0.24f * k, black, 0.2f, false));                 // spare wheel
+                parts.Add(P('z', 0, belt + 0.05f * k, tail - 0.285f * k, 0.44f * k, 0.44f * k, 0.02f * k, s.Trim, 0.9f, false));
+                parts.Add(P('c', 0, roof + 0.07f * k, f.Z(0.66f), wN * 1.5f, 0.07f * k, 0.12f * k, black, 0.5f, false));                        // roof light bar
+                parts.Add(P('c', 0, roof + 0.07f * k, f.Z(0.66f) + 0.065f * k, wN * 1.4f, 0.04f * k, 0.01f, s.Lights, 1f, true));
+            }
+            return parts;
         }
 
         /// <summary>The exact paint, over the closest of the game's own colours: the car's body panels only.</summary>

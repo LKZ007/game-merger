@@ -174,6 +174,23 @@ namespace Frankenstein
             return a >= 0 && b > a ? s.Substring(a + 1, b - a - 1) : o.GetType().FullName;
         }
 
+        /// <summary>Sets an array property (a mesh's vertices, say). IL2CPP wraps Unity's arrays in its own type, so the
+        /// plain array is converted to whatever the property takes on this build.</summary>
+        public static void SetArray(object o, string name, Array value)
+        {
+            var p = o.GetType().GetProperty(name, BindingFlags.Public | BindingFlags.Instance);
+            if (p == null) throw new MissingMemberException(o.GetType().Name, name);
+            var t = p.PropertyType;
+            object v = value;
+            if (!t.IsInstanceOfType(value))
+            {
+                var conv = t.GetMethods(BindingFlags.Public | BindingFlags.Static)
+                            .FirstOrDefault(m => m.Name == "op_Implicit" && m.ReturnType == t && m.GetParameters().Length == 1 && m.GetParameters()[0].ParameterType == value.GetType());
+                v = conv != null ? conv.Invoke(null, new object[] { value }) : Activator.CreateInstance(t, value);
+            }
+            p.SetValue(o, v, null);
+        }
+
         public static GameObject GameObjectOf(object component) => Get(component, "gameObject") as GameObject;
 
         /// <summary>The text shown by a TextMeshPro or Unity UI text, or null if it isn't one.</summary>

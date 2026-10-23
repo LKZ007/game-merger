@@ -304,6 +304,19 @@ class FeatureChecklist(unittest.TestCase):
         self.assertNotIn('merge_id + "~creative" if creative', api, "one set of saves")
         self.assertIn("_members", read(ROOT, "mods", "schedule1", "Rt.cs"))  # reflection cached: less lag
 
+    def test_337_cars_fully_remodelled(self):
+        dll = open(os.path.join(PKG, "mods", "schedule1", "Frankenstein.dll"), "rb").read()
+        for word in ("UnityEngine.WheelCollider", "new body (", "wheels kept"):
+            self.assertIn(word.encode("utf-16-le"), dll, word)
+        body = read(ROOT, "mods", "schedule1", "Body.cs")
+        for shape in ("super", "wedge", "gt", "gwagon"):
+            self.assertIn('["%s"] = new Shape' % shape, body)   # every car has its own body
+        self.assertIn('Rt.SetArray(mesh, "vertices"', body)      # a real mesh, built on either build of the game
+        garage = read(ROOT, "mods", "schedule1", "Garage.cs")
+        self.assertIn("r.enabled = false", garage)               # the base car's body is hidden
+        self.assertIn("IsWheel(", garage)                        # its wheels aren't
+        self.assertIn("CalcSize", read(ROOT, "mods", "schedule1", "Vehicles.cs"))  # the prompt fits the name
+
     def test_336_menu_like_reference_profiles_skip_tutorial(self):
         dll = open(os.path.join(PKG, "mods", "schedule1", "Frankenstein.dll"), "rb").read()
         for word in ("menu-backdrop.jpg", "title.png", "PROFILES", "Multiplayer", "Build your empire. Run your block.",
