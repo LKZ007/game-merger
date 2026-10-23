@@ -304,6 +304,19 @@ class FeatureChecklist(unittest.TestCase):
         self.assertNotIn('merge_id + "~creative" if creative', api, "one set of saves")
         self.assertIn("_members", read(ROOT, "mods", "schedule1", "Rt.cs"))  # reflection cached: less lag
 
+    def test_339_save_button_hint_bar_car_body_hidden(self):
+        dll = open(os.path.join(PKG, "mods", "schedule1", "Frankenstein.dll"), "rb").read()
+        for word in ("Save Game", "Game saved", "garage-debug.txt"):
+            self.assertIn(word.encode("utf-16-le"), dll, word)
+        save = read(ROOT, "mods", "schedule1", "PauseSave.cs")
+        self.assertIn("RequestGameSave", save)                  # the game's own save
+        self.assertIn("Pad.Y", save)                            # on a controller too
+        self.assertIn("CalcSize", read(ROOT, "mods", "schedule1", "Fly.cs"))   # the Creative hint isn't cut off
+        garage = read(ROOT, "mods", "schedule1", "Garage.cs")
+        self.assertIn("KeepHidden()", garage)                   # the base body stays hidden
+        self.assertIn('"BodyMeshes"', garage)                   # the game's own body panels are hidden too
+        self.assertNotIn('n.Contains("rim")', garage)           # "Trim" and "Primary" aren't wheel rims
+
     def test_338_reference_screens_own_guns_aim(self):
         dll = open(os.path.join(PKG, "mods", "schedule1", "Frankenstein.dll"), "rb").read()
         for word in ("ref-menu.jpg", "ref-profiles.jpg", "ref-loading.jpg", "ref-avatar.jpg", "Hood Reputation", "Drug Empire",

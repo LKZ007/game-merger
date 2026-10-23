@@ -86,7 +86,7 @@ namespace Frankenstein
         /// <summary>After the game has moved you this frame: flying, and the extra speed.</summary>
         public static void LateUpdate()
         {
-            if (!MainMenu.Creative || (!Flying && Speed <= 1f)) return;
+            if (!MainMenu.Creative || (!Flying && Speed <= 1f) || PauseSave.Showing) return;
             var me = Player.Local;
             var cam = Camera.main;
             if (me == null || cam == null || me.IsInVehicle) return;
@@ -119,9 +119,11 @@ namespace Frankenstein
 
         public static void Draw()
         {
-            if (!MainMenu.Creative || (!Flying && Speed <= 1f)) return;
-            GUI.Box(new Rect(16, Screen.height - 104, 300, 26), (Flying ? "Flying" : "Walking") + "  ·  Speed " + Speed + "x  ·  " +
-                    (Pad.InUse ? "A A: fly/land" : "Space Space: fly/land, F7: speed"));
+            if (!MainMenu.Creative || (!Flying && Speed <= 1f) || PauseSave.Showing) return;
+            // sized to its words, so nothing is cut off
+            var text = (Flying ? "Flying" : "Walking") + "  ·  Speed " + Speed + "x  ·  " + (Pad.InUse ? "A A: fly/land" : "Space Space: fly/land  ·  F7: speed");
+            var size = GUI.skin.box.CalcSize(new GUIContent(text));
+            GUI.Box(new Rect(16, Screen.height - 104, size.x + 24, Mathf.Max(26, size.y + 4)), text);
         }
     }
 }

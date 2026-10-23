@@ -99,7 +99,8 @@ namespace Frankenstein
         public static void Update()
         {
             if (Time.unscaledTime < _next || Player_() == null) return;
-            _next = Time.unscaledTime + 2f;
+            _next = Time.unscaledTime + 1f;
+            KeepHidden();
             Load();
             for (int i = _pending.Count - 1; i >= 0; i--)
             {
@@ -140,19 +141,32 @@ namespace Frankenstein
             var root = new GameObject(Marker + s.Key);
             root.transform.SetParent(car.transform, false);
             root.layer = go.layer;
-            var renderers = Rt.Comps(go, typeof(MeshRenderer), true).OfType<MeshRenderer>().Where(r => r != null && r.enabled).ToList();
+            var renderers = Rt.Comps(go, typeof(MeshRenderer), true).OfType<Renderer>()
+                              .Concat(Rt.Comps(go, typeof(SkinnedMeshRenderer), true).OfType<Renderer>())
+                              .Where(r => r != null && r.enabled && !r.transform.IsChildOf(root.transform)).ToList();
             var template = renderers.OrderByDescending(r => r.bounds.size.sqrMagnitude).Select(r => r.sharedMaterial).FirstOrDefault();
             var glass = new Color(0.04f, 0.05f, 0.07f);
             var b = Body.Make(root.transform, fit, Body.Shapes[s.Kit], template, s.Paint, glass);
             if (b.Parts == 0) { UnityEngine.Object.Destroy(root); Tint(car, s.Paint); return; }
-            // the base body goes; its wheels (and anything on them) stay
-            int hidden = 0;
+            // the base body goes; its wheels (and anything on them) stay. The game's own list of body panels goes
+            // too, whatever their names, and they're hidden again if the game shows them (Update)
+            var hide = new List<Renderer>();
+            var log = new List<string> { s.Name + " on the " + s.Base + " (" + car.name + "): wheels at " + string.Join(" ", fit.Wheels.Select(w => w.ToString("0.00")).ToArray()) + ", r " + fit.R.ToString("0.00") };
             foreach (var r in renderers)
             {
-                if (IsWheel(r, fit, car.transform)) continue;
-                r.enabled = false;
-                hidden++;
+                bool wheel = IsWheel(r, fit, car.transform);
+                log.Add((wheel ? "  kept   " : "  hidden ") + Path_(r.transform, car.transform) + "  size " + r.bounds.size.ToString("0.00"));
+                if (!wheel) hide.Add(r);
             }
+            foreach (var bm in Creative.Each(Rt.Get(car, "BodyMeshes", "bodyMeshes")))
+            {
+                var r = Rt.Get(bm, "Renderer", "renderer", "Mesh") as Renderer;
+                if (r != null && !hide.Contains(r)) { hide.Add(r); log.Add("  hidden (body panel) " + Path_(r.transform, car.transform)); }
+            }
+            foreach (var r in hide) r.enabled = false;
+            _hidden[car.GetInstanceID()] = new KeyValuePair<Component, List<Renderer>>(car, hide);
+            int hidden = hide.Count;
+            Debug(log);
             var parts = Details(s, fit, b);
             foreach (var p in parts) Looks.Build(p, root.transform, template);
             if (s.Glow.a > 0)
@@ -174,12 +188,48 @@ namespace Frankenstein
                                      " details) on the " + s.Base + ", " + hidden + " of its parts hidden, wheels kept.");
         }
 
+        static readonly Dictionary<int, KeyValuePair<Component, List<Renderer>>> _hidden = new Dictionary<int, KeyValuePair<Component, List<Renderer>>>();
+        static readonly List<string> _log = new List<string>();
+
+        static string Path_(Transform t, Transform car)
+        {
+            var bits = new List<string>();
+            for (; t != null && t != car; t = t.parent) bits.Insert(0, t.name);
+            return string.Join("/", bits.ToArray());
+        }
+
+        static void Debug(List<string> lines)
+        {
+            _log.AddRange(lines);
+            try
+            {
+                var dir = System.IO.Path.Combine(MelonLoader.Utils.MelonEnvironment.UserDataDirectory, "Frankenstein");
+                File.WriteAllLines(System.IO.Path.Combine(dir, "garage-debug.txt"), new[] { "Frankenstein " + Plugin.Version }.Concat(_log.Skip(Math.Max(0, _log.Count - 400))).ToArray());
+            }
+            catch (Exception) { }
+        }
+
+        /// <summary>A hidden base body stays hidden: some of the game's own code (paint, damage) shows it again.</summary>
+        static void KeepHidden()
+        {
+            foreach (var id in _hidden.Keys.ToList())
+            {
+                var kv = _hidden[id];
+                if (kv.Key == null) { _hidden.Remove(id); continue; }
+                foreach (var r in kv.Value)
+                    if (r != null && r.enabled) r.enabled = false;
+            }
+        }
+
+        static readonly string[] WheelWords = { "wheel", "wheels", "tire", "tires", "tyre", "tyres", "rim", "rims", "caliper", "hub", "brake" };
+
+        /// <summary>A wheel by its name (whole words only: "Trim" or "Primary" aren't rims) or by sitting on a wheel.</summary>
         static bool IsWheel(Renderer r, Body.Fit fit, Transform car)
         {
             for (var t = r.transform; t != null && t != car; t = t.parent)
             {
-                var n = t.name.ToLowerInvariant();
-                if (n.Contains("wheel") || n.Contains("tire") || n.Contains("tyre") || n.Contains("rim") || n.Contains("caliper")) return true;
+                var words = System.Text.RegularExpressions.Regex.Split(System.Text.RegularExpressions.Regex.Replace(t.name, "([a-z])([A-Z])", "$1 $2").ToLowerInvariant(), "[^a-z]+");
+                if (words.Any(w => WheelWords.Contains(w) || w.StartsWith("wheel"))) return true;
             }
             var c = car.InverseTransformPoint(r.bounds.center);
             return fit.Wheels.Any(w => (w - c).magnitude < fit.R * 0.9f) && r.bounds.size.magnitude < fit.R * 4f;
@@ -228,7 +278,10 @@ namespace Frankenstein
                     parts.Add(P('c', side * wN * 0.9f, belt - 0.03f * k, nose - 0.25f * k, 0.08f * k, 0.05f * k, 0.14f * k, new Color(1f, 0.6f, 0.1f), 1f, true));  // indicators on the wings
                     parts.Add(P('c', side * (wT - 0.03f), belt - 0.25f * k, tail - 0.005f, 0.1f * k, 0.3f * k, 0.03f * k, red, 1f, true));                       // tail lights
                     parts.Add(P('c', side * (b.WidthAtZ(f.Z(0.5f)) / 2 + 0.06f * k), f.Ground + 0.32f * k, f.Z(0.5f), 0.14f * k, 0.04f * k, (f.FrontZ - f.RearZ) * 0.6f, s.Trim, 0.8f, false));  // step bars
-                    parts.Add(P('c', side * wN * 0.88f, roof + 0.03f, f.Z(0.3f), 0.04f, 0.04f, (f.FrontZ - f.RearZ) * 0.8f, s.Trim, 0.8f, false));  // roof rails
+                    // roof rails: on the roof itself, inside its edges, and only as long as it is
+                    var sh = Body.Shapes[s.Kit];
+                    float rz0 = f.Z(sh.C1 + 0.06f), rz1 = f.Z(sh.C2 - 0.06f);
+                    parts.Add(P('c', side * b.WidthAtZ((rz0 + rz1) / 2) * sh.CabinWidth * 0.42f, roof + 0.02f * k, (rz0 + rz1) / 2, 0.04f * k, 0.04f * k, rz1 - rz0, s.Trim, 0.8f, false));
                     parts.Add(P('c', side * (b.WidthAtZ(f.Z(0.45f)) / 2 + 0.02f), belt - 0.02f * k, f.Z(0.45f), 0.025f, 0.03f * k, (f.FrontZ - f.RearZ) * 1.1f, s.Trim, 0.9f, false));  // chrome belt strip
                 }
                 for (int i = 0; i < 3; i++)

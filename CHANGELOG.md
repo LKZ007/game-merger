@@ -3,6 +3,13 @@
 Every release, newest first. Downloads are on the [releases page](https://github.com/LKZ007/game-merger/releases).
 The app was called Game Merger before 3.8.0.
 
+## v3.39.0 (2026-10-23)
+- **Save Game in the pause menu.** It sits under the game's own list. Click it, press Y on a controller or Ctrl+S. The game saves the same way it does when you sleep, and "Game saved" shows when it's done.
+- **The Creative hint bar isn't cut off any more.** It's sized to fit its text, and it's hidden while the pause menu is open.
+- **The base car's body is now really hidden under the new cars.** A name check treated parts like "Trim" and "Primary" as wheel rims, so they stayed visible. The game's own list of body panels is now hidden too, and kept hidden if the game shows it again. The G-wagon's roof rails now sit on the roof. What was hidden and kept for each car is written to `UserData\Frankenstein\garage-debug.txt`.
+- More realistic models for all five cars are coming next.
+- Not tested in game yet.
+
 ## v3.38.0 (2026-10-23)
 - **Schedule I's screens now match your Hood Warfare reference.** Your reference picture is used for the art: the SCHEDULE 1 × HOOD WARFARE lockup, the night city with the hooded figure and "Same city, different hustles", the loading scene and the avatar. Frankenstein draws the live parts in the same places as in the reference.
   - **Main menu:** the list sits where the reference has it (Creative is still in it), with the cash and level pill and the settings button at the top right and the version at the bottom right.
