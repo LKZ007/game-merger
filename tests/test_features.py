@@ -304,11 +304,20 @@ class FeatureChecklist(unittest.TestCase):
         self.assertNotIn('merge_id + "~creative" if creative', api, "one set of saves")
         self.assertIn("_members", read(ROOT, "mods", "schedule1", "Rt.cs"))  # reflection cached: less lag
 
+    def test_341_creative_character(self):
+        dll = open(os.path.join(PKG, "mods", "schedule1", "Frankenstein.dll"), "rb").read()
+        for word in ("Quick start", "Make a new character", "character-debug.txt", "CharacterCreator", "FromJsonOverwrite"):
+            self.assertIn(word.encode("utf-16-le"), dll, word)
+        ch = read(ROOT, "mods", "schedule1", "Character.cs")
+        self.assertIn("Pad.Pressed & Pad.A", ch)                   # on a controller
+        self.assertIn('s.Mode != "creative"', ch)                  # characters come from story saves
+        self.assertNotIn("File.Write", ch.replace("File.WriteAllLines(Path.Combine(dir, \"character-debug.txt\")", ""))  # story saves are only read
+
     def test_340_minimum_standard_for_every_merge(self):
         from gamemerger import standard
         from gamemerger.api import BUILTIN, Api
         keys = [k for k, _n, _w in standard.STANDARD]
-        for want in ("menu", "loading", "profiles", "creative", "spawner", "weapons", "crosshairs", "cars", "npcs", "controller", "save", "debug"):
+        for want in ("menu", "loading", "profiles", "creative", "character", "spawner", "weapons", "crosshairs", "cars", "npcs", "controller", "save", "debug"):
             self.assertIn(want, keys)                                   # everything the Schedule I merge has
         for host in list(standard.HOSTS) + [None]:
             r = standard.check(host)

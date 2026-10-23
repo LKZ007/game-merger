@@ -3,6 +3,15 @@
 Every release, newest first. Downloads are on the [releases page](https://github.com/LKZ007/game-merger/releases).
 The app was called Game Merger before 3.8.0.
 
+## v3.41.0 (2026-10-23)
+- **Your Creative character.** When the game's character creator opens in a new Creative world, Frankenstein asks first:
+  - **Quick start:** skips character creation and uses your latest story character's look, or the game's default if you have none.
+  - **Use another story character:** one option for each story save that has a character. Its look is copied, and that save is only read, never changed.
+  - **Make a new character:** opens the game's own creator.
+  - Works with mouse, keyboard or controller (d-pad and A). What happened is written to `UserData\Frankenstein\character-debug.txt`.
+- **"Creative character" is now part of the minimum standard,** so it's checked on every merge card.
+- Not tested in game yet.
+
 ## v3.40.2 (2026-10-23)
 - **Dropping, and anything that needs to know what's in your hand, now reads your hand properly.** Before, the mod couldn't tell which hotbar slot you were holding, so drop said there was nothing in your hand.
   - The same problem also kept the own guns' models, crosshairs and the launcher's grenades from switching on.

@@ -15,7 +15,7 @@ namespace Frankenstein
     {
         /// <summary>The Frankenstein release this mod came with (equal to gamemerger/version.py; a test checks).
         /// Shown on F6's title and in MelonLoader's log, where the app reads it back for the merge's card.</summary>
-        public const string Version = "3.40.2";
+        public const string Version = "3.41.0";
         float _next;
         public static bool MenuAllowed = true;
         public static System.Collections.Generic.List<string> Kit = new System.Collections.Generic.List<string>();
@@ -95,6 +95,7 @@ namespace Frankenstein
             try { Gangs.Update(); } catch (Exception e) { Melon<Plugin>.Logger.Warning("Gangs: " + e.Message); }
             try { OwnItems.Update(); } catch (Exception e) { Melon<Plugin>.Logger.Warning("Own items: " + e.Message); }
             try { OwnGuns.Update(); } catch (Exception e) { Melon<Plugin>.Logger.Warning("Own guns: " + e.Message); }
+            try { Character.Update(); } catch (Exception e) { Melon<Plugin>.Logger.Warning("Character: " + e.Message); }
             try { PauseSave.Update(); } catch (Exception e) { Melon<Plugin>.Logger.Warning("Save Game: " + e.Message); }
             try { Aim.Update(); } catch (Exception e) { Melon<Plugin>.Logger.Warning("Aim: " + e.Message); }
             try { Guns.Update(); } catch (Exception e) { Melon<Plugin>.Logger.Warning("Guns: " + e.Message); }
@@ -131,6 +132,7 @@ namespace Frankenstein
         {
             try { Aim.Draw(); } catch (Exception) { }
             try { PauseSave.Draw(); } catch (Exception) { }
+            try { Character.Draw(); } catch (Exception) { }
             try { Wheel.Draw(); } catch (Exception) { }
             try { Fly.Draw(); } catch (Exception) { }
             try { Drop.Draw(); } catch (Exception) { }
