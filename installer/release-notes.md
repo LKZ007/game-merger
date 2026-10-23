@@ -1,4 +1,10 @@
-## Frankenstein 3.45.0
+## Frankenstein 3.45.1
+
+- **Fixed: Play on a packed merge stopped with "...is in the way and isn't a Frankenstein copy".** An earlier rebuild that was cut off left a half-made copy behind without Frankenstein's marker, so the next Play didn't recognise it. Now Frankenstein marks a rebuild as its own before it starts copying. When it finds a leftover with only the game's files and the merge's own files in it, it clears that leftover and rebuilds. If the folder has anything else in it, the folder is moved aside (renamed, nothing deleted) and the copy is rebuilt. The installed game is still only read.
+- **Fixed: your own guns registering (the AK-47 "Ambiguous match found" error).** The game has two members whose names differ only in case ("ID" and "id"), and Frankenstein's lookup tripped over that, so every gun fell back to its base gun. The lookup now picks the exact name and the nearest type. Singletons are found the same safe way everywhere.
+- Not tested in game yet: please press Play, open F6 and spawn a gun. If one still comes out as a base gun, send UserData\Frankenstein\ownitems-debug.txt.
+
+### Also in 3.45.0
 
 - **Hood City: your map becomes the town itself (pick it per save).** On the main menu, the "World" entry switches between Hood City and Schedule I's original town for the save you load, and F8 has a World button to switch a save you're already in (your save is backed up first). The choice is kept in the save's Modded\Frankenstein\world.txt.
   - In Hood City, your map is laid over the town instead of off the coast. Every district, road and gang HQ goes where the picture has it.

@@ -1190,6 +1190,40 @@ class PackTests(unittest.TestCase):
         self.assertTrue(os.path.isfile(os.path.join(new, "Game.exe")))
         self.assertEqual(open(os.path.join(base, "Game.exe")).read(), "exe" * 1000)  # original untouched
 
+    def test_unpack_clears_its_own_cut_off_rebuild_and_moves_strangers_aside(self):
+        root = tempfile.mkdtemp()
+        base = os.path.join(root, "Game")
+        os.makedirs(os.path.join(base, "Data"))
+        for rel in ("Game.exe", "Data/a.pak"):
+            with open(os.path.join(base, rel), "w") as f:
+                f.write("orig")
+        r = types.SimpleNamespace(id="t", name="Test", launch_exe=lambda t: None)
+        t = types.SimpleNamespace(id="th", name="Theme")
+        m = installer.Merge.create(r, t, base, os.path.join(root, "out"), installer.MODE_COPY, "Cut")
+        with open(os.path.join(m.target_path, "mod.txt"), "w") as f:
+            f.write("mine")
+        m.pack()
+        # an older rebuild cut off half way: no marker, only the game's files
+        os.makedirs(os.path.join(m.target_path, "Data"))
+        with open(os.path.join(m.target_path, "Data", "a.pak"), "w") as f:
+            f.write("or")
+        installer.Merge.load(m.id).unpack()
+        self.assertEqual(open(os.path.join(m.target_path, "mod.txt")).read(), "mine")
+        self.assertTrue(os.path.isfile(os.path.join(m.target_path, installer.COPY_MARKER)))
+        self.assertEqual(os.listdir(os.path.join(root, "out")), [os.path.basename(m.target_path)])
+        # someone else's files in the way: moved aside, never deleted
+        m = installer.Merge.load(m.id)
+        m.pack()
+        os.makedirs(m.target_path)
+        with open(os.path.join(m.target_path, "holiday.jpg"), "w") as f:
+            f.write("photo")
+        installer.Merge.load(m.id).unpack()
+        aside = [d for d in os.listdir(os.path.join(root, "out")) if "moved aside" in d]
+        self.assertEqual(len(aside), 1)
+        self.assertEqual(open(os.path.join(root, "out", aside[0], "holiday.jpg")).read(), "photo")
+        self.assertEqual(open(os.path.join(m.target_path, "mod.txt")).read(), "mine")
+        self.assertEqual(open(os.path.join(base, "Game.exe")).read(), "orig")  # original untouched
+
     def test_inplace_merges_are_never_packed(self):
         m = installer.Merge({"id": "x", "name": "X", "mode": installer.MODE_INPLACE, "base_path": "/", "target_path": "/"})
         self.assertIn("original", m.can_pack())

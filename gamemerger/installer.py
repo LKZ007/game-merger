@@ -638,6 +638,10 @@ class Merge:
         while here and not os.path.isdir(here) and os.path.dirname(here) != here:
             here = os.path.dirname(here)
         free = shutil.disk_usage(here).free if here and os.path.isdir(here) else 0
+        t = self.target_path
+        if os.path.isdir(t) and (os.path.isfile(os.path.join(t, COPY_MARKER)) or
+                                 self._leftover_is_ours(os.path.join(self.record_dir(self.id), self.PACK))):
+            free += tree_size(t)[0]  # a half-done rebuild is cleared first, so its room counts as free
         return {"need": room_needed(total), "free": free}
 
     def move_copy_to(self, folder):
@@ -654,6 +658,35 @@ class Merge:
         self.save()
         return new
 
+    def _leftover_is_ours(self, zpath):
+        """True when every file in the folder that's in the way is one of the installed game's files or one of this
+        merge's packed files: what a rebuild that was cut off leaves behind."""
+        key = (lambda r: r.replace("\\", "/").lower()) if os.name == "nt" else (lambda r: r.replace("\\", "/"))
+        known = {key(COPY_MARKER)}
+        for dirpath, _dirs, files in os.walk(self.base_path):
+            for f in files:
+                known.add(key(os.path.relpath(os.path.join(dirpath, f), self.base_path)))
+        try:
+            with zipfile.ZipFile(zpath) as z:
+                known.update(key(n) for n in z.namelist())
+        except (OSError, zipfile.BadZipFile):
+            pass
+        for dirpath, _dirs, files in os.walk(self.target_path):
+            for f in files:
+                if key(os.path.relpath(os.path.join(dirpath, f), self.target_path)) not in known:
+                    return False
+        return True
+
+    def _move_aside(self):
+        """Rename the folder that's in the way (same drive, nothing copied or deleted) so the copy can be rebuilt."""
+        base = os.path.normcase(os.path.abspath(self.base_path))
+        here = os.path.normcase(os.path.abspath(self.target_path))
+        if here == base or base.startswith(here + os.sep) or here.startswith(base + os.sep):
+            raise MergeError("%s is the original game's folder, so it was left alone." % self.target_path)
+        aside = "%s (moved aside %s)" % (os.path.normpath(self.target_path), datetime.datetime.now().strftime("%Y-%m-%d %H%M%S"))
+        os.rename(self.target_path, aside)
+        return aside
+
     def unpack(self, log=_noop, progress=_noop):
         """Make the working copy again: a full copy of your installed game, then the merge's own files on top."""
         if not self.packed:
@@ -662,15 +695,28 @@ class Merge:
             raise MergeError("The original game isn't at %s any more. Install it there again, then press Play." % self.base_path)
         start = time.time()
         zpath = os.path.join(self.record_dir(self.id), self.PACK)
+        aside = None
         if os.path.isdir(self.target_path):
-            if not os.path.isfile(os.path.join(self.target_path, COPY_MARKER)) and os.listdir(self.target_path):
-                raise MergeError("%s is in the way and isn't a Frankenstein copy, so it was left alone." % self.target_path)
-            shutil.rmtree(self.target_path)  # a copy cut off half way: start again
+            if os.path.isfile(os.path.join(self.target_path, COPY_MARKER)) or not os.listdir(self.target_path):
+                log("Clearing a copy that was cut off half way ...")
+                shutil.rmtree(self.target_path)
+            elif self._leftover_is_ours(zpath):
+                # an unpack cut off before 3.45.1 left no marker: every file in it is the game's or this merge's own
+                log("Clearing what an earlier rebuild left half done (only the game's and this merge's own files) ...")
+                shutil.rmtree(self.target_path)
+            else:
+                aside = self._move_aside()
+                log("%s had other files in it, so it was moved aside to %s (nothing in it was deleted)." % (self.target_path, aside))
         log("Copying %s ..." % self.base_path)
         try:
+            os.makedirs(self.target_path, exist_ok=True)
+            with open(os.path.join(self.target_path, COPY_MARKER), "w", encoding="utf-8") as f:
+                f.write("Made by Frankenstein from %s\n" % self.base_path)  # first, so a cut-off rebuild is still known as ours
             clone_tree(self.base_path, self.target_path, hardlink=False, log=log, progress=progress)
-        except BaseException:
+        except BaseException as e:
             shutil.rmtree(self.target_path, ignore_errors=True)  # never leave half a copy filling the drive
+            if aside and isinstance(e, MergeError):
+                raise MergeError("%s The folder that was in the way is at %s: delete it if you don't need it, to make room." % (e, aside))
             raise
         log("Putting the merge's own files back ...")
         with zipfile.ZipFile(zpath) as z:

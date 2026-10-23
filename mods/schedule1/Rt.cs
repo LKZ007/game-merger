@@ -56,6 +56,25 @@ namespace Frankenstein
                      .FirstOrDefault(m => m.Name == name && m.IsGenericMethodDefinition && m.GetParameters().Length == args);
         }
 
+        /// <summary>A singleton's static Instance, nearest type first, without AmbiguousMatchException when a subclass
+        /// redeclares it (Singleton&lt;T&gt; and the game's own class can both have one).</summary>
+        public static object Instance(Type t)
+        {
+            for (var x = t; x != null; x = x.BaseType)
+            {
+                try
+                {
+                    var p = x.GetProperties(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.DeclaredOnly)
+                             .FirstOrDefault(q => q.Name == "Instance" && q.GetIndexParameters().Length == 0);
+                    if (p == null) continue;
+                    var v = p.GetValue(null, null);
+                    if (v != null && !(v is UnityEngine.Object u && u == null)) return v;
+                }
+                catch (Exception) { }
+            }
+            return null;
+        }
+
         static IEnumerable<object> Each(object list)
         {
             var e = list as IEnumerable;
@@ -114,16 +133,26 @@ namespace Frankenstein
             return m;
         }
 
+        /// <summary>Walks the type and its bases one level at a time (DeclaredOnly), so a property the game redeclares
+        /// in a subclass, or two members whose names differ only in case ("ID" and "id"), never throw
+        /// AmbiguousMatchException: the exact spelling wins, then any spelling, nearest type first.</summary>
         static MemberInfo FindMember(Type t, string name)
         {
-            const BindingFlags f = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static |
-                                   BindingFlags.IgnoreCase | BindingFlags.FlattenHierarchy;
-            for (var x = t; x != null; x = x.BaseType)
+            const BindingFlags f = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static | BindingFlags.DeclaredOnly;
+            foreach (var exact in new[] { true, false })
             {
-                var p = x.GetProperty(name, f);
-                if (p != null && p.GetIndexParameters().Length == 0) return p;
-                var fi = x.GetField(name, f);
-                if (fi != null) return fi;
+                var cmp = exact ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
+                for (var x = t; x != null; x = x.BaseType)
+                {
+                    PropertyInfo[] ps;
+                    FieldInfo[] fs;
+                    try { ps = x.GetProperties(f); fs = x.GetFields(f); } catch (Exception) { continue; }
+                    var p = ps.FirstOrDefault(q => string.Equals(q.Name, name, cmp) && q.GetIndexParameters().Length == 0 && q.CanRead && q.CanWrite)
+                            ?? ps.FirstOrDefault(q => string.Equals(q.Name, name, cmp) && q.GetIndexParameters().Length == 0);
+                    if (p != null) return p;
+                    var fi = fs.FirstOrDefault(q => string.Equals(q.Name, name, cmp));
+                    if (fi != null) return fi;
+                }
             }
             return null;
         }
@@ -134,9 +163,9 @@ namespace Frankenstein
             if (o == null) return null;
             foreach (var n in names)
             {
-                var m = Member(o.GetType(), n);
                 try
                 {
+                    var m = Member(o.GetType(), n);
                     if (m is PropertyInfo p && p.CanRead) return p.GetValue(o, null);
                     if (m is FieldInfo fi) return fi.GetValue(o);
                 }
@@ -151,9 +180,9 @@ namespace Frankenstein
             if (o == null) return null;
             foreach (var n in names)
             {
-                var m = Member(o.GetType(), n);
                 try
                 {
+                    var m = Member(o.GetType(), n);
                     var type = m is PropertyInfo pp ? pp.PropertyType : m is FieldInfo ff ? ff.FieldType : null;
                     if (type == null) continue;
                     var v = value == null || type.IsInstanceOfType(value) ? value : Convert.ChangeType(value, type);

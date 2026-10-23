@@ -95,7 +95,7 @@ namespace Frankenstein
                 object target = null;
                 if (!m.IsStatic)
                 {
-                    target = t.GetProperty("Instance", BindingFlags.Public | BindingFlags.Static | BindingFlags.FlattenHierarchy)?.GetValue(null, null) ?? Rt.All(t).FirstOrDefault();
+                    target = Rt.Instance(t) ?? Rt.All(t).FirstOrDefault();
                     if (target == null) return false;
                 }
                 m.Invoke(target, m.GetParameters().Select(p => p.DefaultValue).ToArray());

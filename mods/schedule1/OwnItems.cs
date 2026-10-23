@@ -89,7 +89,7 @@ namespace Frankenstein
             Once("registry type: " + regT.FullName);
             const BindingFlags st = BindingFlags.Public | BindingFlags.Static | BindingFlags.FlattenHierarchy;
             object reg = null;
-            try { reg = regT.GetProperty("Instance", st)?.GetValue(null, null); } catch (Exception e) { Once("Registry.Instance failed: " + (e.InnerException ?? e).Message); }
+            try { reg = Rt.Instance(regT); } catch (Exception e) { Once("Registry.Instance failed: " + (e.InnerException ?? e).Message); }
             if (reg == null || (reg is UnityEngine.Object r0 && r0 == null)) reg = Rt.All(regT).FirstOrDefault();
             if (reg == null || (reg is UnityEngine.Object ro && ro == null)) { Once("waiting: the Registry isn't up yet"); return; }
             var get = regT.GetMethods(st).FirstOrDefault(m => m.Name == "GetItem" && !m.IsGenericMethod && m.GetParameters().Length == 1 && m.GetParameters()[0].ParameterType == typeof(string))

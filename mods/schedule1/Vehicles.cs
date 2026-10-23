@@ -34,7 +34,7 @@ namespace Frankenstein
             try
             {
                 var mgr = Rt.Find("ScheduleOne.Vehicles.VehicleManager");
-                var inst = mgr?.GetProperty("Instance", BindingFlags.Public | BindingFlags.Static | BindingFlags.FlattenHierarchy)?.GetValue(null, null)
+                var inst = Rt.Instance(mgr)
                            ?? (mgr != null ? Rt.All(mgr).FirstOrDefault() : null);
                 foreach (var v in Creative.Each(Rt.Get(inst, "VehiclePrefabs", "vehiclePrefabs")))
                 {

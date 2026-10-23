@@ -619,5 +619,16 @@ class FeatureChecklist(unittest.TestCase):
         dll = open(os.path.join(PKG, "mods", "schedule1", "Frankenstein.dll"), "rb").read()
         self.assertIn("Hood City".encode("utf-16-le"), dll)
 
+    def test_3451_unpack_leftover_and_gun_ambiguity(self):
+        inst = read(PKG, "installer.py")
+        for x in ("_leftover_is_ours", "_move_aside", "moved aside"):
+            self.assertIn(x, inst)
+        rt = read(ROOT, "mods", "schedule1", "Rt.cs")
+        self.assertIn("BindingFlags.DeclaredOnly", rt)
+        self.assertNotIn("BindingFlags.IgnoreCase", rt)  # "ID" and "id" made GetProperty ambiguous for the AK-47
+        self.assertIn("public static object Instance(Type t)", rt)
+        for f in ("OwnItems.cs", "Boom.cs", "Vehicles.cs"):
+            self.assertNotIn('GetProperty("Instance"', read(ROOT, "mods", "schedule1", f))
+
 if __name__ == "__main__":
     unittest.main()

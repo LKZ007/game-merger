@@ -45,7 +45,7 @@ namespace Frankenstein
                 try
                 {
                     var t = Rt.FindByName("SaveManager");
-                    var sm = t?.GetProperty("Instance", BindingFlags.Public | BindingFlags.Static | BindingFlags.FlattenHierarchy)?.GetValue(null, null);
+                    var sm = Rt.Instance(t);
                     var m = t?.GetMethods(BindingFlags.Public | BindingFlags.Instance).FirstOrDefault(x => x.Name == "Save" && x.GetParameters().Length == 0);
                     if (sm != null && m != null) { m.Invoke(sm, null); ok = true; }
                 }

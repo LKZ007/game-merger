@@ -116,7 +116,7 @@ namespace Frankenstein
             try
             {
                 var lmType = Rt.FindByName("LoadManager");
-                var lm = lmType?.GetProperty("Instance", BindingFlags.Public | BindingFlags.Static | BindingFlags.FlattenHierarchy)?.GetValue(null, null)
+                var lm = Rt.Instance(lmType)
                          ?? Rt.All(lmType).FirstOrDefault();
                 if (lm == null) return false;
                 var start = lm.GetType().GetMethods(BindingFlags.Public | BindingFlags.Instance)

@@ -148,7 +148,7 @@ namespace Frankenstein
             foreach (var n in new[] { "ItemUIManager", "InventoryUI", "PlayerInventoryUI" })
             {
                 var t = Rt.FindByName(n);
-                if (t != null) owners.Add(t.GetProperty("Instance", BindingFlags.Public | BindingFlags.Static | BindingFlags.FlattenHierarchy)?.GetValue(null, null) ?? Rt.All(t).FirstOrDefault());
+                if (t != null) owners.Add(Rt.Instance(t) ?? Rt.All(t).FirstOrDefault());
             }
             foreach (var o in owners.Where(o => o != null))
             {

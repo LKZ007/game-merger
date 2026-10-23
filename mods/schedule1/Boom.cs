@@ -190,7 +190,7 @@ namespace Frankenstein
             if (_invFound is UnityEngine.Object live && live != null) return _invFound;
             if (_inv == null) _inv = Rt.FindByName("PlayerInventory");
             if (_inv == null) return null;
-            _invFound = _inv.GetProperty("Instance", BindingFlags.Public | BindingFlags.Static | BindingFlags.FlattenHierarchy)?.GetValue(null, null)
+            _invFound = Rt.Instance(_inv)
                         ?? Rt.All(_inv).FirstOrDefault();
             return _invFound;
         }
