@@ -544,7 +544,8 @@ def build(target, houses=True, log=None):
 
 
 def start_tools_when_ready(target, is_running, wait=240, settle=20, popen=subprocess.Popen):
-    """Creative: start the Practice Tool once the game is up (it attaches to the running game)."""
+    """Creative is in the game: start the Practice Tool once the game is up, on every Play (it attaches to the running
+    game, and stays out of the way until the Creative wheel or its menu is opened)."""
     exe = _find(target, TOOL_EXE)
     if not exe:
         return False

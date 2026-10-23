@@ -1,4 +1,10 @@
-## Frankenstein 3.42.0
+## Frankenstein 3.42.1
+
+- **Creative is never in the app.** The "✦ Creative" button is gone from every merge card, and a test keeps it gone. Creative lives inside each game.
+- **Elden Ring: Creative is in the game on every Play.** Press both sticks for the Creative wheel, or 0 for its menu, on any character. It has the item spawner, fly, Torrent as a broom, no damage and unlimited spells. Elden Ring's own menus are locked in its archives, so there's no Creative entry in them, and the mode isn't remembered per character. The merge card says so.
+- Not tested in game yet.
+
+### Also in 3.42.0
 
 - **Elden Ring is now a Host game with Frankenstein's own mod, starting with Elden Ring x Hogwarts Legacy.**
   - **Offline only, always.** Play starts the merge copy through Mod Engine 2 (downloaded by itself), without Easy Anti-Cheat, so it can't go online. The original game and your saves aren't touched: the merge has its own saves, starting as a copy of your characters.

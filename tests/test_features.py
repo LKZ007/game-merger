@@ -286,6 +286,7 @@ class FeatureChecklist(unittest.TestCase):
         js = read(PKG, "web", "app.js")
         self.assertIn("roomToUnpack", js)
         self.assertNotIn("Creative (own saves)</button>", js, "Creative lives in the game's own menu, not the app's More menu")
+        self.assertNotIn('data-act="creative"', js, "no Creative button in the app for any merge: Creative lives in the game")
 
     def test_332_game_mode_controller_guns_fly_cars(self):
         dll = open(os.path.join(PKG, "mods", "schedule1", "Frankenstein.dll"), "rb").read()
