@@ -116,7 +116,7 @@ namespace Frankenstein
         static void Light()
         {
             if (!_light || Time.unscaledTime < _nextLight) return;
-            _nextLight = Time.unscaledTime + 3f;  // the game's day cycle keeps changing the light, so keep it tinted
+            _nextLight = Time.unscaledTime + Perf.Every(3f);  // the game's day cycle keeps changing the light, so keep it tinted
             RenderSettings.fog = true;
             RenderSettings.fogMode = FogMode.Exponential;
             RenderSettings.fogColor = new Color(0.32f, 0.18f, 0.46f);

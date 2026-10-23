@@ -143,7 +143,7 @@ namespace Frankenstein
             try { inCar = me.IsInVehicle; } catch (Exception) { return; }
             if (Time.unscaledTime >= _nextNear)
             {
-                _nextNear = Time.unscaledTime + 0.4f;
+                _nextNear = Time.unscaledTime + Mathf.Min(Perf.Every(0.4f), 0.8f);
                 _near = null;
                 float best = inCar ? 3f : 2.2f;
                 var cars = Cars();

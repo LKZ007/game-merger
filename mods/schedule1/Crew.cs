@@ -186,7 +186,7 @@ namespace Frankenstein
         {
             if (Input.GetKeyDown(KeyCode.F10) && Gangs.On) _open = !_open;
             if (!_inTown || !Gangs.On || Time.unscaledTime < _next) return;
-            _next = Time.unscaledTime + 1.5f;
+            _next = Time.unscaledTime + Perf.Every(1.5f);
             if (Time.unscaledTime - _since < 12f) return;  // the town needs a moment
             if (_lives.Count == 0) Collect();
             Learn();
@@ -276,11 +276,11 @@ namespace Frankenstein
         {
             var n = l.Npc;
             if (n == null) return;
-            // far from you nobody sees them: they think every 6 seconds instead of every 1.5
+            // far from you nobody sees them: they think every 6 seconds instead of every 1.5 (less often, and nearer, when Perf turns extras down)
             var me = Player.Local;
             if (me != null && l.Placed && Time.unscaledTime < l.NextThink)
                 return;
-            l.NextThink = me != null && Vector3.Distance(n.Position, me.Position) > 120f ? Time.unscaledTime + 6f : 0f;
+            l.NextThink = me != null && Vector3.Distance(n.Position, me.Position) > Perf.FarNpc ? Time.unscaledTime + Perf.Every(6f) : 0f;
             var route = Route(l.P.Gang, l);
             if (route == null) { l.Doing = "waiting for the town"; return; }
             float now = Time.unscaledTime;

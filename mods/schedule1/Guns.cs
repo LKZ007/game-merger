@@ -50,7 +50,7 @@ namespace Frankenstein
         {
             if (OwnGuns.Holding) return;  // Frankenstein's own gun is in your hand: it has its own numbers
             if (_specs.Count == 0 || Time.unscaledTime < _next) return;
-            _next = Time.unscaledTime + 2f;  // a full search of the game's objects: not too often
+            _next = Time.unscaledTime + Perf.Every(2f);  // a full search of the game's objects: not too often
             if (_weapon == null)
             {
                 if (_looked) return;

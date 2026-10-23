@@ -525,5 +525,31 @@ class FeatureChecklist(unittest.TestCase):
         for g in GANGS["hoodwarfare"]:
             self.assertTrue(g.get("district"), "every gang gets a new district")
 
+    def test_3422_no_lag(self):
+        from gamemerger import standard
+        from gamemerger.api import Api, PERF_LEVELS
+        self.assertIn("performance", [k for k, _n, _w in standard.STANDARD])
+        self.assertTrue(next(r for r in standard.check("schedule1")["rows"] if r["id"] == "performance")["met"])
+        self.assertEqual(PERF_LEVELS[0], "auto")
+        perf = read(ROOT, "mods", "schedule1", "Perf.cs")
+        for x in ("BudgetMs", "Every(", "FarNpc", "perf-debug.txt", "Fps < 40f"):
+            self.assertIn(x, perf)
+        plugin = read(ROOT, "mods", "schedule1", "Plugin.cs")
+        for x in ("Perf.Begin()", "Perf.End()", "Perf.GuiBegin()", "Perf.Read("):
+            self.assertIn(x, plugin)
+        for f in ("Crew.cs", "Gangs.cs", "Garage.cs", "Guns.cs", "Creative.cs"):
+            self.assertIn("Perf.Every(", read(ROOT, "mods", "schedule1", f), f)
+        self.assertIn("_invFound", read(ROOT, "mods", "schedule1", "Boom.cs"))  # no full search several times a second
+        dll = open(os.path.join(PKG, "mods", "schedule1", "Frankenstein.dll"), "rb").read()
+        self.assertIn("perf-debug.txt".encode("utf-16-le"), dll)
+        api = read(PKG, "api.py")
+        self.assertIn('"performance": self._settings.get("performance", "auto")', api)  # sent to the mod and the settings page
+        self.assertIn("self._quiet(True)", api)
+        self.assertIn("self._quiet(False)", api)
+        js = read(PKG, "web", "app.js")
+        self.assertIn("gameOn(true)", js)
+        self.assertIn("perfLevel", js)
+        self.assertIn("body.game-on", read(PKG, "web", "app.css"))
+
 if __name__ == "__main__":
     unittest.main()

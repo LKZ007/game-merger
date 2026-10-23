@@ -15,7 +15,7 @@ namespace Frankenstein
     {
         /// <summary>The Frankenstein release this mod came with (equal to gamemerger/version.py; a test checks).
         /// Shown on F6's title and in MelonLoader's log, where the app reads it back for the merge's card.</summary>
-        public const string Version = "3.42.1";
+        public const string Version = "3.42.2";
         float _next;
         public static bool MenuAllowed = true;
         public static System.Collections.Generic.List<string> Kit = new System.Collections.Generic.List<string>();
@@ -61,6 +61,7 @@ namespace Frankenstein
                 World.Host = J.S(s, "host", "Schedule I");
                 Loading.Read(J.O(s, "loading"));
                 Guns.Read(J.O(s, "guns"));
+                Perf.Read(J.S(s, "performance", "auto"));
                 Gangs.Read(J.O(s, "gangs"));
                 Carry.Read(s is System.Collections.Generic.Dictionary<string, object> d3 && d3.TryGetValue("carry", out var cv) ? cv : null);
                 if (pa != null && J.S(pa, "style").Length > 0)
@@ -79,6 +80,12 @@ namespace Frankenstein
         public override void OnSceneWasInitialized(int buildIndex, string sceneName) { MainMenu.Scene(sceneName); World.Scene(sceneName); Loading.Scene(sceneName); Skip.Scene(sceneName); }
 
         public override void OnUpdate()
+        {
+            Perf.Begin();
+            try { Updates(); } finally { Perf.End(); }
+        }
+
+        void Updates()
         {
             Pad.Update();
             try { Mode.Tick(); } catch (Exception e) { Melon<Plugin>.Logger.Warning("Game mode: " + e.Message); }
@@ -123,9 +130,11 @@ namespace Frankenstein
 
         public override void OnGUI()
         {
+            Perf.GuiBegin();
             Pad.GuiBegin();
             DrawAll();
             Pad.GuiEnd();
+            Perf.GuiEnd();
         }
 
         static void DrawAll()

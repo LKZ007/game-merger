@@ -175,19 +175,24 @@ namespace Frankenstein
         {
             if (_inv == null) _inv = Rt.FindByName("PlayerInventory");
             if (_inv == null) return new List<object>();
-            var inv = _inv.GetProperty("Instance", BindingFlags.Public | BindingFlags.Static | BindingFlags.FlattenHierarchy)?.GetValue(null, null)
-                      ?? Rt.All(_inv).FirstOrDefault();
+            var inv = Inventory();
             return Creative.Each(Rt.Get(inv, "hotbarSlots", "HotbarSlots")).ToList();
         }
 
         internal static string Id(object slot) => Rt.Get(Rt.Get(slot, "ItemInstance"), "ID") as string;
 
+        static object _invFound;
+
+        /// <summary>The player's inventory. Found once and kept: it's asked for several times a second, and
+        /// searching every object in the game each time would cost frames.</summary>
         internal static object Inventory()
         {
+            if (_invFound is UnityEngine.Object live && live != null) return _invFound;
             if (_inv == null) _inv = Rt.FindByName("PlayerInventory");
             if (_inv == null) return null;
-            return _inv.GetProperty("Instance", BindingFlags.Public | BindingFlags.Static | BindingFlags.FlattenHierarchy)?.GetValue(null, null)
-                   ?? Rt.All(_inv).FirstOrDefault();
+            _invFound = _inv.GetProperty("Instance", BindingFlags.Public | BindingFlags.Static | BindingFlags.FlattenHierarchy)?.GetValue(null, null)
+                        ?? Rt.All(_inv).FirstOrDefault();
+            return _invFound;
         }
 
         static string _equipWay = "";

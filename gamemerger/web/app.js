@@ -1,5 +1,5 @@
 "use strict";
-window.APP_BUILD = "3.42.1";  // must match index.html: a mixed-up install is caught at start
+window.APP_BUILD = "3.42.2";  // must match index.html: a mixed-up install is caught at start
 
 // ---------- talking to the Python side ----------
 const TOKEN = document.querySelector('meta[name="gm-token"]')?.content;
@@ -1358,12 +1358,27 @@ async function importMerge(path) {
 
 // Refresh My merges when the game closes and the normal saves are put back.
 let playWatch = null;
+// While a merged game runs the app stays still so it never costs the game frames: animations and videos
+// pause (the backend also drops the app to below-normal priority), and pick up again when the game closes.
+let pausedVideos = [];
+function gameOn(on) {
+  document.body.classList.toggle("game-on", on);
+  if (on) {
+    pausedVideos = [...document.querySelectorAll("video")].filter((v) => !v.paused);
+    pausedVideos.forEach((v) => v.pause());
+  } else {
+    pausedVideos.forEach((v) => v.isConnected && v.play().catch(() => {}));
+    pausedVideos = [];
+  }
+}
 function watchPlaying() {
   if (playWatch) return;
+  gameOn(true);
   playWatch = setInterval(async () => {
     const now = await call("playing").catch(() => null);
     if (!now) {
       clearInterval(playWatch); playWatch = null;
+      gameOn(false);
       toast("Game closed. Your merge's progress is saved and your normal saves are back.", 4500);
       if (state.view === "merges") loadMerges();
     }
@@ -1924,6 +1939,11 @@ async function loadSettings() {
       <p class="muted">Every item in a merge, mods' items included, from a menu in the game (Schedule I: F6 or Back + Y; Cyberpunk: the ~ overlay). It's always on in Creative.</p>
       <label class="row"><input type="checkbox" id="itemMenuNormal" ${s.item_menu_normal ? "checked" : ""}> Also in normal play</label>
     </div>
+    <div class="card"><h2>Performance</h2>
+      <p class="muted">Merged games shouldn't lag. Frankenstein's own mod in the game keeps to a budget, checks the game's FPS and turns its own extras down (crews, gangs, car and gun checks) when the game drops frames, then back up when it's smooth again. While a game runs, this app stops its animations and steps back so the game gets the PC.</p>
+      <div class="field"><label for="perfLevel">In-game extras</label>
+        <select class="input" id="perfLevel">${[["auto", "Automatic (recommended)"], ["quality", "Always full"], ["balanced", "Lighter"], ["performance", "Lightest, for slower PCs"]].map(([v, n]) => `<option value="${v}" ${(s.performance || "auto") === v ? "selected" : ""}>${n}</option>`).join("")}</select></div>
+    </div>
     <div class="card"><h2>Save space</h2>
       <p class="muted">After you close a merged game, Frankenstein packs it away. It keeps only the files the merge changed (mods, their settings) and zips its saves, then deletes the copy. When you press Play it rebuilds the copy from your own installed game first. That takes about as long as copying the game: seconds for small games, several minutes for big ones like Cyberpunk. Your original game is only ever read.</p>
       <label class="row"><input type="checkbox" id="packAfterPlay" ${s.pack_after_play !== false ? "checked" : ""}> Pack merges away after playing</label>
@@ -1974,6 +1994,7 @@ async function loadSettings() {
   $("#cloudPick").onchange = async () => { state.settings = await call("save_settings", { cloud_folder: $("#cloudPick").value }); toast($("#cloudPick").value ? "Cloud backup is on." : "Cloud backup is off."); };
   $("#checkUpdate").onclick = async () => offerUpdate(await call("check_update").catch(() => null), true);
   $("#selfCheck").onclick = async () => { toast("Checking everything…"); try { showSelfCheck(await call("self_check_result", true)); } catch (e) { toast(errText(e)); } };
+  $("#perfLevel").onchange = async () => { state.settings = await call("save_settings", { performance: $("#perfLevel").value }); };
   $("#packAfterPlay").onchange = async () => { state.settings = await call("save_settings", { pack_after_play: $("#packAfterPlay").checked }); };
   $("#itemMenuNormal").onchange = async () => { state.settings = await call("save_settings", { item_menu_normal: $("#itemMenuNormal").checked }); };
   $("#funStyle").onchange = async () => { state.settings = await call("save_settings", { fun_style: $("#funStyle").value }); applyFun(); };

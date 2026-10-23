@@ -158,7 +158,7 @@ namespace Frankenstein
             var v = tr.forward * 34f + Vector3.up * 2.5f;
             float floor = tr.position.y - 1.7f, k = Screen.height / 1080f;
             _pts.Clear();
-            for (float t = 0.08f; t < 3f; t += 0.08f)
+            for (float t = 0.08f; t < 3f; t += Perf.Level == 2 ? 0.16f : 0.08f)
             {
                 var at = p + v * t + 0.5f * new Vector3(0, -9.81f, 0) * t * t;
                 if (at.y < floor) break;

@@ -232,7 +232,7 @@ namespace Frankenstein
             if (Input.GetKeyDown(KeyCode.F9)) _open = !_open;
             if (Input.GetKeyDown(KeyCode.G)) TryRob();
             if (Time.unscaledTime < _next) return;
-            _next = Time.unscaledTime + 1f;
+            _next = Time.unscaledTime + Perf.Every(1f);
             var me = Player.Local;
             if (me == null) return;
             try { _region = me.CurrentRegion.ToString(); } catch (Exception) { _region = ""; }

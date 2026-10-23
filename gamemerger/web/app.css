@@ -579,3 +579,6 @@ body.pad .tile:focus .face { border: 2px solid var(--accent); box-shadow: 0 0 30
 .standard { list-style: none; padding: 0; margin: 8px 0 0; display: grid; gap: 8px; }
 .standard li { padding: 8px 10px; border-radius: 8px; background: rgba(255,255,255,.04); }
 .standard li.good strong { color: #bbf7d0; }
+
+/* a merged game is running: nothing in the app moves, so the game gets every frame */
+body.game-on *, body.game-on *::before, body.game-on *::after { animation-play-state: paused !important; transition: none !important; }

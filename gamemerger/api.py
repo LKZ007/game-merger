@@ -23,6 +23,8 @@ from . import carryover, eldenring, mergeplan, playas, recipes
 from .recipes import load_recipes, resource_dir
 
 SHARE_TYPES = ("Shared merges (*.gmerge)", "All files (*.*)")
+# Settings > Performance: auto turns Frankenstein's in-game extras down by itself when the game drops frames
+PERF_LEVELS = ("auto", "quality", "balanced", "performance")
 MOD_TYPES = ("Mod files (*.zip;*.7z;*.rar;*.archive;*.dll;*.asi;*.reds;*.lua;*.yaml;*.xl)", "All files (*.*)")
 
 
@@ -839,17 +841,32 @@ class Api:
             r = self._recipe(Merge.load(state["merge_id"].split("~")[0]).data.get("recipe_id"))
             if r and saves.running(r.processes):
                 self._playing = state["merge_id"].split("~")[0]
+                self._quiet(True)
                 saves.watch_until_closed(r.processes, self._game_closed, grace=0)
                 return
         except (OSError, ValueError):
             pass
         saves.swap_out()
 
+    @staticmethod
+    def _quiet(on):
+        """While a merged game runs, Frankenstein steps back so the game gets the PC: the app drops to below-normal
+        priority (its page also stops its animations, see app.js gameOn), and back to normal when the game closes."""
+        if sys.platform != "win32":
+            return False
+        try:
+            import ctypes
+            k = ctypes.windll.kernel32
+            return bool(k.SetPriorityClass(k.GetCurrentProcess(), 0x4000 if on else 0x20))  # BELOW_NORMAL / NORMAL
+        except Exception:
+            return False
+
     def _game_closed(self):
         slot = (saves.active() or {}).get("merge_id")
         mid = self._playing or slot
         saves.swap_out()
         self._playing = None
+        self._quiet(False)
         if slot:
             try:
                 m = Merge.load(slot.split("~")[0])
@@ -2536,6 +2553,7 @@ class Api:
                      "play_as": dict(playas.settings(r.id, source), on=bool(m.data.get("play_as_on", True))),
                      "world": mergeplan.settings(r.id, m.data.get("theme_id", ""), source.split(" /")[0]),
                      "host": m.data.get("game_name", ""),
+                     "performance": self._settings.get("performance", "auto"),
                      "carry": carryover.settings(r.id, m.data.get("carry"))}
         if r.id == "schedule1":
             extra_all.update(self._schedule1_extras(m, r, source))
@@ -3002,8 +3020,8 @@ class Api:
     def job_terminal(self, job_id, title=""):
         """A small terminal window beside the app that shows the game being rebuilt, step by step (each file
         copied or linked, each mod, each part filled), in Frankenstein's purple."""
-        if self._window is None or job_id not in self._jobs:
-            return False
+        if self._window is None or job_id not in self._jobs or self._playing:
+            return False  # never over a running game
         import webview
         import html as h
         j = self._jobs[job_id]
@@ -3030,6 +3048,12 @@ class Api:
                     win.evaluate_js("feed(%s, %s, %s)" % (json.dumps(lines[-250:]), json.dumps(p), "true" if j.done else "false"))
                 except Exception:
                     return  # the window was closed
+                if self._playing:  # the game started: get out of its way at once
+                    try:
+                        win.destroy()
+                    except Exception:
+                        pass
+                    return
                 if j.done:
                     time.sleep(8)
                     try:
@@ -3160,6 +3184,7 @@ class Api:
             m.save()
             saves.swap_in(slot, r)
             self._playing = merge_id
+            self._quiet(True)
             saves.watch_until_closed(r.processes or [os.path.basename(exe)], self._game_closed)
         # modded copies start offline-only where the game supports it, so mods never reach online modes;
         # creative mode always does
@@ -3664,6 +3689,7 @@ class Api:
                 "fun_style": self._settings.get("fun_style", "dot"),
                 "item_menu_normal": bool(self._settings.get("item_menu_normal")),
                 "pack_after_play": self._settings.get("pack_after_play", True),
+                "performance": self._settings.get("performance", "auto"),
                 "has_curseforge": bool(self._settings.get("curseforge_key")),
                 "cloud_folder": self._settings.get("cloud_folder", ""),
                 "cloud_options": saves.cloud_folders()}
@@ -3672,7 +3698,9 @@ class Api:
         shared = {"mode", "destination", "claude_api_key"}
         if shared & {k for k, v in values.items() if v is not None} and not self._me().get("admin"):
             raise MergeError("Only the admin account can change keys and where copies go.")
-        for k in ("mode", "destination", "cloud_folder", "fun_style", "item_menu_normal", "pack_after_play"):
+        if "performance" in values and values["performance"] not in PERF_LEVELS:
+            raise MergeError("Performance is one of: %s." % ", ".join(PERF_LEVELS))
+        for k in ("mode", "destination", "cloud_folder", "fun_style", "item_menu_normal", "pack_after_play", "performance"):
             if k in values:
                 self._settings[k] = values[k]
         if values.get("claude_api_key") is not None:

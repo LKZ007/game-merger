@@ -99,7 +99,7 @@ namespace Frankenstein
         public static void Update()
         {
             if (Time.unscaledTime < _next || Player_() == null) return;
-            _next = Time.unscaledTime + 1f;
+            _next = Time.unscaledTime + Perf.Every(1f);
             KeepHidden();
             Load();
             for (int i = _pending.Count - 1; i >= 0; i--)

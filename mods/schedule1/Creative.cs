@@ -27,7 +27,7 @@ namespace Frankenstein
         {
             if (!MainMenu.Creative || Time.unscaledTime < _next) return;
             if (StartEmpty) Empty();
-            _next = Time.unscaledTime + 0.25f;
+            _next = Time.unscaledTime + Perf.Every(0.25f);
             try { Ammo(); } catch (Exception e) { Warn("ammo", e); }
             try { Items(); } catch (Exception e) { Warn("items", e); }
         }
@@ -43,7 +43,7 @@ namespace Frankenstein
         {
             if (_gun == null) _gun = Rt.FindByName("Equippable_RangedWeapon");
             if (_gun == null) return;
-            if (Time.unscaledTime >= _nextGuns) { _nextGuns = Time.unscaledTime + 2f; _guns = Rt.All(_gun); }
+            if (Time.unscaledTime >= _nextGuns) { _nextGuns = Time.unscaledTime + Perf.Every(2f); _guns = Rt.All(_gun); }
             foreach (var w in _guns)
             {
                 if (w is UnityEngine.Object uo && uo == null) continue;
@@ -91,10 +91,8 @@ namespace Frankenstein
 
         static void Items()
         {
-            if (_inv == null) _inv = Rt.FindByName("PlayerInventory");
-            if (_inv == null) return;
-            var inv = _inv.GetProperty("Instance", BindingFlags.Public | BindingFlags.Static | BindingFlags.FlattenHierarchy)?.GetValue(null, null)
-                      ?? Rt.All(_inv).FirstOrDefault();
+            var inv = Boom.Inventory();
+            if (inv == null) return;
             var slots = Each(Rt.Get(inv, "hotbarSlots", "HotbarSlots")).ToList();
             // a menu is open (inventory, a storage rack, a shop, the phone): items moved there are moved, not used,
             // so nothing comes back; the hotbar is read afresh once you're playing again

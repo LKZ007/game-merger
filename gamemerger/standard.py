@@ -27,6 +27,7 @@ STANDARD = [
     ("npcs", "Gangs and NPCs", "The Extension's crews and named characters in the world, with their own turf."),
     ("controller", "Controller", "Everything works on a controller, with one wheel for Frankenstein's tools."),
     ("save", "Save Game", "A Save Game button in the pause menu."),
+    ("performance", "No lag", "Frankenstein's own mod keeps to a 2 ms a frame budget (no per-frame scans, crews and HUD on timers), watches the FPS and turns its extras down by itself; Settings > Performance; the app stops its animations while you play."),
     ("debug", "Debug logs", "Each feature writes what it did to a file, so problems can be fixed without guessing."),
 ]
 
@@ -45,6 +46,7 @@ HOSTS = {
         "npcs": ("planned", "Gangs and named crews from the Extension aren't built for GTA V yet."),
         "controller": ("native", "GTA V plays on a controller itself."),
         "save": ("native", "GTA V saves from its pause menu and when you sleep in a safehouse."),
+        "performance": ("partial", "The app steps back while you play (no animations, lower priority); the in-game FPS check isn't built into the GTA V script yet."),
         "debug": ("partial", "The script logs to ScriptHookVDotNet's log; per-feature debug files aren't written yet."),
     },
     "eldenring": {
@@ -60,6 +62,7 @@ HOSTS = {
         "npcs": ("partial", "Elden Ring's own creatures stand in for the wizarding world's; their names and looks stay Elden Ring's."),
         "controller": ("native", "Elden Ring plays on a controller; the Creative tools have a wheel (press both sticks)."),
         "save": ("native", "Elden Ring saves all the time, and on Quit Game."),
+        "performance": ("partial", "Most of the merge is data (the game's own params), so it adds little work a frame, and the app steps back while you play; an in-game FPS check isn't built for Elden Ring yet."),
         "debug": ("built", "frankenstein-debug.txt in the merge's frankenstein folder says what was built on every Play, and why if something wasn't."),
     },
     "cyberpunk2077": {
@@ -75,6 +78,7 @@ HOSTS = {
         "npcs": ("planned", "Gangs and named crews from the Extension aren't built for Cyberpunk yet."),
         "controller": ("native", "Cyberpunk plays on a controller itself."),
         "save": ("native", "Cyberpunk saves from its pause menu."),
+        "performance": ("partial", "The app steps back while you play (no animations, lower priority); the in-game FPS check isn't built into the sandbox menu yet."),
         "debug": ("partial", "The sandbox menu logs to Cyberpunk Engine Tweaks' log; per-feature debug files aren't written yet."),
     },
 }
@@ -93,6 +97,7 @@ GENERIC = {
     "npcs": ("planned", "Gangs and named crews need Frankenstein's own mod for this game."),
     "controller": ("built", "Frankenstein's key mapper runs while you play when the game has no controller support."),
     "save": ("native", "The game's own save."),
+    "performance": ("partial", "The app steps back while you play (no animations, lower priority); mods from other people keep their own cost."),
     "debug": ("partial", "Frankenstein logs the merge and the mods it installed; in-game debug files need its own mod."),
 }
 

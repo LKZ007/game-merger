@@ -3,6 +3,15 @@
 Every release, newest first. Downloads are on the [releases page](https://github.com/LKZ007/game-merger/releases).
 The app was called Game Merger before 3.8.0.
 
+## v3.42.2 (2026-10-23)
+- **Merged games shouldn't lag. "No lag" is now part of the minimum standard for every merge.**
+  - **A budget for Frankenstein's own Schedule I mod:** everything it does in a frame (its updates, menus and HUD) should take under 2 ms. It times itself, and the player's inventory is now found once and kept instead of being searched for several times a second.
+  - **An in-game FPS check.** When the game drops under 40 FPS, or the mod goes over its budget, for a few seconds, Frankenstein turns its own extras down by itself. The crews, gangs, car and gun checks run less often, far-off crew members think less, and the launcher arc uses fewer dots. You get a short message when this happens. When the game has run smoothly for a while, the extras go back up. perf-debug.txt records the FPS and the mod's own cost every 30 seconds.
+  - **Settings > Performance:** Automatic (recommended), Always full, Lighter, or Lightest for slower PCs.
+  - **The app steps back while a game runs.** Its animations and videos stop, it drops to below-normal priority, and the merge terminal closes the moment a game starts (it never opens over one).
+  - Honest limit: this only lightens Frankenstein's own work. If the game itself is heavy on your PC, its own graphics settings help more. The merge card's checklist shows how far each Host game gets.
+- Not tested in game yet.
+
 ## v3.42.1 (2026-10-23)
 - **Creative is never in the app.** The "✦ Creative" button is gone from every merge card, and a test keeps it gone. Creative lives inside each game.
 - **Elden Ring: Creative is in the game on every Play.** Press both sticks for the Creative wheel, or 0 for its menu, on any character. It has the item spawner, fly, Torrent as a broom, no damage and unlimited spells. Elden Ring's own menus are locked in its archives, so there's no Creative entry in them, and the mode isn't remembered per character. The merge card says so.
