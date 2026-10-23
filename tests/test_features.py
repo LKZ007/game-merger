@@ -304,6 +304,16 @@ class FeatureChecklist(unittest.TestCase):
         self.assertNotIn('merge_id + "~creative" if creative', api, "one set of saves")
         self.assertIn("_members", read(ROOT, "mods", "schedule1", "Rt.cs"))  # reflection cached: less lag
 
+    def test_3371_drop_weapons_and_empty_creative(self):
+        dll = open(os.path.join(PKG, "mods", "schedule1", "Frankenstein.dll"), "rb").read()
+        for word in ("drop-debug.txt", "ClearStoredInstance", "started empty"):
+            self.assertIn(word.encode("utf-16-le"), dll, word)
+        drop = read(ROOT, "mods", "schedule1", "Drop.cs")
+        self.assertIn("KeyCode.G", drop)                      # keyboard too
+        self.assertIn("Boom.Id(slot) != id", drop)            # checks the item really left
+        self.assertIn("MainMenu.Creative) return;", read(ROOT, "mods", "schedule1", "Story.cs"))  # no starter kit in Creative
+        self.assertIn("Creative.StartEmpty = true", read(ROOT, "mods", "schedule1", "Mode.cs"))
+
     def test_337_cars_fully_remodelled(self):
         dll = open(os.path.join(PKG, "mods", "schedule1", "Frankenstein.dll"), "rb").read()
         for word in ("UnityEngine.WheelCollider", "new body (", "wheels kept"):

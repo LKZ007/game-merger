@@ -382,6 +382,8 @@ namespace Frankenstein
         static void GiveKit(ProgressData p)
         {
             if (Plugin.Kit.Count == 0 || p.KitGiven == Plugin.KitName) return;
+            // Creative starts empty, like Minecraft's: no starter guns (the mode is known once the save is)
+            if (Mode.SavePath.Length == 0 || Mode.Pending.Length > 0 || MainMenu.Creative) return;
             p.KitGiven = Plugin.KitName;
             var got = new List<string>();
             foreach (var entry in Plugin.Kit)

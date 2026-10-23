@@ -80,6 +80,7 @@ namespace Frankenstein
             SavePath = p;
             if (Pending.Length > 0)
             {
+                if (Pending == "creative" && Of(SavePath) != "creative") Creative.StartEmpty = true;  // a new Creative world: empty hotbar
                 Set(Pending, false);
                 Pending = "";
             }

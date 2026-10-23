@@ -20,9 +20,13 @@ namespace Frankenstein
         static readonly Dictionary<int, KeyValuePair<string, int>> _had = new Dictionary<int, KeyValuePair<string, int>>();
         static bool _warned;
 
+        /// <summary>Set when a new world starts in Creative: its hotbar is emptied once, so you start with nothing.</summary>
+        public static bool StartEmpty;
+
         public static void Update()
         {
             if (!MainMenu.Creative || Time.unscaledTime < _next) return;
+            if (StartEmpty) Empty();
             _next = Time.unscaledTime + 0.25f;
             try { Ammo(); } catch (Exception e) { Warn("ammo", e); }
             try { Items(); } catch (Exception e) { Warn("items", e); }
@@ -121,6 +125,18 @@ namespace Frankenstein
                 if (id != null) _had[i] = new KeyValuePair<string, int>(id, Math.Max(qty, 1));
                 else _had.Remove(i);
             }
+        }
+
+        static void Empty()
+        {
+            var slots = Boom.Slots();
+            if (slots.Count == 0) return;  // not loaded yet: next time
+            StartEmpty = false;
+            int n = 0;
+            foreach (var slot in slots)
+                if (Boom.Id(slot) != null && !Boom.Id(slot).ToLowerInvariant().Contains("cash") && Call(slot, "ClearStoredInstance")) n++;
+            _had.Clear();
+            Melon<Plugin>.Logger.Msg("Creative: started empty (" + n + " slot(s) cleared).");
         }
 
         /// <summary>Dropping something on purpose shouldn't make it come back: Frankenstein forgets the hotbar

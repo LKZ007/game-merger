@@ -3,6 +3,11 @@
 Every release, newest first. Downloads are on the [releases page](https://github.com/LKZ007/game-merger/releases).
 The app was called Game Merger before 3.8.0.
 
+## v3.37.1 (2026-10-23)
+- **Dropping works for weapons too.** Press G or d-pad down to drop what's in your hand. With the inventory open, LB/RB pick a slot first. Frankenstein tries the game's own drop and checks the item really left your hand. The game doesn't let some things (like guns) be dropped, so for those the slot is just emptied: get them back from F6 any time. What happened is written to `UserData\Frankenstein\drop-debug.txt`.
+- **A new Creative world starts empty.** No starter pistol, mags or shells: your hotbar is cleared once when the world starts, and the merge's starter kit is only given in Survival.
+- Not tested in game yet.
+
 ## v3.37.0 (2026-10-23)
 - **The new cars are fully remodelled.** Each now has a whole new body of its own instead of the base car with parts stuck on: the side profile, hood, cabin, roof, tail, wheel arches cut around the wheels, tinted glass and a painted roof.
   - **Velocci 720:** low and curved, with a teardrop cabin, fenders that rise over the wheels and a small ducktail.
