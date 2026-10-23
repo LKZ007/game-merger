@@ -206,6 +206,7 @@ ARSENALS = {
 }
 
 
+AUTO_PACK_MIN_FREE = 3 * 1000 ** 3  # GB free on the drive before packing by itself after playing
 _PACK_LOCK = threading.Lock()  # one pack or unpack at a time
 
 
@@ -672,6 +673,15 @@ class Api:
         try:
             m = Merge.load(merge_id)
             if m.can_pack() is None:
+                # packing frees the copy's room, but if the drive is nearly full anyway, whatever fills it next
+                # (an update, a download) leaves no room to rebuild it, and the merge can't be played
+                free = shutil.disk_usage(m.target_path).free
+                if free < AUTO_PACK_MIN_FREE:
+                    m.data["pack_error"] = ("Not packed after playing: the drive only has %.1f GB free, so packing "
+                                            "could leave no room to rebuild it next time. Pack it from ⋯ More if you "
+                                            "need the space." % (free / 1e9))
+                    m.save()
+                    return
                 self._pack(m)
         except Exception as e:
             try:
@@ -700,13 +710,43 @@ class Api:
             return self._pack_info(Merge.load(merge_id))
         return self._run(work)
 
-    def unpack_merge(self, merge_id):
-        """Rebuild the working copy from your own installed game plus the merge's kept files (and its saves)."""
+    @staticmethod
+    def _drives():
+        """Other drives this PC has, with their free space (Windows drive letters)."""
+        if os.name != "nt":
+            return []
+        out = []
+        for letter in "CDEFGHIJKLMNOPQRSTUVWXYZ":
+            root = letter + ":\\"
+            try:
+                if os.path.isdir(root):
+                    out.append({"path": root, "free": shutil.disk_usage(root).free})
+            except OSError:
+                pass
+        return out
+
+    def unpack_room(self, merge_id):
+        """Before rebuilding a packed merge: is there room, and if not, which other drives have it."""
+        m = Merge.load(merge_id)
+        if not m.packed:
+            return {"short": 0}
+        r = m.unpack_room()
+        here = os.path.splitdrive(os.path.abspath(m.target_path))[0].upper()
+        drives = [d for d in self._drives() if d["free"] >= r["need"] and os.path.splitdrive(d["path"])[0].upper() != here]
+        return {"need": r["need"], "free": r["free"], "short": max(0, r["need"] - r["free"]), "drive": here,
+                "drives": [dict(d, folder=os.path.join(d["path"], "Frankenstein merges")) for d in drives]}
+
+    def unpack_merge(self, merge_id, folder=None):
+        """Rebuild the working copy from your own installed game plus the merge's kept files (and its saves).
+        With a folder (another drive with room), the copy is rebuilt there from now on."""
         def work(job):
             m = Merge.load(merge_id)
             if not m.packed:
                 saves.unzip_slots(merge_id)
                 return {"secs": 0}
+            if folder:
+                with _PACK_LOCK:
+                    job.write("The copy goes to %s from now on." % Merge.load(merge_id).move_copy_to(folder))
             job.write("Rebuilding %s from your installed game ..." % m.name)
             with _PACK_LOCK:
                 m = Merge.load(merge_id)
@@ -2677,7 +2717,7 @@ class Api:
                         "offline_lock": bool(self._recipe(m.data.get("recipe_id")) and
                                              self._recipe(m.data.get("recipe_id")).launch_args and m.mode != MODE_INPLACE),
                         "ingame": self._ingame(m),
-                        "mod_check": m.data.get("mod_check"), "builtin_error": m.data.get("builtin_error", ""),
+                        "mod_check": m.data.get("mod_check"), "pack_error": m.data.get("pack_error", ""), "builtin_error": m.data.get("builtin_error", ""),
                         "playing": self._playing == m.id, "needs_upgrade": m.data.get("upgraded", 1) < self.UPGRADE, "originals": self._originals_note(m), "save_fix": m.data.get("save_fix"),
                         "sources": self._sources_for(self._recipe(m.data.get("recipe_id"))),
                         "mc_loader": m.data.get("mc_loader"), "mc_version": m.data.get("mc_version"),

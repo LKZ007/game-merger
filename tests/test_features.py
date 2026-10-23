@@ -274,6 +274,14 @@ class FeatureChecklist(unittest.TestCase):
         self.assertIn("_builtin_zip(src, b[\"dest\"], kept)", api)  # and the kept copy is refreshed
         self.assertIn("mod_check.version", read(PKG, "web", "app.js"))
 
+    def test_3312_room_to_rebuild_and_creative_only_in_game(self):
+        api = read(PKG, "api.py")
+        for x in ("def unpack_room", "AUTO_PACK_MIN_FREE", "move_copy_to"):
+            self.assertIn(x, api)
+        js = read(PKG, "web", "app.js")
+        self.assertIn("roomToUnpack", js)
+        self.assertNotIn("Creative (own saves)</button>", js, "Creative lives in the game's own menu, not the app's More menu")
+
     def test_3311_new_districts(self):
         dll = open(os.path.join(PKG, "mods", "schedule1", "Frankenstein.dll"), "rb").read()
         for word in ("Frankenstein ground ", "TRAVEL", "Entering "):

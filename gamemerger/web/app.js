@@ -1,5 +1,5 @@
 "use strict";
-window.APP_BUILD = "3.31.1";  // must match index.html: a mixed-up install is caught at start
+window.APP_BUILD = "3.31.2";  // must match index.html: a mixed-up install is caught at start
 
 // ---------- talking to the Python side ----------
 const TOKEN = document.querySelector('meta[name="gm-token"]')?.content;
@@ -861,7 +861,6 @@ async function loadMerges() {
           ${m.ingame ? "" : `<button class="btn creative" data-act="creative" title="Sandbox: every item, spawners, free camera. Own saves, offline.">✦ Creative</button>`}
           <div class="more"><button class="btn ghost" data-more aria-haspopup="true" aria-expanded="false">⋯ More</button>
             <div class="more-menu" role="menu" hidden>
-              ${m.ingame ? `<button data-act="creative" title="Also in the game itself">✦ Creative (own saves)</button>` : ""}
               <button data-act="carry">Carry over my save</button>
               <button data-act="plan">Merge plan</button>
               <button data-act="rundown">Rundown</button>
@@ -880,6 +879,7 @@ async function loadMerges() {
         </div>
         ${m.ingame ? `<div class="ingame small" title="Frankenstein's own mod adds these to the game itself">🎮 <strong>In the game:</strong> ${esc(m.ingame)}</div>` : `<div class="ingame small muted">This game has no menu Frankenstein can add to, so Creative stays here.</div>`}
         ${m.mod_check && !m.mod_check.loaded ? `<div class="ingame small warn" role="status">⚠ <strong>Last time you played:</strong> ${esc(m.mod_check.why)}</div>` : m.mod_check?.version ? `<div class="ingame small muted" title="Read from MelonLoader's log. F6's title in the game shows the same number.">✓ Frankenstein mod ${esc(m.mod_check.version)} ran last time you played.</div>` : ""}
+        ${m.pack_error ? `<div class="ingame small muted" role="status">📦 ${esc(m.pack_error)}</div>` : ""}
         ${m.builtin_error ? `<div class="ingame small warn" role="status">⚠ Frankenstein's own mod couldn't be added: ${esc(m.builtin_error)} It's tried again when you press Play.</div>` : ""}
       </div>
     </div>`).join("");
@@ -1270,9 +1270,35 @@ function watchPlaying() {
 const NEEDS_FILES = ["play", "creative", "add", "undo", "autofill", "fix", "upgrade", "spawner"];
 const fmtGB = (b) => (b < 1e9 ? Math.max(1, Math.round(b / 1e6)) + " MB" : (b / 1e9 >= 10 ? (b / 1e9).toFixed(0) : (b / 1e9).toFixed(1)) + " GB");
 const fmtSecs = (s) => (s < 90 ? Math.max(5, Math.round(s)) + " seconds" : Math.round(s / 60) + " minutes");
+// Before rebuilding a packed merge: if its drive is too full, say how much to free, or rebuild it on another drive
+async function roomToUnpack(m) {
+  for (;;) {
+    const r = await call("unpack_room", m.id).catch(() => ({ short: 0 }));
+    if (!r.short) return { ok: true };
+    const actions = [{ label: "Cancel", value: null }, { label: "I've freed space, try again", value: "again" }];
+    (r.drives || []).forEach((d) => actions.push({ label: `Rebuild it on ${d.path} (${fmtGB(d.free)} free)`, value: d.folder, primary: true }));
+    actions.push({ label: "Pick a folder…", value: "pick" });
+    const v = await modal("Not enough room to rebuild " + m.name, `
+      <p>Rebuilding the copy needs <strong>${fmtGB(r.need)}</strong>, and drive ${esc(r.drive || "")} has <strong>${fmtGB(r.free)}</strong> free.
+      Free up <strong>${fmtGB(r.short + 50e6)}</strong> and try again: empty the Recycle Bin, or run Disk Cleanup (Start menu, type “Disk Cleanup”).</p>
+      ${(r.drives || []).length ? `<p class="muted">Or rebuild it on another drive that has room. Your merge and its saves come along; the original game isn't touched.</p>` : `<p class="muted">No other drive has enough room. You can also pick a folder on a USB or external drive.</p>`}
+      <p class="muted small">Nothing is lost while it's packed: the merge's own files and saves are kept safe.</p>`, actions);
+    if (v === null) return { ok: false };
+    if (v === "again") continue;
+    if (v === "pick") {
+      const f = await call("pick_folder").catch(() => null);
+      if (!f) continue;
+      return { ok: true, folder: f };
+    }
+    return { ok: true, folder: v };
+  }
+}
+
 async function ensureUnpacked(m) {
   if (!m.packed?.on) return true;
-  const j = await followJob(await call("unpack_merge", m.id),
+  const room = await roomToUnpack(m);
+  if (!room.ok) return false;
+  const j = await followJob(await call("unpack_merge", m.id, room.folder || null),
     `Rebuilding ${m.name} from your installed game (about ${fmtSecs(m.packed.unpack_secs)})`);
   if (j) m.packed = { on: false };
   return !!j;

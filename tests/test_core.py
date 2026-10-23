@@ -1,5 +1,6 @@
 import json
 import os
+import shutil
 import tempfile
 import unittest
 import types
@@ -1031,6 +1032,39 @@ class PackTests(unittest.TestCase):
         # the original game was only read
         self.assertEqual(before, {r: open(os.path.join(base, r)).read() for r in before})
         self.assertFalse(os.path.exists(os.path.join(base, "Mods")))
+
+    def test_short_on_room_rebuilds_elsewhere_and_leaves_no_half_copy(self):
+        root = tempfile.mkdtemp()
+        base = os.path.join(root, "Game")
+        os.makedirs(base)
+        with open(os.path.join(base, "Game.exe"), "w") as f:
+            f.write("exe" * 1000)
+        r = types.SimpleNamespace(id="t", name="Test", launch_exe=lambda t: None)
+        t = types.SimpleNamespace(id="th", name="Theme")
+        m = installer.Merge.create(r, t, base, os.path.join(root, "out"), installer.MODE_COPY, "Roomy")
+        with open(os.path.join(m.target_path, "mod.txt"), "w") as f:
+            f.write("mine")
+        m.pack()
+        room = m.unpack_room()
+        self.assertGreaterEqual(room["need"], 3000 + installer.HEADROOM)
+        real = shutil.disk_usage
+        try:  # the drive is too full: the copy is refused and nothing is left half made
+            shutil.disk_usage = lambda p: types.SimpleNamespace(free=1000, total=1, used=0)
+            with self.assertRaises(installer.MergeError) as e:
+                installer.Merge.load(m.id).unpack()
+            self.assertIn("Free up", str(e.exception))
+        finally:
+            shutil.disk_usage = real
+        m = installer.Merge.load(m.id)
+        self.assertTrue(m.packed)
+        self.assertFalse(os.path.exists(m.target_path))
+        with self.assertRaises(installer.MergeError):
+            m.move_copy_to(base)  # never inside the original
+        new = m.move_copy_to(os.path.join(root, "other drive"))
+        installer.Merge.load(m.id).unpack()
+        self.assertEqual(open(os.path.join(new, "mod.txt")).read(), "mine")
+        self.assertTrue(os.path.isfile(os.path.join(new, "Game.exe")))
+        self.assertEqual(open(os.path.join(base, "Game.exe")).read(), "exe" * 1000)  # original untouched
 
     def test_inplace_merges_are_never_packed(self):
         m = installer.Merge({"id": "x", "name": "X", "mode": installer.MODE_INPLACE, "base_path": "/", "target_path": "/"})

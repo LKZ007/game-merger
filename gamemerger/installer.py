@@ -33,6 +33,13 @@ class MergeError(Exception):
     pass
 
 
+HEADROOM = 300 * 1024 * 1024  # room left over after a full copy, so the game can still write its logs and saves
+
+
+def room_needed(total):
+    return total + HEADROOM
+
+
 def _noop(*_a, **_k):
     pass
 
@@ -67,12 +74,13 @@ def clone_tree(src, dst, hardlink=True, log=_noop, progress=_noop):
     """Copy a game folder. With hardlink=True, unchanged files are shared with the
     original (falls back to real copies if the target is on another drive)."""
     total, count = tree_size(src)
-    if not hardlink:
-        free = shutil.disk_usage(os.path.dirname(os.path.abspath(dst)) or ".").free
-        if free < total * 1.05:
-            raise MergeError("Not enough disk space: the copy needs %.1f GB, %.1f GB free."
-                             % (total / 1e9, free / 1e9))
     os.makedirs(dst, exist_ok=True)
+    if not hardlink:
+        free = shutil.disk_usage(dst).free
+        if free < room_needed(total):
+            raise MergeError("Not enough disk space: the copy needs %.1f GB and the drive has %.1f GB free. "
+                             "Free up %.1f GB (empty the Recycle Bin or run Disk Cleanup) and try again."
+                             % (room_needed(total) / 1e9, free / 1e9, (room_needed(total) - free) / 1e9 + 0.05))
     done = 0
     for dirpath, _dirs, files in os.walk(src):
         rel_dir = os.path.relpath(dirpath, src)
@@ -87,9 +95,9 @@ def clone_tree(src, dst, hardlink=True, log=_noop, progress=_noop):
                     log("Hard links aren't possible here (different drive?), making a full copy instead.")
                     hardlink = False
                     free = shutil.disk_usage(dst).free
-                    if free < total * 1.05:
+                    if free < room_needed(total):
                         raise MergeError("Not enough disk space for a full copy: needs %.1f GB, %.1f GB free."
-                                         % (total / 1e9, free / 1e9))
+                                         % (room_needed(total) / 1e9, free / 1e9))
                     shutil.copy2(s, d)
             else:
                 shutil.copy2(s, d)
@@ -610,6 +618,34 @@ class Merge:
         self.save()
         return self.data["packed"]
 
+    def unpack_room(self):
+        """How much room rebuilding the copy takes, and how much its drive has."""
+        total = tree_size(self.base_path)[0] if os.path.isdir(self.base_path) else 0
+        try:
+            with zipfile.ZipFile(os.path.join(self.record_dir(self.id), self.PACK)) as z:
+                total += sum(i.file_size for i in z.infolist())  # the merge's own files go on top
+        except (OSError, zipfile.BadZipFile):
+            pass
+        here = self.target_path
+        while here and not os.path.isdir(here) and os.path.dirname(here) != here:
+            here = os.path.dirname(here)
+        free = shutil.disk_usage(here).free if here and os.path.isdir(here) else 0
+        return {"need": room_needed(total), "free": free}
+
+    def move_copy_to(self, folder):
+        """While packed: rebuild the copy in another folder (another drive with room), not where it was."""
+        if not self.packed:
+            raise MergeError("Only a packed merge can be moved this way.")
+        new = os.path.join(os.path.abspath(folder), os.path.basename(os.path.normpath(self.target_path)))
+        base = os.path.normcase(os.path.abspath(self.base_path))
+        if os.path.normcase(new) == base or os.path.normcase(new).startswith(base + os.sep):
+            raise MergeError("That's inside the original game's folder. Pick another place.")
+        if os.path.isdir(new) and os.listdir(new) and not os.path.isfile(os.path.join(new, COPY_MARKER)):
+            raise MergeError("%s already has other files in it. Pick another place." % new)
+        self.data["target_path"] = new
+        self.save()
+        return new
+
     def unpack(self, log=_noop, progress=_noop):
         """Make the working copy again: a full copy of your installed game, then the merge's own files on top."""
         if not self.packed:
@@ -623,7 +659,11 @@ class Merge:
                 raise MergeError("%s is in the way and isn't a Frankenstein copy, so it was left alone." % self.target_path)
             shutil.rmtree(self.target_path)  # a copy cut off half way: start again
         log("Copying %s ..." % self.base_path)
-        clone_tree(self.base_path, self.target_path, hardlink=False, log=log, progress=progress)
+        try:
+            clone_tree(self.base_path, self.target_path, hardlink=False, log=log, progress=progress)
+        except BaseException:
+            shutil.rmtree(self.target_path, ignore_errors=True)  # never leave half a copy filling the drive
+            raise
         log("Putting the merge's own files back ...")
         with zipfile.ZipFile(zpath) as z:
             index = json.loads(z.read(self.PACK_INDEX).decode("utf-8")) if self.PACK_INDEX in z.namelist() else {}
