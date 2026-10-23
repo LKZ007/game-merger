@@ -966,6 +966,56 @@ class StartupTests(unittest.TestCase):
         self.assertEqual(Api._stale_web(here), [], "index.html PAGE_BUILD and app.js APP_BUILD must equal VERSION " + VERSION)
 
 
+class DeviceTests(unittest.TestCase):
+    def _lan(self, accounts_, inv):
+        from gamemerger import devices
+        lan = devices.Lan(lambda: {"accounts": accounts_, "current": accounts_[0]["uid"] if accounts_ else "", "inventory": inv})
+        lan.sent = []
+        lan._send = lambda msg, ip: lan.sent.append((msg, ip))
+        return lan
+
+    def test_inventory_only_goes_to_the_same_account(self):
+        from gamemerger import devices
+        inv = devices.inventory([{"name": "Schedule I", "source": "Steam"}], [{"name": "Hood", "host": "Schedule I", "extension": "Hood Warfare 2"}], "3.33.0")
+        pc = self._lan([{"uid": "levy-uid", "name": "levy"}], inv)
+        pc.handle({"t": "inv?", "device": "STRANGER", "uids": ["someone-else"]}, "10.0.0.9")
+        self.assertEqual(pc.sent, [])  # a different account gets nothing
+        pc.handle({"t": "inv?", "device": "LEVYS-LAPTOP", "uids": ["levy-uid"]}, "10.0.0.5")
+        msg, ip = pc.sent[-1]
+        self.assertEqual((msg["t"], ip), ("inv", "10.0.0.5"))
+        self.assertEqual(msg["merges"][0]["name"], "Hood")
+        laptop = self._lan([{"uid": "levy-uid", "name": "levy"}], devices.inventory([], [], "3.33.0"))
+        laptop.handle(dict(msg, device="DESKTOP-1T0410G"), "10.0.0.4")
+        self.assertEqual(laptop.inventories["desktop-1t0410g"]["merges"][0]["host"], "Schedule I")
+
+    def test_joining_needs_a_yes_and_a_known_account(self):
+        pc = self._lan([{"uid": "levy-uid", "name": "levy"}], {"games": [], "merges": []})
+        pc.handle({"t": "join?", "device": "LEVYS-LAPTOP", "uid": "not-ours"}, "10.0.0.5")
+        self.assertEqual(pc.requests, {})
+        pc.handle({"t": "join?", "device": "LEVYS-LAPTOP", "uid": "levy-uid"}, "10.0.0.5")
+        (rid, req), = pc.requests.items()
+        self.assertEqual(req["account"], "levy")
+        self.assertEqual(pc.sent, [])  # nothing is sent until someone says yes
+        pc.answer(rid, True, "FRANK-code")
+        self.assertEqual(pc.sent[-1][0]["code"], "FRANK-code")
+        laptop = self._lan([], {"games": [], "merges": []})
+        laptop.handle(dict(pc.sent[-1][0], device="DESKTOP-1T0410G"), "10.0.0.4")
+        self.assertTrue(laptop.answers["desktop-1t0410g"]["ok"])
+
+    def test_cloud_folder_round_trip(self):
+        from gamemerger import devices
+        root = tempfile.mkdtemp()
+        inv = devices.inventory([], [{"name": "Hood", "host": "Schedule I"}], "3.33.0")
+        inv["device"] = "OTHER-PC"
+        d = os.path.join(root, "Frankenstein devices", "levy-uid")
+        os.makedirs(d)
+        with open(os.path.join(d, "OTHER-PC.json"), "w") as f:
+            json.dump(inv, f)
+        got = devices.read_cloud([root], "levy-uid")
+        self.assertEqual(got["other-pc"]["merges"][0]["name"], "Hood")
+        self.assertEqual(devices.read_cloud([root], "someone-else"), {})
+
+
 class CreativeFoldTests(unittest.TestCase):
     def test_creative_saves_join_the_others_marked_creative(self):
         from gamemerger import saves, paths

@@ -42,11 +42,13 @@ API = {
     "trailer clips for preview slides": ["cover_clip", "merge_cover_clip"],
     "Merge plan before Merge it": ["merge_plan", "merge_plan_of"],
     "Carry over my save (character and abilities)": ["carry_read", "carry_save"],
+    "your devices on one account, joining over Wi-Fi (3.33)": ["devices_state", "device_join", "device_join_result", "device_join_answer", "_start_devices"],
 }
 
 # feature: something the page must still have (a function or element id in the web files)
 WEB = {
     "who's playing and account linking": ["whoIsPlaying", "linkGet"],
+    "your devices card and join requests (3.33)": ["renderDevices", "watchJoinRequests", "Use ${esc(a.name)}'s account on this PC"],
     "library halo, Make host and this-merge panel": ["mergePairHtml", "make-host", "picked"],
     "merge step picks mods by itself": ["What it brings over"],
     "What it adds with built-ins and stand-ins": ["addsHtml", "story stand-in"],

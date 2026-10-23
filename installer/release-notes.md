@@ -1,4 +1,10 @@
-## Frankenstein 3.32.1
+## Frankenstein 3.33.0
+
+- **See your other PCs.** Every PC signed in to the same Frankenstein account now shows the others in Settings > Accounts > Your devices, with what's installed and merged on each one, when it was last seen and which Frankenstein version it runs. PCs find each other on the same Wi-Fi, and through your cloud folder (OneDrive, Google Drive or Dropbox) when they're apart. A PC only shares its list with PCs on the same account.
+- **Put a PC on your account in two clicks.** Open Frankenstein on both PCs on the same Wi-Fi. On the new PC, go to Settings > Accounts and press **Use levy's account on this PC** next to the other PC's name. Then press **Yes, it's mine** on the other PC. If the account has a PIN, you have to be signed in to it to say yes. The link code still works too.
+- Windows may ask once whether Frankenstein can use the network. Allow it on private networks.
+
+### Also in 3.32.1
 
 - **Melee swings hit harder: the bat, knife, machete and the rest.**
   - The camera pulls back while you wind up and whips through as you swing.

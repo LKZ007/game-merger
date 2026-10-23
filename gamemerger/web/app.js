@@ -1,5 +1,5 @@
 "use strict";
-window.APP_BUILD = "3.32.1";  // must match index.html: a mixed-up install is caught at start
+window.APP_BUILD = "3.33.0";  // must match index.html: a mixed-up install is caught at start
 
 // ---------- talking to the Python side ----------
 const TOKEN = document.querySelector('meta[name="gm-token"]')?.content;
@@ -564,7 +564,9 @@ async function renderAccountsCard() {
     <p class="muted small">${st.remembered ? `This PC keeps you signed in as ${esc(me.name)}. Press your name and Switch to sign out.` : "Pick your account once and this PC keeps you signed in."}
       With cloud backup (OneDrive or Google Drive) on both PCs, your account follows you on its own. Otherwise get a link code here and paste it on the other PC.</p>
     <div class="row" style="flex-wrap:nowrap"><button class="btn ghost" id="linkGet">Get my link code</button>
-      <input class="input" id="linkIn" placeholder="Paste a link code from your other PC" autocomplete="off"><button class="btn primary" id="linkGo">Link</button></div>`;
+      <input class="input" id="linkIn" placeholder="Paste a link code from your other PC" autocomplete="off"><button class="btn primary" id="linkGo">Link</button></div>
+    <div id="devicesBox" style="margin-top:18px"></div>`;
+  renderDevices();
   const ask = (title, label, type = "text") => {
     const done = modal(title, `<input class="input" id="askIn" type="${type}" inputmode="${type === "password" ? "numeric" : "text"}" placeholder="${esc(label)}" autocomplete="off">`,
       [{ label: "Cancel", value: null }, { label: "Save", value: true, primary: true }]);
@@ -603,6 +605,57 @@ async function renderAccountsCard() {
     renderAccountsCard();
   };
 }
+
+// ---------- your devices: what's on your other PCs, and joining an account over Wi-Fi ----------
+const ago = (t) => { const s = Date.now() / 1000 - t; return s < 90 ? "just now" : s < 3600 ? Math.round(s / 60) + " min ago" : s < 86400 ? Math.round(s / 3600) + " h ago" : Math.round(s / 86400) + " days ago"; };
+
+async function renderDevices() {
+  const el = $("#devicesBox");
+  if (!el) return;
+  const d = await call("devices_state").catch(() => null);
+  if (!d) return;
+  const merges = (list) => list.length ? list.map((m) => `<li>${esc(m.name)} <span class="muted small">${esc(m.host)}${m.extension ? " × " + esc(m.extension) : ""}${m.packed ? " · packed" : ""}</span></li>`).join("") : `<li class="muted">No merges yet</li>`;
+  el.innerHTML = `<div class="row" style="flex-wrap:nowrap"><h3 class="grow">Your devices</h3><button class="btn ghost" id="devRefresh">Refresh</button></div>
+    <p class="muted small">This PC is <strong>${esc(d.device)}</strong>. Every PC signed in to ${esc(d.account || "your account")} shows here with what's installed and merged on it. They find each other on the same Wi-Fi${d.cloud ? " and through your cloud folder" : ""}.${d.network ? "" : " " + esc(d.network_error || "The local network isn't on.")}</p>
+    ${d.mine.length ? d.mine.map((x) => `<details class="device-card"><summary><strong>${esc(x.device)}</strong> <span class="muted small">· ${x.merges.length} merge${x.merges.length === 1 ? "" : "s"} · ${x.games.length}${x.games_cut ? "+" : ""} games · seen ${ago(x.time)} ${x.via === "network" ? "on this Wi-Fi" : "through the cloud folder"}${x.version ? " · Frankenstein " + esc(x.version) : ""}</span></summary>
+      <div class="row" style="align-items:flex-start;gap:24px"><div><h4>Merges</h4><ul>${merges(x.merges)}</ul></div>
+      <div><h4>Games installed</h4><ul class="small">${x.games.slice(0, 60).map((g) => `<li>${esc(g.name)} <span class="muted">${esc(g.source)}</span></li>`).join("")}${x.games.length > 60 ? `<li class="muted">and ${x.games.length - 60} more</li>` : ""}</ul></div></div></details>`).join("")
+      : `<p class="muted">No other PC on ${esc(d.account || "your account")} yet. Open Frankenstein on your other PC, on the same Wi-Fi, and it shows up below to join.</p>`}
+    ${d.nearby.length ? `<h4 style="margin-top:12px">Frankenstein on this Wi-Fi</h4>` + d.nearby.map((n) => `<div class="row" style="flex-wrap:wrap;gap:8px"><strong>${esc(n.device)}</strong>
+        ${n.joinable.map((a) => `<button class="btn ghost" data-join="${esc(n.device)}" data-uid="${esc(a.uid)}">Use ${esc(a.name)}'s account on this PC</button>`).join("")}</div>`).join("") : ""}`;
+  $("#devRefresh").onclick = renderDevices;
+  el.querySelectorAll("[data-join]").forEach((b) => (b.onclick = () => joinDevice(b.dataset.join, b.dataset.uid, b.textContent)));
+}
+
+async function joinDevice(device, uid, label) {
+  try { await call("device_join", device, uid); } catch (e) { return toast(errText(e)); }
+  toast(`Asked ${device}. Press Yes on that PC.`, 8000);
+  for (let i = 0; i < 60; i++) {
+    await new Promise((r) => setTimeout(r, 2000));
+    const r = await call("device_join_result", device).catch(() => null);
+    if (!r || r.waiting) continue;
+    if (!r.ok) return toast(r.why, 6000);
+    toast("Done: this PC is on the same account now.", 6000);
+    state.profiles = r.profiles;
+    renderAccountsCard(); renderMe();
+    return;
+  }
+  toast(`${device} didn't answer. Open Frankenstein there and try again.`, 6000);
+}
+
+// someone on this Wi-Fi asking to join one of this PC's accounts
+const seenJoin = new Set();
+async function watchJoinRequests() {
+  const d = await call("devices_state").catch(() => null);
+  for (const r of d?.requests || []) {
+    if (seenJoin.has(r.id)) continue;
+    seenJoin.add(r.id);
+    const yes = await modal("Join your account?", `<p><strong>${esc(r.device)}</strong> on your Wi-Fi wants to use <strong>${esc(r.account)}</strong>'s account. Say yes only if it's your own PC: it gets this account's merges list, settings and achievements.</p>`,
+      [{ label: "No", value: false }, { label: "Yes, it's mine", value: true, primary: true }]);
+    try { await call("device_join_answer", r.id, yes); if (yes) toast(`${r.device} is on your account now.`); } catch (e) { toast(errText(e)); }
+  }
+}
+setInterval(watchJoinRequests, 4000);
 
 // ---------- Discord status ----------
 async function renderDiscord() {

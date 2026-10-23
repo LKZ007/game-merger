@@ -16,7 +16,7 @@ import urllib.parse
 import uuid
 import webbrowser
 
-from . import installer, storymode, accounts, achievements, ai, autorecipe, controller, covers, minecraft, modsources, storeinfo, discord, profiles, detect, downloader, gallery, network, nexus, paths, permissions, saves, scan, sharing, updater
+from . import installer, storymode, accounts, devices, achievements, ai, autorecipe, controller, covers, minecraft, modsources, storeinfo, discord, profiles, detect, downloader, gallery, network, nexus, paths, permissions, saves, scan, sharing, updater
 from .version import VERSION
 from .installer import MODE_COPY, MODE_HARDLINK, MODE_INPLACE, Merge, MergeError, find_clashes, preview
 from . import carryover, mergeplan, playas, recipes
@@ -325,6 +325,107 @@ class Api:
         self._locked = False
         self._sync_accounts()
         return self.profiles_state()
+
+    # ---------- your devices: what's on your other PCs, and joining an account over the network ----------
+
+    def _my_merges_brief(self, pid):
+        out = []
+        for m in Merge.all():
+            owner = m.data.get("owner")
+            p = profiles.find(pid) or {}
+            if owner != pid and not (owner is None and p.get("admin")):
+                continue
+            out.append({"name": m.name, "host": m.data.get("game_name", ""),
+                        "extension": m.data.get("source_name") or m.data.get("theme_name", ""), "packed": bool(m.data.get("packed"))})
+        return out
+
+    def _device_me(self):
+        data = profiles.load()
+        me = self._me()
+        return {"accounts": [{"uid": profiles.uid(p), "name": p["name"]} for p in data["profiles"]],
+                "current": profiles.uid(me) if me else "",
+                "inventory": devices.inventory(self._installed_here(), self._my_merges_brief(me.get("id")) if me else [], VERSION)}
+
+    def _start_devices(self):
+        """Started once the window is up: say hello on the local network and share this PC's list in the cloud folder."""
+        if getattr(self, "_lan", None):
+            return
+        self._lan = devices.Lan(self._device_me)
+        self._lan.start()
+        threading.Thread(target=self._publish_device, daemon=True).start()
+
+    def _publish_device(self):
+        try:
+            me = self._device_me()
+            if me["current"]:
+                devices.publish_cloud(self._cloud_roots(), me["current"], me["inventory"])
+        except Exception:
+            pass
+
+    def devices_state(self):
+        """Every other device signed in to your account (what's installed and merged there), devices on this
+        network you could join, and anyone asking to join yours."""
+        lan = getattr(self, "_lan", None)
+        me = self._device_me()
+        uid = me["current"]
+        found = devices.read_cloud(self._cloud_roots(), uid) if uid else {}
+        if lan:
+            for key, inv in lan.inventories.items():
+                if key not in found or inv.get("time", 0) >= found[key].get("time", 0):
+                    found[key] = inv
+        mine = []
+        for key, inv in sorted(found.items()):
+            mine.append({"device": inv.get("device") or key, "via": inv.get("via", ""), "time": inv.get("time", 0),
+                         "version": inv.get("version", ""), "games": inv.get("games") or [], "merges": inv.get("merges") or [],
+                         "games_cut": bool(inv.get("games_cut"))})
+        nearby = []
+        if lan:
+            for p in lan.live_peers():
+                same = uid in {a["uid"] for a in p["accounts"]}
+                if not same:
+                    nearby.append({"device": p["device"], "accounts": [a["name"] for a in p["accounts"]],
+                                   "joinable": [a for a in p["accounts"]]})
+        return {"device": devices.device_name(), "account": (self._me() or {}).get("name", ""), "mine": mine, "nearby": nearby,
+                "requests": [dict(r, ip="") for r in (lan.requests.values() if lan else [])],
+                "network": bool(lan and lan.sock), "network_error": lan.error if lan else "",
+                "cloud": bool(self._cloud_roots())}
+
+    def device_join(self, device, uid):
+        """Ask a PC on this network to let this PC into one of its accounts. It has to say yes there."""
+        lan = getattr(self, "_lan", None)
+        if not lan:
+            raise MergeError("The local network isn't on yet. Try again in a few seconds.")
+        try:
+            lan.ask_to_join(device, uid)
+        except KeyError:
+            raise MergeError("%s isn't on this network any more." % device)
+        return {"asked": device}
+
+    def device_join_result(self, device):
+        """The other PC's answer: once it says yes, this PC joins the account (like pasting a link code)."""
+        lan = getattr(self, "_lan", None)
+        a = lan.answers.get(device.lower()) if lan else None
+        if not a:
+            return {"waiting": True}
+        lan.answers.pop(device.lower(), None)
+        if not a["ok"]:
+            return {"ok": False, "why": a["why"] or "They said no."}
+        state = self.profile_link(a["code"])
+        threading.Thread(target=self._publish_device, daemon=True).start()
+        return {"ok": True, "profiles": state}
+
+    def device_join_answer(self, rid, allow):
+        """Yes or no to a PC asking to join one of this PC's accounts."""
+        lan = getattr(self, "_lan", None)
+        r = lan.requests.get(rid) if lan else None
+        if not r:
+            raise MergeError("That request has gone.")
+        p = next((x for x in profiles.load()["profiles"] if profiles.uid(x) == r["uid"]), None)
+        if allow and p and p.get("pin") and self._me().get("id") != p["id"]:
+            raise MergeError("Sign in as %s on this PC first, then say yes." % p["name"])
+        code = profiles.link_code(p["id"]) if (allow and p) else ""
+        lan.answer(rid, allow and bool(p), code)
+        return self.devices_state()
 
     def profile_add(self, name, pin="", perms=None):
         self._admin()
@@ -1029,6 +1130,7 @@ class Api:
             accounts.publish_installed(cloud, self._installed_here())
         except OSError:
             pass
+        threading.Thread(target=self._publish_device, daemon=True).start()
         games = accounts.merge_lists(self._installed_here(), owned, accounts.other_devices(cloud))
         before = set(self._style_names())
         self._owned = {g["key"]: g for g in games}

@@ -108,4 +108,8 @@ def main():
             api._handoffs.append(msg)
         bring_to_front(window)
     instance.listen(on_handoff)
+    try:
+        api._start_devices()  # your other PCs on the same account, and joining over the local network
+    except Exception:
+        pass
     webview.start()
