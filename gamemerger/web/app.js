@@ -1,5 +1,5 @@
 "use strict";
-window.APP_BUILD = "3.46.1";  // must match index.html: a mixed-up install is caught at start
+window.APP_BUILD = "3.47.0";  // must match index.html: a mixed-up install is caught at start
 
 // ---------- talking to the Python side ----------
 const TOKEN = document.querySelector('meta[name="gm-token"]')?.content;
@@ -1955,6 +1955,10 @@ async function loadSettings() {
       <p class="muted" id="modelPacks">${((s.models || {}).packs || []).map(p => `${p.ready ? "✓" : "○"} ${esc(p.name)} by ${esc(p.author)}${p.ready ? ` (${p.files} files)` : ""}`).join("<br>")}</p>
       <button class="btn" id="getModels">Download model packs now</button>
     </div>
+    <div class="card"><h2>Delete all merges</h2>
+      <p class="muted">Deletes every merged copy, its packed zip and the merge's own saves, to start fresh. Your installed games and their real saves are not touched.</p>
+      <button class="btn danger" id="deleteAll">Delete all merges</button>
+    </div>
     <div class="card"><h2>Save space</h2>
       <p class="muted">After you close a merged game, Frankenstein packs it away. It keeps only the files the merge changed (mods, their settings) and zips its saves, then deletes the copy. When you press Play it rebuilds the copy from your own installed game first. That takes about as long as copying the game: seconds for small games, several minutes for big ones like Cyberpunk. Your original game is only ever read.</p>
       <label class="row"><input type="checkbox" id="packAfterPlay" ${s.pack_after_play !== false ? "checked" : ""}> Pack merges away after playing</label>
@@ -2006,6 +2010,13 @@ async function loadSettings() {
   $("#checkUpdate").onclick = async () => offerUpdate(await call("check_update").catch(() => null), true);
   $("#selfCheck").onclick = async () => { toast("Checking everything…"); try { showSelfCheck(await call("self_check_result", true)); } catch (e) { toast(errText(e)); } };
   $("#perfLevel").onchange = async () => { state.settings = await call("save_settings", { performance: $("#perfLevel").value }); };
+  $("#deleteAll").onclick = async () => {
+    const n = (state.merges || []).length;
+    if (!(await confirmBox("Delete all merges?", `This deletes ${n || "every"} merge${n === 1 ? "" : "s"}: the copies, their packed zips and their own saves. Your installed games and their real saves stay as they are. It can't be undone.`, "Delete all", true))) return;
+    const j = await followJob(await call("delete_all_merges"), "Deleting all merges");
+    if (j && j.result) toast(`Deleted ${j.result.deleted} merge${j.result.deleted === 1 ? "" : "s"}, ${fmtGB(j.result.freed)} freed.` + (j.result.failed.length ? ` Not deleted: ${j.result.failed.join(", ")}.` : ""), 8000);
+    loadMerges();
+  };
   $("#gfxLevel").onchange = async () => { state.settings = await call("save_settings", { graphics: $("#gfxLevel").value }); };
   $("#getModels").onclick = async () => { const j = await followJob(await call("download_models"), "Downloading the free model packs"); if (j) loadSettings(); };
   $("#packAfterPlay").onchange = async () => { state.settings = await call("save_settings", { pack_after_play: $("#packAfterPlay").checked }); };

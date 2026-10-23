@@ -615,5 +615,24 @@ class FeatureChecklist(unittest.TestCase):
         from gamemerger import assetpacks
         self.assertIn("tried", assetpacks.status())
 
+    def test_347_gta5_empire_and_delete_all(self):
+        src = read(PKG, "mods", "gta5", "FrankensteinEmpire.3.cs")
+        for bit in ("empire on (Schedule I x Hood Warfare merge)", "Keys.F5", "GTA.Control.Detonate", "GET_PED_TYPE", "FRANKENSTEIN_ENEMY",
+                    "empire.txt", "empire-debug.txt", "g_m_y_famca_01", "BatchMinutes", "Grapeseed"):
+            self.assertIn(bit, src)
+        import json as _j
+        rec = _j.loads(read(PKG, "recipes", "gta5.json"))
+        theme = [t for t in rec["themes"] if t["id"] == "empire"][0]
+        self.assertIn("schedule i", theme["source_match"])
+        self.assertTrue(all(sl.get("builtin") for sl in theme["slots"]))
+        self.assertIn("-scOfflineOnly", rec["launch_args"])
+        api = read(PKG, "api.py")
+        self.assertIn('extra_all["empire"] = m.data.get("theme_id") == "empire"', api)
+        self.assertIn("mods/gta5/FrankensteinEmpire.3.cs", api)
+        self.assertIn("def delete_all_merges", api)
+        app = read(PKG, "web", "app.js")
+        self.assertIn('call("delete_all_merges")', app)
+        self.assertIn("Deleting all merges", app)
+
 if __name__ == "__main__":
     unittest.main()

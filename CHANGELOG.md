@@ -3,6 +3,15 @@
 Every release, newest first. Downloads are on the [releases page](https://github.com/LKZ007/game-merger/releases).
 The app was called Game Merger before 3.8.0.
 
+## v3.47.0 (2026-10-23)
+- **A new merge with GTA V as the Host: Schedule I x Hood Warfare in Los Santos (milestone 1).** Make it from a GTA V merge by picking "Schedule I x Hood Warfare: business, gangs and guns" as the Extension. Story mode only, offline, on Frankenstein's own copy of the game.
+  - **Labs, farms and production.** Buy four properties (Grapeseed farm, Sandy Shores lab, Strawberry grow house, Docks lab), buy supplies, start a batch of weed, meth or coke and collect it when it's ready. Hire a worker and the lab runs by itself.
+  - **Street dealing.** Walk up to someone and press E (D-pad right) to offer product. Prices are better on your own turf, and some buyers are undercover cops. Dealers you hire sell your stock every in-game hour.
+  - **Gangs and turf wars.** GTA V's own gangs hold their real neighbourhoods. Hold E in a gang's zone to start a four-minute turf war; win it and the zone is yours and pays every hour. Gangs try to take turf back, or you can buy a truce.
+  - **Heat and raids.** Dealing and fighting raise heat; high heat brings police raids on your labs.
+  - **Empire menu and HUD.** F5 (or hold D-pad left on a controller) opens the empire menu with waypoints to every lab. The HUD shows the territory you're in, who controls it, your product and your heat. Saved to scripts/Frankenstein/empire.txt, logged to empire-debug.txt.
+- **Delete all merges** in Settings: removes every merge's game copy, its packed files and its own saves in one go, and says how much space it freed. Your installed games and their own saves are never touched.
+
 ## v3.46.1 (2026-10-23)
 - **The free 3D model packs now download by themselves when you press Play** on the Schedule I merge, the first time, with the download shown in a window and in the merge terminal. No button needed. If a pack can't download, the game still starts, and Play tries again the next time you open the app. The button is still in Settings > Graphics and models, under Performance.
 

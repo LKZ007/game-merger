@@ -1224,6 +1224,32 @@ class PackTests(unittest.TestCase):
         self.assertEqual(open(os.path.join(m.target_path, "mod.txt")).read(), "mine")
         self.assertEqual(open(os.path.join(base, "Game.exe")).read(), "orig")  # original untouched
 
+    def test_delete_all_merges_keeps_originals(self):
+        from gamemerger import api, saves
+        root = tempfile.mkdtemp()
+        base = os.path.join(root, "Game")
+        os.makedirs(base)
+        with open(os.path.join(base, "Game.exe"), "w") as f:
+            f.write("exe")
+        r = types.SimpleNamespace(id="t", name="Test", launch_exe=lambda t: None)
+        t = types.SimpleNamespace(id="th", name="Theme")
+        made = [installer.Merge.create(r, t, base, os.path.join(root, "out"), installer.MODE_COPY, "All %d" % i) for i in range(2)]
+        made[1].pack()
+        os.makedirs(saves.slot_root(made[0].id), exist_ok=True)
+        jobs = []
+        fake = types.SimpleNamespace(_playing=None, _me=lambda: {"id": "me", "admin": True},
+                                     _run=lambda fn: jobs.append(fn(types.SimpleNamespace(write=lambda *_: None, progress=None))))
+        api.Api.delete_all_merges(fake)
+        mine = {m.id for m in made}
+        self.assertFalse(any(m.id in mine for m in installer.Merge.all()))
+        self.assertGreaterEqual(jobs[0]["deleted"], 2)
+        self.assertGreater(jobs[0]["freed"], 0)
+        for m in made:
+            self.assertFalse(os.path.exists(m.target_path))
+            self.assertFalse(os.path.exists(installer.Merge.record_dir(m.id)))
+            self.assertFalse(os.path.exists(saves.slot_root(m.id)))
+        self.assertEqual(open(os.path.join(base, "Game.exe")).read(), "exe")  # the installed game stays
+
     def test_inplace_merges_are_never_packed(self):
         m = installer.Merge({"id": "x", "name": "X", "mode": installer.MODE_INPLACE, "base_path": "/", "target_path": "/"})
         self.assertIn("original", m.can_pack())

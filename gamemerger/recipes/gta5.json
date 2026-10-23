@@ -72,6 +72,54 @@
   ],
   "themes": [
     {
+      "id": "empire",
+      "name": "Schedule I x Hood Warfare: business, gangs and guns",
+      "from_game": "Schedule I",
+      "source_match": [
+        "schedule i",
+        "schedule 1",
+        "hood warfare"
+      ],
+      "description": "Los Santos as Schedule I's business and Hood Warfare's gang war: buy labs and farms, cook and grow product, sell it on the street, hire workers and dealers, and take turf from GTA V's own gangs in timed turf wars, with police heat and raids. Built by Frankenstein's own GTA V script from GTA V's own people, places and guns; nothing is copied from Schedule I or Hood Warfare. Story mode only, offline.",
+      "frameworks": [
+        "scripthookv",
+        "shvdn"
+      ],
+      "slots": [
+        {
+          "name": "Labs, farms and production",
+          "search": "",
+          "hero": true,
+          "builtin": "Frankenstein's own GTA V script: four properties to buy (Grapeseed farm, Sandy Shores lab, Strawberry grow house, Docks lab). Buy supplies, start a batch (weed, meth or coke) and collect it when it's ready, or hire a worker who runs the lab while you're away. F5 (or hold D-pad left) opens the empire menu with waypoints."
+        },
+        {
+          "name": "Street dealing and dealers",
+          "search": "",
+          "builtin": "Walk up to someone and press E (D-pad right) to offer product; the price is better on your own turf, and some buyers are undercover cops. Dealers you hire sell your stock every in-game hour on the turf you hold."
+        },
+        {
+          "name": "Gangs and turf wars",
+          "search": "",
+          "builtin": "GTA V's own gangs hold their real neighbourhoods (Families, Ballas, Vagos, Aztecas, Marabunta, The Lost, Kkangpae). Hold E (D-pad right) in a gang's zone to start a four-minute turf war against armed crews; win it and the zone is yours and pays every hour. Gangs try to take turf back, or you can buy a truce."
+        },
+        {
+          "name": "Police heat and raids",
+          "search": "",
+          "builtin": "Dealing and fighting raise heat; high heat brings police raids on your labs and a wanted level. Heat cools off over time."
+        },
+        {
+          "name": "Hood Warfare guns",
+          "search": "weapon",
+          "builtin": "GTA V's own guns, given by Frankenstein's spawner (F7 gives every weapon). Hood Warfare's own gun models are a later milestone; weapon mods can add more (picks below)."
+        },
+        {
+          "name": "Cinematic look",
+          "search": "visualv",
+          "builtin": "Stand-in for now: GTA V's own graphics settings. A graphics mod (VisualV, NaturalVision) brings the concept art's look closer (picks below)."
+        }
+      ]
+    },
+    {
       "id": "minecraft",
       "name": "Minecraft style: blocks, skins and creatures",
       "from_game": "Minecraft",

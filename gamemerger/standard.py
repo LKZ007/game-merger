@@ -43,11 +43,11 @@ HOSTS = {
         "weapons": ("partial", "GTA V's own weapons are given; the Extension's own weapon models aren't built yet."),
         "crosshairs": ("native", "GTA V has its own crosshair and scope per weapon."),
         "cars": ("partial", "Any GTA V car spawns; the Extension's own car bodies aren't built yet."),
-        "npcs": ("planned", "Gangs and named crews from the Extension aren't built for GTA V yet."),
+        "npcs": ("partial", "In the Schedule I x Hood Warfare merge, GTA V's own gangs hold their neighbourhoods and fight turf wars (F5 empire menu); other Extensions' crews aren't built for GTA V yet."),
         "controller": ("native", "GTA V plays on a controller itself."),
         "save": ("native", "GTA V saves from its pause menu and when you sleep in a safehouse."),
         "performance": ("partial", "The app steps back while you play (no animations, lower priority); the in-game FPS check isn't built into the GTA V script yet."),
-        "debug": ("partial", "The script logs to ScriptHookVDotNet's log; per-feature debug files aren't written yet."),
+        "debug": ("partial", "The scripts log to ScriptHookVDotNet's log, and the empire writes scripts/Frankenstein/empire-debug.txt; the other features don't have their own debug files yet."),
     },
     "eldenring": {
         "menu": ("can't", "Elden Ring's title screen is packed in its encrypted archives; the merge's options stay in Frankenstein's launcher."),

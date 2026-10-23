@@ -562,7 +562,7 @@ class Api:
     # files every install of Frankenstein must have (the app's own pages and its mods for each game)
     REQUIRED = ["web/index.html", "web/app.js", "web/app.css", "recipes/cyberpunk2077.json", "recipes/schedule1.json",
                 "recipes/gta5.json", "mods/schedule1/Frankenstein.dll", "mods/cyberpunk2077/frankenstein_items/init.lua",
-                "mods/gta5/Frankenstein.3.cs", "mods/gta5/FrankensteinMenu.3.cs",
+                "mods/gta5/Frankenstein.3.cs", "mods/gta5/FrankensteinMenu.3.cs", "mods/gta5/FrankensteinEmpire.3.cs",
                 "recipes/eldenring.json", "mods/eldenring/README.txt"]
 
     def _self_check(self):
@@ -2569,6 +2569,9 @@ class Api:
                      "performance": self._settings.get("performance", "auto"),
                      "graphics": self._settings.get("graphics", "high"),
                      "carry": carryover.settings(r.id, m.data.get("carry"))}
+        if r.id == "gta5":
+            # Frankenstein's GTA V empire (Schedule I's business, Hood Warfare's gangs) runs only in that merge
+            extra_all["empire"] = m.data.get("theme_id") == "empire"
         if r.id == "schedule1":
             extra_all.update(self._schedule1_extras(m, r, source))
         if r.id == "eldenring":
@@ -3632,6 +3635,41 @@ class Api:
             saves.delete_slot(merge_id)
             if m.data.get("mc_root"):
                 minecraft.remove_profile(m.data["mc_root"], merge_id)
+        return self._run(work)
+
+    def delete_all_merges(self):
+        """Settings > Delete all merges: every merge's copy, its packed zip and its own saves, one after another.
+        The installed games and their real saves are never touched (an in-place merge is undone instead)."""
+        if self._playing:
+            raise MergeError("Close the game first.")
+        me = self._me()
+
+        def size(p):
+            try:
+                return installer.tree_size(p)[0] if os.path.isdir(p) else (os.path.getsize(p) if os.path.isfile(p) else 0)
+            except OSError:
+                return 0
+
+        def work(job):
+            mine = [m for m in Merge.all() if m.data.get("owner") == me.get("id") or (m.data.get("owner") is None and me.get("admin"))]
+            freed, done, failed = 0, 0, []
+            for i, m in enumerate(mine):
+                job.progress = [i, len(mine)]
+                job.write("Deleting %s ..." % m.name)
+                before = sum(size(p) for p in (m.target_path if m.mode != MODE_INPLACE else "", Merge.record_dir(m.id),
+                                                saves.slot_root(m.id), saves.zip_path(m.id)) if p)
+                try:
+                    m.delete(log=job.write)
+                    saves.delete_slot(m.id)
+                    if m.data.get("mc_root"):
+                        minecraft.remove_profile(m.data["mc_root"], m.id)
+                    freed += before
+                    done += 1
+                except Exception as e:  # one that can't go (a folder that isn't Frankenstein's) doesn't stop the rest
+                    failed.append(m.name)
+                    job.write("Couldn't delete %s: %s" % (m.name, e))
+            job.write("Deleted %d merge(s), %.1f GB freed.%s" % (done, freed / 1e9, (" Not deleted: " + ", ".join(failed)) if failed else ""))
+            return {"deleted": done, "freed": freed, "failed": failed}
         return self._run(work)
 
     # ---------- first run and downloads ----------
