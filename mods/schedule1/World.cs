@@ -168,7 +168,18 @@ namespace Frankenstein
                 if (Pad.Button(new Rect(px + 12, cy + 58, (pw - 30) / 2, 28), "Yes, switch")) { _confirm = ""; Mode.Set(to); }
                 if (Pad.Button(new Rect(px + 18 + (pw - 30) / 2, cy + 58, (pw - 30) / 2, 28), "Cancel")) _confirm = "";
             }
-            else if (Pad.Button(new Rect(px + 12, cy + 26, pw - 24, 30), "Game Mode: " + (MainMenu.Creative ? "Creative  ·  switch to Survival" : "Survival  ·  switch to Creative"))) _confirm = to;
+            else if (_confirm == "world")
+            {
+                bool hood = Mode.HoodCity;
+                GUI.Label(new Rect(px + 12, cy + 22, pw - 24, 36), hood ? "This save goes back to Schedule I's original town. A copy of it is kept first." : "This save becomes Hood City: levy's map over the town, its real shops and buildings kept. A copy of it is kept first.");
+                if (Pad.Button(new Rect(px + 12, cy + 58, (pw - 30) / 2, 28), "Yes, switch")) { _confirm = ""; Mode.SetLayout(hood ? "original" : "hoodcity"); }
+                if (Pad.Button(new Rect(px + 18 + (pw - 30) / 2, cy + 58, (pw - 30) / 2, 28), "Cancel")) _confirm = "";
+            }
+            else
+            {
+                if (Pad.Button(new Rect(px + 12, cy + 26, (pw - 30) / 2, 30), "Game Mode: " + (MainMenu.Creative ? "Creative" : "Survival"))) _confirm = to;
+                if (Expansion.On && Pad.Button(new Rect(px + 18 + (pw - 30) / 2, cy + 26, (pw - 30) / 2, 30), "World: " + (Mode.HoodCity ? "Hood City" : "Original town"))) _confirm = "world";
+            }
             Carry.Draw(px + pw + 12, py - top + 64, 420);
             DrawTravel(px, py + (Style.Length > 0 ? 250 : 0) + 8, pw);
             if (Style.Length == 0) return;

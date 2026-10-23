@@ -607,5 +607,17 @@ class FeatureChecklist(unittest.TestCase):
         for word in ("Vehicle Spawner", "Velocci P-One", "MPH"):
             self.assertIn(word.encode("utf-16-le"), dll, word)
 
+    def test_345_hood_city(self):
+        exp = read(ROOT, "mods", "schedule1", "Expansion.cs")
+        for x in ("Mode.HoodCity", "NPCEnterableBuilding", "ShopInterface", "Settle(", "Outside(", "Rebuild()", "Hood City"):
+            self.assertIn(x, exp)
+        mode = read(ROOT, "mods", "schedule1", "Mode.cs")
+        for x in ("world.txt", "SetLayout(", "PendingLayout", "HoodCity"):
+            self.assertIn(x, mode)
+        self.assertIn('"World"', read(ROOT, "mods", "schedule1", "MenuSkin.cs"))  # chosen per save on the main menu
+        self.assertIn("World: ", read(ROOT, "mods", "schedule1", "World.cs"))   # and from F8
+        dll = open(os.path.join(PKG, "mods", "schedule1", "Frankenstein.dll"), "rb").read()
+        self.assertIn("Hood City".encode("utf-16-le"), dll)
+
 if __name__ == "__main__":
     unittest.main()

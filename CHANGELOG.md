@@ -3,6 +3,14 @@
 Every release, newest first. Downloads are on the [releases page](https://github.com/LKZ007/game-merger/releases).
 The app was called Game Merger before 3.8.0.
 
+## v3.45.0 (2026-10-23)
+- **Hood City: your map becomes the town itself (pick it per save).** On the main menu, the "World" entry switches between Hood City and Schedule I's original town for the save you load, and F8 has a World button to switch a save you're already in (your save is backed up first). The choice is kept in the save's Modded\Frankenstein\world.txt.
+  - In Hood City, your map is laid over the town instead of off the coast. Every district, road and gang HQ goes where the picture has it.
+  - **The original town's real places stay and keep working.** Shops, properties, enterable buildings and their doors are kept where they stand, and the new districts are built around them, so the spots that would have been empty shells are the town's own working buildings.
+  - The town's scenery that would sit under the new districts is hidden while you play Hood City and comes back when you switch to the original town.
+- Honest limits: the town's own ground, roads and hills stay underneath, so the layout is as close to your map as the land allows. New buildings are still Frankenstein's code-built shells with no insides, and the town's shops can't be moved, so they keep their own spots inside the new layout.
+- Not tested in game yet.
+
 ## v3.44.0 (2026-10-23)
 - **Cars like your sheet.** There are twelve lookalikes now, with made-up names and no real brands. Each one has the sheet's top speed and 0-60:
   - Supercars: Velocci P-One (240 mph, 2.4 s), Toro Furioso (217, 2.9), Rosso Novanta (211, 2.5), Ventara Aria (230, 3.0), Toro Uragano (202, 3.2) and Vitesse Centaur (261, 2.3).

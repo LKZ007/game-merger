@@ -139,8 +139,46 @@ namespace Frankenstein
         public static int Count => _built ? Plan.Length : 0;
         public static float Water => _water;
 
+        // ---------- Hood City: levy's map as the world itself (Mode.HoodCity, chosen per save) ----------
+        // The map is laid over the town instead of off its coast. The town's real buildings that do something (homes
+        // people go into, shops, your properties, anything with a door) stay exactly where they are and keep
+        // working; the new city is built around them, and wherever a new building would have stood empty, the
+        // real one is there instead. The town's other buildings and props are hidden (put back when you switch to
+        // the original town), its roads and ground stay so the game's people and cars still find their way, and
+        // the new pieces sit on the town's own ground. Outside the town the map is built as on the island.
+        static bool _hood;
+        static Rect _townPx;
+        static readonly List<Bounds> _keep = new List<Bounds>();
+        static readonly HashSet<int> _kept = new HashSet<int>();
+        static readonly List<GameObject> _offObjects = new List<GameObject>();
+        static readonly List<Renderer> _offRenderers = new List<Renderer>();
+        static System.Reflection.MethodInfo _ray;
+
+        public static bool Hood => _hood;
+
+        /// <summary>The save switched worlds: everything Frankenstein built goes, the town comes back as it was, and
+        /// the chosen world is built again a moment later.</summary>
+        public static void Rebuild()
+        {
+            foreach (var g in _made) if (g != null) UnityEngine.Object.Destroy(g);
+            foreach (var d in Plan) if (d.Root != null) UnityEngine.Object.Destroy(d.Root);
+            foreach (var g in _offObjects) if (g != null) g.SetActive(true);
+            foreach (var r in _offRenderers) if (r != null) r.enabled = true;
+            Say("switching worlds: " + _offObjects.Count + " objects and " + _offRenderers.Count + " parts of the town are back");
+            _offObjects.Clear();
+            _offRenderers.Clear();
+            _keep.Clear();
+            _kept.Clear();
+            Scene(true);
+            _buildAt = Time.unscaledTime + 2f;
+        }
+
         public static void Scene(bool inTown)
         {
+            _offObjects.Clear();
+            _offRenderers.Clear();
+            _keep.Clear();
+            _kept.Clear();
             _built = false;
             _step = -1;
             _made.Clear();
@@ -258,7 +296,7 @@ namespace Frankenstein
             if (Time.unscaledTime < _nextRescue || _roadPoints.Count == 0) return;
             _nextRescue = Time.unscaledTime + 0.5f;
             var p = me.Position;
-            if (p.x < _townEdge.x || p.y > _water - 1.2f) return;
+            if ((!_hood && p.x < _townEdge.x) || InTown(p) || p.y > _water - 1.2f) return;
             try { if (me.IsInVehicle) return; } catch (Exception) { }
             var best = _roadPoints.OrderBy(r => (r - p).sqrMagnitude).First();
             try { me.Position = best + new Vector3(0, 1.5f, 0); ItemMenu.Notify("Out of the water: back on the road."); } catch (Exception) { }
@@ -315,8 +353,22 @@ namespace Frankenstein
             _townEdge = new Vector3(town.max.x, _ground, town.center.z);
             Say("the town measures " + town.size.x.ToString("0") + " x " + town.size.z.ToString("0") + " m (" + (town.size.x * town.size.z / 1e6f).ToString("0.00") +
                 " km2 as a rectangle); the island's land is about 1.07 km2. Its west shore is at x " + (town.max.x + 90f + 20f * S).ToString("0") + ", the town's east edge at x " + town.max.x.ToString("0"));
-            _origin = new Vector3(town.max.x + 90f, _ground, town.center.z + 455f * S);
-            Clear(seaBounds, sea);
+            _hood = Mode.HoodCity;
+            if (_hood)
+            {
+                // the map's middle on the town's middle
+                _origin = new Vector3(town.center.x - PW / 2 * S, _ground, town.center.z + PH / 2 * S);
+                var lo = ToPx(new Vector3(town.min.x, 0, town.max.z));
+                var hi = ToPx(new Vector3(town.max.x, 0, town.min.z));
+                _townPx = Rect.MinMaxRect(lo.x, lo.y, hi.x, hi.y);
+                Say("Hood City: the map is laid over the town (the town covers x " + _townPx.xMin.ToString("0") + ".." + _townPx.xMax.ToString("0") + ", y " + _townPx.yMin.ToString("0") + ".." + _townPx.yMax.ToString("0") + " of the map's pixels)");
+                Town(all);
+            }
+            else
+            {
+                _origin = new Vector3(town.max.x + 90f, _ground, town.center.z + 455f * S);
+                Clear(seaBounds, sea);
+            }
             foreach (var d in Plan) d.Centre = ToWorld(d.Px.center.x, d.Px.center.y, _ground + d.Lift);
             _windows = Windows();
             BuildBase();
@@ -366,6 +418,125 @@ namespace Frankenstein
             bool inSea = !float.IsNaN(sea) && seaBounds.min.x <= west.x && seaBounds.max.x >= east.x && seaBounds.min.z <= east.z && seaBounds.max.z >= west.z;
             if (!_ownSea && !inSea) { _ownSea = true; Say("the game's sea doesn't reach the island: Frankenstein lays its own at the same level"); }
             Say("the island: x " + west.x.ToString("0") + ".." + east.x.ToString("0") + ", z " + east.z.ToString("0") + ".." + west.z.ToString("0") + ", ground " + _ground.ToString("0.#") + ", water " + _water.ToString("0.#"));
+        }
+
+        static bool InTown(Vector3 w) => _hood && _townPx.Contains(ToPx(w));
+
+        static readonly string[] Ways = { "road", "sidewalk", "pavement", "curb", "kerb", "street", "crossing", "terrain", "ground", "grass", "water",
+                                          "ocean", "sea", "bridge", "parking", "path", "lamp", "light", "frankenstein" };
+        static readonly string[] Alive = { "npc", "vehicle", "player", "dealer", "customer", "police", "car", "frankenstein" };
+        static readonly string[] PlainParts = { "Transform", "MeshFilter", "MeshRenderer", "MeshCollider", "BoxCollider", "CapsuleCollider", "SphereCollider", "LODGroup" };
+
+        /// <summary>Queues the town's change-over: first what stays (every building that does something), then the
+        /// rest hidden a few hundred parts a frame.</summary>
+        static void Town(List<MeshRenderer> all)
+        {
+            var anchors = new List<Component>();
+            foreach (var name in new[] { "NPCEnterableBuilding", "Property", "DoorController", "ShopInterface" })
+            {
+                var t = Rt.FindByName(name);
+                if (t == null) continue;
+                foreach (var o in Rt.All(t)) if (o is Component c && c != null) anchors.Add(c);
+            }
+            Say("Hood City: " + anchors.Count + " working buildings, doors and shops found in the town; they stay");
+            foreach (var a in anchors)
+            {
+                var anchor = a;
+                _jobs.Enqueue(() => Keep(anchor));
+            }
+            for (int i = 0; i < all.Count; i += 300)
+            {
+                var chunk = all.Skip(i).Take(300).ToList();
+                _jobs.Enqueue(() => Hide(chunk));
+            }
+            _jobs.Enqueue(() => Say("Hood City: " + _keep.Count + " buildings kept, " + _offObjects.Count + " objects and " + _offRenderers.Count + " parts of the old town hidden"));
+        }
+
+        /// <summary>The whole building a working part belongs to: up its parents while that's still one building.</summary>
+        static void Keep(Component anchor)
+        {
+            if (anchor == null) return;
+            Transform best = anchor.transform;
+            List<Renderer> rs = Rt.Comps(best.gameObject, typeof(MeshRenderer), true).OfType<Renderer>().ToList();
+            for (var t = best.parent; t != null; t = t.parent)
+            {
+                var more = Rt.Comps(t.gameObject, typeof(MeshRenderer), true).OfType<Renderer>().ToList();
+                if (more.Count > 400) break;
+                var b = Around(more);
+                if (b.size.x > 70f || b.size.z > 70f) break;
+                best = t;
+                rs = more;
+            }
+            if (rs.Count == 0) return;
+            foreach (var r in rs) _kept.Add(r.GetInstanceID());
+            var box = Around(rs);
+            if (box.size.x > 0.5f && !_keep.Any(k => k.Contains(box.center) && k.size.sqrMagnitude >= box.size.sqrMagnitude)) _keep.Add(box);
+        }
+
+        static Bounds Around(List<Renderer> rs)
+        {
+            var b = new Bounds();
+            bool first = true;
+            foreach (var r in rs)
+            {
+                if (r == null) continue;
+                if (first) { b = r.bounds; first = false; } else b.Encapsulate(r.bounds);
+            }
+            return b;
+        }
+
+        static bool Has(Transform t, string[] words, int depth)
+        {
+            for (int i = 0; t != null && i < depth; i++, t = t.parent)
+            {
+                var n = t.name.ToLowerInvariant();
+                if (words.Any(n.Contains)) return true;
+            }
+            return false;
+        }
+
+        /// <summary>The town's other buildings and props go (they come back with the original town).</summary>
+        static void Hide(List<MeshRenderer> chunk)
+        {
+            foreach (var r in chunk)
+            {
+                if (r == null || !r.enabled || _kept.Contains(r.GetInstanceID())) continue;
+                var b = r.bounds;
+                if (Huge(b) || Has(r.transform, Ways, 2) || Has(r.transform, Alive, 6)) continue;
+                if (_keep.Any(k => k.Intersects(b))) continue;  // part of a building that stays
+                var go = r.gameObject;
+                bool plain = go.transform.childCount == 0 && Rt.Comps(go, typeof(Component), false).All(c => PlainParts.Contains(Rt.TypeName(c)));
+                if (plain) { go.SetActive(false); _offObjects.Add(go); }
+                else { r.enabled = false; _offRenderers.Add(r); }
+            }
+        }
+
+        /// <summary>Where the town's own ground (or anything standing there) is, right under a spot.</summary>
+        static float? Under(Vector3 at, float from)
+        {
+            if (_ray == null)
+                _ray = Rt.Find("UnityEngine.Physics")?.GetMethods(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)
+                         .FirstOrDefault(m => m.Name == "Raycast" && m.GetParameters().Length == 4 && m.GetParameters()[2].ParameterType.IsByRef);
+            if (_ray == null) return null;
+            var args = new object[] { new Vector3(at.x, from, at.z), Vector3.down, null, 120f };
+            try
+            {
+                if ((bool)_ray.Invoke(null, args) && Rt.Get(args[2], "point") is Vector3 hit) return hit.y;
+            }
+            catch (Exception) { }
+            return null;
+        }
+
+        /// <summary>In Hood City a new piece over the town stands on the town's own ground, and never where a kept
+        /// building is: there the real one is used instead.</summary>
+        static bool Settle(ref Vector3 at, float foot, float reach)
+        {
+            if (!InTown(at)) return true;
+            var box = new Bounds(new Vector3(at.x, at.y, at.z), new Vector3(reach * 2, Mathf.Max(1f, (at.y - foot) * 2), reach * 2));
+            if (_keep.Any(k => k.Intersects(box))) return false;
+            var h = Under(new Vector3(at.x, 0, at.z), foot + 40f);
+            if (h != null && Mathf.Abs(h.Value - foot) < 25f) at.y += h.Value - foot;
+            return true;
         }
 
         static void Shells(List<MeshRenderer> all)
@@ -502,6 +673,7 @@ namespace Frankenstein
         /// <summary>Every piece is queued, and Next makes them a few milliseconds a frame, so the game never stalls.</summary>
         static void Shape(PrimitiveType kind, Vector3 at, Vector3 size, Quaternion rot, string mat, bool solid)
         {
+            if (size.y < 0.5f && InTown(at) && kind == PrimitiveType.Cube) return;  // Hood City: the town's own ground and roads stay
             var parent = _parent;
             var m = Mat(mat);
             _pieces++;
@@ -510,6 +682,11 @@ namespace Frankenstein
 
         static void Make(PrimitiveType kind, Vector3 at, Vector3 size, Quaternion rot, Material mat, bool solid, Transform parent)
         {
+            if (_hood)
+            {
+                float half = kind == PrimitiveType.Cylinder || kind == PrimitiveType.Capsule ? size.y : size.y / 2;
+                if (!Settle(ref at, at.y - half, Mathf.Max(size.x, size.z) / 2)) return;
+            }
             var g = GameObject.CreatePrimitive(kind);  // its collider stays when solid: you walk and drive on it
             g.name = "Frankenstein " + (mat != null ? mat.name : "piece");
             if (parent != null) g.transform.SetParent(parent, false);
@@ -549,6 +726,7 @@ namespace Frankenstein
         static void Clone(GameObject src, Vector3 at, float yaw, float scale, Transform parent)
         {
             if (src == null) return;
+            if (_hood && !Settle(ref at, at.y, 6f)) return;
             var c = UnityEngine.Object.Instantiate(src);
             c.name = "Frankenstein " + src.name;
             // only what you see and bump into: the game's scripts, network parts and doors don't come along
@@ -563,6 +741,7 @@ namespace Frankenstein
             {
                 var b = r.bounds;  // stand it on the ground at the spot, whatever its pivot
                 c.transform.position += new Vector3(at.x - b.center.x, at.y - b.min.y, at.z - b.center.z);
+                if (_hood && InTown(at) && _keep.Any(k => k.Intersects(r.bounds))) { UnityEngine.Object.Destroy(c); return; }  // the real building is there
             }
             c.SetActive(true);
         }
@@ -587,7 +766,8 @@ namespace Frankenstein
                 var mid = ToWorld(PW / 2, PH / 2, _water - 0.1f);
                 Box(mid, new Vector3(PW * S + 900f, 0.2f, PH * S + 900f), 0, "water", false);
             }
-            foreach (var l in Land)
+            foreach (var whole in Land)
+            foreach (var l in Outside(whole))
             {
                 float top = _ground + l[4], depth = top - _water + 6f;
                 var c = ToWorld(l[0] + l[2] / 2, l[1] + l[3] / 2, top - depth / 2);
@@ -595,8 +775,8 @@ namespace Frankenstein
                 // a rocky shore where the land meets the water
                 Box(new Vector3(c.x, _water + 0.8f, c.z), new Vector3(l[2] * S + 2f, 3f, l[3] * S + 2f), 0, "rock", false);
             }
-            // the highway bridge from the edge of town
-            Road(new Vector3(_townEdge.x - 30f, _ground, _townEdge.z), ToWorld(Roads[0][0], Roads[0][1], _ground), 16f);
+            // the highway bridge from the edge of town (Hood City is the town itself: no bridge needed)
+            if (!_hood) Road(new Vector3(_townEdge.x - 30f, _ground, _townEdge.z), ToWorld(Roads[0][0], Roads[0][1], _ground), 16f);
             foreach (var r in Roads)
                 Road(ToWorld(r[0], r[1], 0), ToWorld(r[2], r[3], 0), r[4]);
             var b = _base;
@@ -604,7 +784,40 @@ namespace Frankenstein
             _parent = null;
         }
 
+        /// <summary>A land rectangle, less the part the town covers in Hood City (the town has its own ground).</summary>
+        static IEnumerable<float[]> Outside(float[] l)
+        {
+            var r = new Rect(l[0], l[1], l[2], l[3]);
+            if (!_hood || !r.Overlaps(_townPx)) { yield return l; yield break; }
+            var t = _townPx;
+            if (t.yMin > r.yMin) yield return new[] { r.xMin, r.yMin, r.width, t.yMin - r.yMin, l[4] };               // above the town
+            if (t.yMax < r.yMax) yield return new[] { r.xMin, t.yMax, r.width, r.yMax - t.yMax, l[4] };               // below it
+            float y0 = Mathf.Max(r.yMin, t.yMin), y1 = Mathf.Min(r.yMax, t.yMax);
+            if (t.xMin > r.xMin) yield return new[] { r.xMin, y0, t.xMin - r.xMin, y1 - y0, l[4] };                   // left of it
+            if (t.xMax < r.xMax) yield return new[] { t.xMax, y0, r.xMax - t.xMax, y1 - y0, l[4] };                   // right of it
+        }
+
+        /// <summary>A road; in Hood City only the stretches outside the town (the town's own roads stay its roads).</summary>
         static void Road(Vector3 a, Vector3 b, float width)
+        {
+            if (!_hood) { RoadPart(a, b, width); return; }
+            float len = Vector3.Distance(new Vector3(a.x, 0, a.z), new Vector3(b.x, 0, b.z));
+            float start = -1;
+            for (float t = 0; t <= len + 0.01f; t += 5f)
+            {
+                var p = Vector3.Lerp(a, b, Mathf.Min(1, t / Mathf.Max(1, len)));
+                bool outside = !InTown(p);
+                if (outside && start < 0) start = t;
+                if ((!outside || t + 5f > len) && start >= 0)
+                {
+                    float end = outside ? len : t;
+                    if (end - start > 10f) RoadPart(Vector3.Lerp(a, b, start / len), Vector3.Lerp(a, b, end / len), width);
+                    start = -1;
+                }
+            }
+        }
+
+        static void RoadPart(Vector3 a, Vector3 b, float width)
         {
             a.y = HeightAt(a);
             b.y = HeightAt(b);
