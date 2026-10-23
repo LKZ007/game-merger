@@ -182,6 +182,79 @@ namespace Frankenstein
 
         internal static string Id(object slot) => Rt.Get(Rt.Get(slot, "ItemInstance"), "ID") as string;
 
+        internal static object Inventory()
+        {
+            if (_inv == null) _inv = Rt.FindByName("PlayerInventory");
+            if (_inv == null) return null;
+            return _inv.GetProperty("Instance", BindingFlags.Public | BindingFlags.Static | BindingFlags.FlattenHierarchy)?.GetValue(null, null)
+                   ?? Rt.All(_inv).FirstOrDefault();
+        }
+
+        static string _equipWay = "";
+        static Type _hotbar;
+
+        /// <summary>Which hotbar slot is in your hand (-1 for none). Builds differ, so every way is tried: the
+        /// inventory's own index, its equipped slot, then each slot's IsEquipped (read as the hotbar slot it is).
+        /// The way that worked is written to drop-debug.txt once.</summary>
+        internal static int EquippedIndex(List<object> slots)
+        {
+            var inv = Inventory();
+            if (inv == null || slots.Count == 0) return -1;
+            var n = Rt.Get(inv, "EquippedSlotIndex", "equippedSlotIndex", "SelectedSlotIndex", "selectedSlotIndex", "CurrentSlotIndex");
+            if (n != null)
+            {
+                int i;
+                try { i = Convert.ToInt32(n); } catch (Exception) { i = -2; }
+                if (i >= 0 && i < slots.Count) { Way("inventory index"); return i; }  // -1 may just be stale: the other ways still look
+            }
+            var eq = Rt.Get(inv, "equippedSlot", "EquippedSlot");
+            if (eq != null)
+            {
+                var p = Ptr(eq);
+                for (int i = 0; i < slots.Count; i++)
+                    if (ReferenceEquals(slots[i], eq) || (p != IntPtr.Zero && Ptr(slots[i]) == p)) { Way("inventory's equipped slot"); return i; }
+            }
+            if (_hotbar == null) _hotbar = Rt.FindByName("HotbarSlot");
+            for (int i = 0; i < slots.Count; i++)
+            {
+                var on = Rt.Get(slots[i], "IsEquipped", "isEquipped", "Equipped") ?? Rt.Get(As(slots[i], _hotbar), "IsEquipped", "isEquipped", "Equipped");
+                if (on is bool b && b) { Way("slot IsEquipped"); return i; }
+            }
+            Way(eq == null && n == null ? "none found: the inventory has no equipped index or slot" : "nothing equipped");
+            return -1;
+        }
+
+        internal static object EquippedSlot()
+        {
+            var slots = Slots();
+            int i = EquippedIndex(slots);
+            return i >= 0 ? slots[i] : null;
+        }
+
+        static void Way(string how)
+        {
+            if (_equipWay == how) return;
+            _equipWay = how;
+            Drop.Note("held slot found by: " + how);
+        }
+
+        static IntPtr Ptr(object o)
+        {
+            try { var v = o?.GetType().GetProperty("Pointer")?.GetValue(o, null); return v is IntPtr p ? p : IntPtr.Zero; } catch (Exception) { return IntPtr.Zero; }
+        }
+
+        /// <summary>An IL2CPP object read as one of its own subclasses (TryCast), or null.</summary>
+        static object As(object o, Type t)
+        {
+            if (o == null || t == null || t.IsInstanceOfType(o)) return o;
+            try
+            {
+                var m = o.GetType().GetMethods().FirstOrDefault(x => x.Name == "TryCast" && x.IsGenericMethodDefinition);
+                return m?.MakeGenericMethod(t).Invoke(o, null);
+            }
+            catch (Exception) { return null; }
+        }
+
         /// <summary>The grenade launcher is in your hand.</summary>
         public static bool LauncherHeld;
 
@@ -197,15 +270,15 @@ namespace Frankenstein
             }
             // the launcher in your hand: its own item, or (given before 3.38) the shotgun in the slot it went into
             object slot = null;
-            foreach (var s in slots)
-                if (OwnItems.KeyOf(Id(s)) == "launcher" && Rt.Get(s, "IsEquipped", "isEquipped") is bool eq && eq) slot = s;
+            int held = EquippedIndex(slots);
+            if (held >= 0 && OwnItems.KeyOf(Id(slots[held])) == "launcher") slot = slots[held];
             if (slot == null)
             {
                 if (_launcherSlot < 0 || _launcherSlot >= slots.Count) { _heldGun = null; return; }
                 slot = slots[_launcherSlot];
                 var id = Id(slot);
                 if (id == null || (_shotgun != null && id != _shotgun)) { if (id != null && _before == null) { _launcherSlot = -1; Store(); } return; }
-                if (!(Rt.Get(slot, "IsEquipped", "isEquipped") is bool on) || !on) { _heldGun = null; return; }
+                if (held != _launcherSlot) { _heldGun = null; return; }
             }
             LauncherHeld = true;
             if (_gun == null) _gun = Rt.FindByName("Equippable_RangedWeapon");

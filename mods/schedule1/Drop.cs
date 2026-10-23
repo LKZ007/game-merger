@@ -53,17 +53,23 @@ namespace Frankenstein
 
         static object Equipped(out int index)
         {
-            index = -1;
             var slots = Boom.Slots();
-            for (int i = 0; i < slots.Count; i++)
-                if (Rt.Get(slots[i], "IsEquipped", "isEquipped") is bool on && on) { index = i; return slots[i]; }
-            return null;
+            index = Boom.EquippedIndex(slots);
+            return index >= 0 ? slots[index] : null;
         }
+
+        /// <summary>A line for drop-debug.txt from elsewhere (how the held slot was found).</summary>
+        public static void Note(string line) => Say(line);
 
         public static void Now()
         {
             var slot = Equipped(out var index);
-            if (slot == null || Boom.Id(slot) == null) { ItemMenu.Notify("Nothing in your hand to drop."); return; }
+            if (slot == null || Boom.Id(slot) == null)
+            {
+                Say("drop pressed: no held slot found (index " + index + ")" + (slot != null ? ", the slot reads empty" : ""));
+                ItemMenu.Notify("Couldn't tell what's in your hand. Open the inventory and use LB/RB to pick the slot, then drop it. drop-debug.txt has why.");
+                return;
+            }
             Slot(index);
         }
 

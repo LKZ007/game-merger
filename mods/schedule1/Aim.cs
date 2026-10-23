@@ -28,15 +28,12 @@ namespace Frankenstein
         {
             if (OwnGuns.HeldKey != null) return OwnGuns.HeldKey;
             if (Boom.LauncherHeld) return "launcher";
-            foreach (var s in Boom.Slots())
-            {
-                if (!(Rt.Get(s, "IsEquipped", "isEquipped") is bool on) || !on) continue;
-                var id = (Boom.Id(s) ?? "").ToLowerInvariant();
-                if (id.Contains("shotgun")) return "shotgun";
-                if (id.Contains("revolver")) return "revolver";
-                if (id.Contains("m1911") || id.Contains("pistol") || id.Contains("glock")) return "pistol";
-                return null;
-            }
+            var s = Boom.EquippedSlot();
+            if (s == null) return null;
+            var id = (Boom.Id(s) ?? "").ToLowerInvariant();
+            if (id.Contains("shotgun")) return "shotgun";
+            if (id.Contains("revolver")) return "revolver";
+            if (id.Contains("m1911") || id.Contains("pistol") || id.Contains("glock")) return "pistol";
             return null;
         }
 

@@ -23,12 +23,12 @@ namespace Frankenstein
             if (Time.unscaledTime < _nextLook) return _holding;
             _nextLook = Time.unscaledTime + 0.3f;
             _holding = false;
-            foreach (var s in Boom.Slots())
-                if (Rt.Get(s, "IsEquipped", "isEquipped") is bool on && on)
-                {
-                    var id = (Boom.Id(s) ?? "").ToLowerInvariant().Replace(" ", "").Replace("_", "");
-                    _holding = Words.Any(id.Contains);
-                }
+            var s = Boom.EquippedSlot();
+            if (s != null)
+            {
+                var id = (Boom.Id(s) ?? "").ToLowerInvariant().Replace(" ", "").Replace("_", "");
+                _holding = Words.Any(id.Contains);
+            }
             return _holding;
         }
 

@@ -375,6 +375,8 @@ class FeatureChecklist(unittest.TestCase):
             self.assertIn(word.encode("utf-16-le"), dll, word)
         drop = read(ROOT, "mods", "schedule1", "Drop.cs")
         self.assertIn("KeyCode.G", drop)                      # keyboard too
+        self.assertIn("Boom.EquippedIndex(slots)", drop)      # the held slot, found every way the builds allow
+        self.assertIn('"EquippedSlotIndex"', read(ROOT, "mods", "schedule1", "Boom.cs"))
         self.assertIn("Boom.Id(slot) != id", drop)            # checks the item really left
         self.assertIn("MainMenu.Creative) return;", read(ROOT, "mods", "schedule1", "Story.cs"))  # no starter kit in Creative
         self.assertIn("Creative.StartEmpty = true", read(ROOT, "mods", "schedule1", "Mode.cs"))

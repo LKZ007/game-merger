@@ -116,11 +116,11 @@ namespace Frankenstein
                 if (id != null && id != Story.ItemId(d.Base)) { _slots.Remove(i); Store(); }
             }
             Def held = null;
-            for (int i = 0; i < slots.Count && held == null; i++)
+            int hi = Boom.EquippedIndex(slots);
+            if (hi >= 0)
             {
-                if (!(Rt.Get(slots[i], "IsEquipped", "isEquipped") is bool on) || !on) continue;
-                var key = OwnItems.KeyOf(Boom.Id(slots[i]));  // its own item
-                if (key == null && _slots.ContainsKey(i)) key = _slots[i];  // a base gun given before 3.38
+                var key = OwnItems.KeyOf(Boom.Id(slots[hi]));  // its own item
+                if (key == null && _slots.ContainsKey(hi)) key = _slots[hi];  // a base gun given before 3.38
                 held = Defs.FirstOrDefault(x => x.Key == key);
             }
             Holding = held != null;
