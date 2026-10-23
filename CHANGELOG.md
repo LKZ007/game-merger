@@ -3,6 +3,11 @@
 Every release, newest first. Downloads are on the [releases page](https://github.com/LKZ007/game-merger/releases).
 The app was called Game Merger before 3.8.0.
 
+## v3.49.0 (2026-10-23)
+- **The GTA V Schedule I x Hood Warfare merge, closer to the concept art.**
+  - **The empire map in game.** GTA V's own map now shows each of your four properties with its icon (stash house, weed farm, meth lab, warehouse), the rank it needs and its price. Yours are violet, the ones for sale are white and the locked ones are grey. Each gang's turf shows as a coloured ring (Families green, Ballas purple, Vagos yellow, Aztecas light blue, Marabunta blue, Lost MC white, Kkangpae red), and a ring turns violet when the turf is yours.
+  - **The film look.** One of GTA V's own film filters goes over the game: strong on Cinematic, lighter on High and Balanced, and off on Performance (Settings > Graphics). F5 > Look picks another filter or GTA V's own look, and can set golden hour or night for screenshots and testing.
+
 ## v3.48.0 (2026-10-23)
 - **Story and Creative in the GTA V Schedule I x Hood Warfare merge.**
   - **Story plays like Schedule I.** You start with a small stash house in Strawberry and a few supplies. Batches, sales, turf wars and objectives give XP, and you climb ten ranks from Street Rat to Kingpin. The ranks unlock the Grapeseed farm, meth and the Sandy Shores lab, workers, dealers, turf wars, truces, and finally coke and the Elysian Island warehouse. The current objective, your rank and an XP bar are on screen, with a cash reward and a waypoint for each step. Locked properties only show on the map once they're for sale.

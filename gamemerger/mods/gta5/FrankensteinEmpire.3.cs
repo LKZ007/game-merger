@@ -42,6 +42,7 @@ public class FrankensteinEmpire : Script
         public string Id, Name, Kind;   // kind: farm (weed), lab (meth, coke), stash
         public Vector3 At;
         public int Price, Rank;         // Story: the rank that puts it up for sale
+        public int Sprite;              // its map icon
         public bool Owned, Worker;
         public int Supplies;            // one unit makes one batch
         public string Batch = "";       // what's growing or cooking
@@ -56,7 +57,19 @@ public class FrankensteinEmpire : Script
         public Color Color;
         public int Rep;                 // how they feel about you: -100 war, 0 neutral, 100 allies
         public WeaponHash Gun;
+        public BlipColor Ring;          // its turf rings on the map
     }
+
+    // the middle of each gang neighbourhood and how far it reaches, for the coloured turf rings on the map
+    // (GTA V's zones aren't circles, so the rings are close, not exact)
+    static readonly Dictionary<string, float[]> ZoneRing = new Dictionary<string, float[]>
+    {
+        { "CHAMH", new[] { -150f, -1620f, 260f } }, { "STRAW", new[] { 90f, -1400f, 260f } }, { "DAVIS", new[] { 110f, -1760f, 280f } },
+        { "RANCHO", new[] { 420f, -1880f, 260f } }, { "CYPRE", new[] { 820f, -2280f, 300f } }, { "EBURO", new[] { 1350f, -2050f, 280f } },
+        { "EAST_V", new[] { 880f, -160f, 280f } }, { "STAB", new[] { 70f, 3700f, 200f } }, { "SANDY", new[] { 1800f, 3720f, 380f } },
+        { "KOREAT", new[] { -680f, -900f, 300f } },
+    };
+    readonly List<Blip> rings = new List<Blip>();
 
     static readonly string[] Products = { "weed", "meth", "coke" };
     static readonly Dictionary<string, int> StreetPrice = new Dictionary<string, int> { { "weed", 60 }, { "meth", 140 }, { "coke", 220 } };
@@ -66,21 +79,21 @@ public class FrankensteinEmpire : Script
 
     readonly List<Lab> labs = new List<Lab>
     {
-        new Lab { Id = "grapeseed", Name = "Grapeseed farm", Kind = "farm", At = new Vector3(2434f, 4969f, 46.8f), Price = 45000, Rank = 1 },
-        new Lab { Id = "sandy", Name = "Sandy Shores trailer lab", Kind = "lab", At = new Vector3(1972f, 3817f, 33.4f), Price = 60000, Rank = 2 },
-        new Lab { Id = "strawberry", Name = "Strawberry stash house", Kind = "farm", At = new Vector3(-14f, -1440f, 31.1f), Price = 30000 },
-        new Lab { Id = "docks", Name = "Elysian Island warehouse", Kind = "lab", At = new Vector3(155f, -3080f, 5.9f), Price = 90000, Rank = 5 },
+        new Lab { Id = "grapeseed", Name = "Grapeseed farm", Sprite = 496, Kind = "farm", At = new Vector3(2434f, 4969f, 46.8f), Price = 45000, Rank = 1 },
+        new Lab { Id = "sandy", Name = "Sandy Shores trailer lab", Sprite = 499, Kind = "lab", At = new Vector3(1972f, 3817f, 33.4f), Price = 60000, Rank = 2 },
+        new Lab { Id = "strawberry", Name = "Strawberry stash house", Sprite = 40, Kind = "farm", At = new Vector3(-14f, -1440f, 31.1f), Price = 30000 },
+        new Lab { Id = "docks", Name = "Elysian Island warehouse", Sprite = 473, Kind = "lab", At = new Vector3(155f, -3080f, 5.9f), Price = 90000, Rank = 5 },
     };
 
     readonly List<Gang> gangs = new List<Gang>
     {
-        new Gang { Id = "families", Name = "The Families", Model = "g_m_y_famca_01", Zones = new[] { "CHAMH", "STRAW" }, Color = Color.FromArgb(40, 180, 70), Gun = WeaponHash.MicroSMG },
-        new Gang { Id = "ballas", Name = "Ballas", Model = "g_m_y_ballaorig_01", Zones = new[] { "DAVIS" }, Color = Color.FromArgb(150, 60, 200), Gun = WeaponHash.Pistol },
-        new Gang { Id = "vagos", Name = "Vagos", Model = "g_m_y_mexgoon_01", Zones = new[] { "RANCHO", "CYPRE" }, Color = Color.FromArgb(240, 200, 30), Gun = WeaponHash.AssaultRifle },
-        new Gang { Id = "aztecas", Name = "Aztecas", Model = "g_m_y_azteca_01", Zones = new[] { "EBURO" }, Color = Color.FromArgb(60, 160, 230), Gun = WeaponHash.SawnOffShotgun },
-        new Gang { Id = "marabunta", Name = "Marabunta Grande", Model = "g_m_y_salvagoon_01", Zones = new[] { "EAST_V" }, Color = Color.FromArgb(70, 120, 230), Gun = WeaponHash.Pistol },
-        new Gang { Id = "lost", Name = "The Lost MC", Model = "g_m_y_lost_01", Zones = new[] { "STAB", "SANDY" }, Color = Color.FromArgb(200, 200, 200), Gun = WeaponHash.PumpShotgun },
-        new Gang { Id = "kkangpae", Name = "Kkangpae", Model = "g_m_y_korean_01", Zones = new[] { "KOREAT" }, Color = Color.FromArgb(220, 60, 60), Gun = WeaponHash.SMG },
+        new Gang { Id = "families", Name = "The Families", Model = "g_m_y_famca_01", Zones = new[] { "CHAMH", "STRAW" }, Color = Color.FromArgb(40, 180, 70), Gun = WeaponHash.MicroSMG, Ring = BlipColor.Green },
+        new Gang { Id = "ballas", Name = "Ballas", Model = "g_m_y_ballaorig_01", Zones = new[] { "DAVIS" }, Color = Color.FromArgb(150, 60, 200), Gun = WeaponHash.Pistol, Ring = BlipColor.Purple },
+        new Gang { Id = "vagos", Name = "Vagos", Model = "g_m_y_mexgoon_01", Zones = new[] { "RANCHO", "CYPRE" }, Color = Color.FromArgb(240, 200, 30), Gun = WeaponHash.AssaultRifle, Ring = BlipColor.Yellow },
+        new Gang { Id = "aztecas", Name = "Aztecas", Model = "g_m_y_azteca_01", Zones = new[] { "EBURO" }, Color = Color.FromArgb(60, 160, 230), Gun = WeaponHash.SawnOffShotgun, Ring = BlipColor.BlueLight },
+        new Gang { Id = "marabunta", Name = "Marabunta Grande", Model = "g_m_y_salvagoon_01", Zones = new[] { "EAST_V" }, Color = Color.FromArgb(70, 120, 230), Gun = WeaponHash.Pistol, Ring = BlipColor.BlueDark },
+        new Gang { Id = "lost", Name = "The Lost MC", Model = "g_m_y_lost_01", Zones = new[] { "STAB", "SANDY" }, Color = Color.FromArgb(200, 200, 200), Gun = WeaponHash.PumpShotgun, Ring = BlipColor.White },
+        new Gang { Id = "kkangpae", Name = "Kkangpae", Model = "g_m_y_korean_01", Zones = new[] { "KOREAT" }, Color = Color.FromArgb(220, 60, 60), Gun = WeaponHash.SMG, Ring = BlipColor.Red },
     };
 
     // Story's ranks (Schedule I's ladder) and what each one unlocks
@@ -98,6 +111,10 @@ public class FrankensteinEmpire : Script
     readonly Dictionary<string, int> dealers = new Dictionary<string, int>();  // zone -> dealers working it
     int heat, earned, lastHour = -1;
     bool on, loaded, creative, creativeHeat, fresh;
+    string graphics = "high";
+    int look = -1;                  // which film look (-1: the graphics setting's own pick)
+    // GTA V's own film filters (the Rockstar Editor's), checked in game: one that isn't there is skipped
+    static readonly string[] Looks = { "NG_filmic02", "NG_filmic06", "NG_filmic10", "NG_filmic13", "NG_filmic20" };
     int xp, quest, madeCount, packedCount, soldCount, warsWon, nextTopUp, switchConfirm;
     readonly HashSet<int> served = new HashSet<int>();
     readonly List<string> log = new List<string>();
@@ -129,6 +146,8 @@ public class FrankensteinEmpire : Script
             var text = File.Exists(p) ? File.ReadAllText(p) : "";
             on = System.Text.RegularExpressions.Regex.IsMatch(text, "\"empire\"\\s*:\\s*true");
             creative = System.Text.RegularExpressions.Regex.IsMatch(text, "\"creative\"\\s*:\\s*true");
+            var g = System.Text.RegularExpressions.Regex.Match(text, "\"graphics\"\\s*:\\s*\"(\\w+)\"");
+            if (g.Success) graphics = g.Groups[1].Value;
         }
         catch (Exception) { on = false; }
         Say(on ? "empire on (Schedule I x Hood Warfare merge), " + (creative ? "Creative" : "Story") : "empire off (not this merge's Extension)");
@@ -141,7 +160,7 @@ public class FrankensteinEmpire : Script
         if (!on) return;
         var me = Game.Player.Character;
         if (me == null || !me.Exists() || Game.IsLoading) return;
-        if (!loaded) { Load(); loaded = true; Begin(); Blips(); Say("loaded: " + labs.Count(l => l.Owned) + " labs, " + turf.Count + " turf, $" + earned + " earned, " + RankName + " (" + xp + " XP)"); }
+        if (!loaded) { Load(); loaded = true; Begin(); Blips(); Look(); Say("loaded: " + labs.Count(l => l.Owned) + " labs, " + turf.Count + " turf, $" + earned + " earned, " + RankName + " (" + xp + " XP)"); }
         try
         {
             Production();
@@ -349,12 +368,13 @@ public class FrankensteinEmpire : Script
             warsWon++;
             Notification.Show("~g~" + Game.GetLocalizedString(warZone) + " is yours.~s~ It pays every hour, and your dealers can work it.");
             AddXp(250, "turf war");
+            Blips();
             Say("took " + warZone);
             EndWar();
         }
         else if (lost)
         {
-            if (turf.Remove(warZone)) Notification.Show("~r~" + warGang.Name + " took " + Game.GetLocalizedString(warZone) + " back.");
+            if (turf.Remove(warZone)) { Blips(); Notification.Show("~r~" + warGang.Name + " took " + Game.GetLocalizedString(warZone) + " back."); }
             else Notification.Show("~r~The turf war in " + Game.GetLocalizedString(warZone) + " is lost.");
             Say("lost the war in " + warZone);
             EndWar();
@@ -490,6 +510,7 @@ public class FrankensteinEmpire : Script
                     Notification.Show("You paid " + gang.Name + " $10,000. Relations: " + gang.Rep + ".");
                 }));
         }
+        list.Add(Item("Look...", LookMenu));
         list.Add(Item(Game.GameTime < switchConfirm ? "Press again to switch to " + (creative ? "Story" : "Creative") : "Switch this game to " + (creative ? "Story" : "Creative") + "...", SwitchMode));
         Open((creative ? "CREATIVE" : "STORY") + "  ·  " + RankName + "  ·  earned $" + earned.ToString("N0") + "  ·  heat " + heat, list);
     }
@@ -507,6 +528,44 @@ public class FrankensteinEmpire : Script
             Say("switch to " + (creative ? "story" : "creative") + " asked");
         }
         catch (Exception e) { Notification.Show("~r~Couldn't switch: " + e.Message); }
+    }
+
+    // ---------- the look, towards the concept art ----------
+
+    /// <summary>The concept art's film grade over GTA V's own lighting: one of GTA V's own film filters, at a
+    /// strength from the app's Graphics setting (Cinematic strongest, Performance off). F5 > Look picks another.</summary>
+    void Look()
+    {
+        Function.Call(Hash.CLEAR_TIMECYCLE_MODIFIER);
+        if (graphics == "performance" || look == -2) { Say("look: GTA V's own (" + graphics + ")"); return; }
+        float strength = graphics == "cinematic" ? 0.85f : graphics == "balanced" ? 0.4f : 0.6f;
+        for (int i = 0; i < Looks.Length; i++)
+        {
+            string name = Looks[(Math.Max(0, look) + i) % Looks.Length];
+            Function.Call(Hash.SET_TIMECYCLE_MODIFIER, name);
+            if (Function.Call<int>(Hash.GET_TIMECYCLE_MODIFIER_INDEX) >= 0)
+            {
+                Function.Call(Hash.SET_TIMECYCLE_MODIFIER_STRENGTH, strength);
+                Say("look: " + name + " at " + strength + " (" + graphics + ")");
+                return;
+            }
+            Say("look: " + name + " isn't in this GTA V");
+        }
+        Function.Call(Hash.CLEAR_TIMECYCLE_MODIFIER);
+    }
+
+    void LookMenu()
+    {
+        var list = new List<KeyValuePair<string, Action>>();
+        for (int i = 0; i < Looks.Length; i++)
+        {
+            int n = i;
+            list.Add(Item("Film look " + (i + 1) + (look == i || (look == -1 && i == 0) ? "  (on)" : ""), () => { look = n; Look(); Save(); LookMenu(); }));
+        }
+        list.Add(Item("GTA V's own look" + (look == -2 ? "  (on)" : ""), () => { look = -2; Look(); Save(); LookMenu(); }));
+        list.Add(Item("Golden hour now (18:45, clear)", () => { World.CurrentTimeOfDay = new TimeSpan(18, 45, 0); World.Weather = Weather.ExtraSunny; }));
+        list.Add(Item("Night now (22:30, clear)", () => { World.CurrentTimeOfDay = new TimeSpan(22, 30, 0); World.Weather = Weather.Clear; }));
+        Open("LOOK  ·  graphics: " + graphics, list);
     }
 
     // ---------- Creative: everything, for testing ----------
@@ -713,17 +772,33 @@ public class FrankensteinEmpire : Script
 
     void Blips()
     {
+        // every property, like the empire map: yours in violet, for sale in white, locked ones grey with the rank they need
         foreach (var l in labs)
         {
             if (l.Blip != null && l.Blip.Exists()) l.Blip.Delete();
-            l.Blip = null;
-            if (!creative && !l.Owned && Rank < l.Rank) continue;  // Story: a property shows on the map once your rank puts it up for sale
+            bool locked = !creative && !l.Owned && Rank < l.Rank;
             l.Blip = World.CreateBlip(l.At);
-            l.Blip.Sprite = l.Kind == "farm" ? (BlipSprite)140 : (BlipSprite)499;  // weed leaf, meth lab
-            l.Blip.Color = l.Owned ? BlipColor.Green : BlipColor.White;
-            l.Blip.Name = (l.Owned ? "" : "For sale: ") + l.Name;
-            l.Blip.IsShortRange = !l.Owned;
+            l.Blip.Sprite = (BlipSprite)l.Sprite;
+            l.Blip.Color = l.Owned ? BlipColor.Purple : locked ? BlipColor.Grey : BlipColor.White;
+            l.Blip.Name = l.Owned ? "Your " + l.Name : l.Name + "  ·  " + Ranks[l.Rank] + "  ·  $" + l.Price.ToString("N0") + (locked ? " (locked)" : "");
+            l.Blip.IsShortRange = false;
+            if (locked) l.Blip.Alpha = 150;
         }
+        // each gang's turf as a coloured ring; yours turns violet
+        foreach (var b in rings) if (b != null && b.Exists()) b.Delete();
+        rings.Clear();
+        foreach (var g in gangs)
+            foreach (var z in g.Zones)
+            {
+                float[] c;
+                if (!ZoneRing.TryGetValue(z, out c)) continue;
+                var ring = World.CreateBlip(new Vector3(c[0], c[1], 0f), c[2]);
+                bool mine = turf.Contains(z);
+                ring.Color = mine ? BlipColor.Purple : g.Ring;
+                ring.Alpha = 90;
+                ring.Name = Game.GetLocalizedString(z) + "  ·  " + (mine ? "your turf" : g.Name + " turf");
+                rings.Add(ring);
+            }
     }
 
     // ---------- helpers ----------
@@ -736,6 +811,8 @@ public class FrankensteinEmpire : Script
     void Cleanup()
     {
         foreach (var l in labs) if (l.Blip != null && l.Blip.Exists()) l.Blip.Delete();
+        foreach (var b in rings) if (b != null && b.Exists()) b.Delete();
+        Function.Call(Hash.CLEAR_TIMECYCLE_MODIFIER);
         foreach (var p in warPeds) if (p != null && p.Exists()) p.Delete();
     }
 
@@ -750,7 +827,7 @@ public class FrankensteinEmpire : Script
             var lines = new List<string> { "heat=" + heat, "earned=" + earned, "turf=" + string.Join(",", turf.ToArray()),
                                            "dealers=" + string.Join(",", dealers.Select(kv => kv.Key + ":" + kv.Value).ToArray()),
                                            "xp=" + xp, "quest=" + quest, "made=" + madeCount, "packed=" + packedCount, "sold=" + soldCount,
-                                           "wars=" + warsWon, "creativeHeat=" + (creativeHeat ? 1 : 0) };
+                                           "wars=" + warsWon, "creativeHeat=" + (creativeHeat ? 1 : 0), "look=" + look };
             foreach (var p in Products) lines.Add("stock." + p + "=" + stock[p]);
             foreach (var l in labs)
             {
@@ -786,6 +863,7 @@ public class FrankensteinEmpire : Script
                 else if (k == "sold" && int.TryParse(v, out n)) soldCount = n;
                 else if (k == "wars" && int.TryParse(v, out n)) warsWon = n;
                 else if (k == "creativeHeat") creativeHeat = v == "1";
+                else if (k == "look" && int.TryParse(v, out n)) look = n;
                 else if (k == "turf") foreach (var z in v.Split(',')) { if (z.Length > 0) turf.Add(z); }
                 else if (k == "dealers") foreach (var d in v.Split(',')) { var b = d.Split(':'); if (b.Length == 2 && int.TryParse(b[1], out n)) dealers[b[0]] = n; }
                 else if (k.StartsWith("stock.") && stock.ContainsKey(k.Substring(6)) && int.TryParse(v, out n)) stock[k.Substring(6)] = n;

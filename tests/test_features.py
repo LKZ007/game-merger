@@ -650,5 +650,12 @@ class FeatureChecklist(unittest.TestCase):
         theme = [t for t in _j.loads(read(PKG, "recipes", "gta5.json"))["themes"] if t["id"] == "empire"][0]
         self.assertIn("Story and Creative modes", [s["name"] for s in theme["slots"]])
 
+    def test_349_gta5_empire_map_and_look(self):
+        src = read(PKG, "mods", "gta5", "FrankensteinEmpire.3.cs")
+        for bit in ("ZoneRing", "World.CreateBlip(new Vector3(c[0], c[1], 0f), c[2])", "SET_TIMECYCLE_MODIFIER_STRENGTH",
+                    "GET_TIMECYCLE_MODIFIER_INDEX", "LookMenu", "Golden hour now", "Sprite = 496", "Sprite = 473"):
+            self.assertIn(bit, src)
+        self.assertIn('"graphics"', read(PKG, "api.py"))
+
 if __name__ == "__main__":
     unittest.main()
