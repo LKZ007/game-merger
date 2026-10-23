@@ -1,4 +1,8 @@
-## Frankenstein 3.49.0
+## Frankenstein 3.50.0
+
+- **Cutscenes in the GTA V Schedule I x Hood Warfare Story.** Story's big moments now play as short cutscenes, filmed with GTA V's own cameras, letterboxed, with your Uncle Ray on the phone: the start in Strawberry, every rank-up, every property you buy, your first meth and first coke, your first turf war won and lost, the first police raid, and Kingpin, with a sweep over the city. Each one plays once per save, and only when you're safe (no wanted level, no turf war). Enter, Space or A skips one. In Creative, the F5 test tools can replay any of them.
+
+### Also in 3.49.0
 
 - **The GTA V Schedule I x Hood Warfare merge, closer to the concept art.**
   - **The empire map in game.** GTA V's own map now shows each of your four properties with its icon (stash house, weed farm, meth lab, warehouse), the rank it needs and its price. Yours are violet, the ones for sale are white and the locked ones are grey. Each gang's turf shows as a coloured ring (Families green, Ballas purple, Vagos yellow, Aztecas light blue, Marabunta blue, Lost MC white, Kkangpae red), and a ring turns violet when the turf is yours.

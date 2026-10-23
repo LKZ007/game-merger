@@ -657,5 +657,13 @@ class FeatureChecklist(unittest.TestCase):
             self.assertIn(bit, src)
         self.assertIn('"graphics"', read(PKG, "api.py"))
 
+    def test_350_gta5_empire_cutscenes(self):
+        src = read(PKG, "mods", "gta5", "FrankensteinEmpire.3.cs")
+        for bit in ("World.CreateCamera", "World.RenderingCamera = null", "IS_DISABLED_CONTROL_JUST_PRESSED", "HIDE_HUD_AND_RADAR_THIS_FRAME",
+                    'Cutscene("intro"', 'Cutscene("rank-"', 'Cutscene("bought-"', 'Cutscene("first-raid"', 'Cutscene("first-turf"',
+                    'Cutscene("first-loss"', "KingpinShots", "CutsceneMenu", '"seen="', "Game.Player.WantedLevel > 0"):
+            self.assertIn(bit, src)
+        self.assertIn("EndScene();\n    }", src)  # a reloaded script never leaves the camera stuck
+
 if __name__ == "__main__":
     unittest.main()

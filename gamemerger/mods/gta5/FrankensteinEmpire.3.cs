@@ -19,6 +19,9 @@
 // Creative is for testing: everything unlocked and owned, unlimited money and supplies, 30-second batches, no heat
 // unless you turn it on, and test tools in the F5 menu (product, heat, raids, turf wars, ranks, teleports).
 // The mode is the save's own (Frankenstein's Creative switch); the F5 menu can switch it too, so a controller can.
+// Story has cutscenes for its big moments (the start, each rank, each property, first meth and coke, first turf won
+// and lost, first raid, Kingpin), each once per save, played with GTA V's own cameras when you're safe; Enter, Space
+// or A skips one. Creative can replay any of them from its test tools.
 using System;
 using System.Collections.Generic;
 using System.Drawing;
@@ -161,6 +164,7 @@ public class FrankensteinEmpire : Script
         var me = Game.Player.Character;
         if (me == null || !me.Exists() || Game.IsLoading) return;
         if (!loaded) { Load(); loaded = true; Begin(); Blips(); Look(); Say("loaded: " + labs.Count(l => l.Owned) + " labs, " + turf.Count + " turf, $" + earned + " earned, " + RankName + " (" + xp + " XP)"); }
+        if (playing != null) { try { Scenes(me); } catch (Exception ex) { Say("cutscene: " + ex.Message); EndScene(); } return; }  // a cutscene owns the screen
         try
         {
             Production();
@@ -172,6 +176,7 @@ public class FrankensteinEmpire : Script
             Interact(me);
             Hud(me);
             Pad(me);
+            Scenes(me);
             if (menuOpen) Menu();
         }
         catch (Exception ex) { Say("tick: " + ex.Message); }
@@ -200,6 +205,7 @@ public class FrankensteinEmpire : Script
         l.ReadyAt = Game.GameTime + BatchMs(what);
         AddHeat(what == "weed" ? 2 : 5);
         madeCount++;
+        if (what != "weed") Cutscene("first-" + what, LabShots(l, "Uncle Ray (phone)", what == "meth" ? "That's the real stuff now. Careful who you sell it to." : "Coke. Rich people's problem, your profit. Keep it clean."));
         if (!quiet) Notification.Show("~g~" + Title(what) + "~s~ started at " + l.Name + ": ready in " + Mins(BatchMs(what)) + ".");
         Say(l.Name + ": started " + what + (quiet ? " (worker)" : ""));
         Save();
@@ -301,6 +307,7 @@ public class FrankensteinEmpire : Script
         {
             if (me.Position.DistanceTo(lab.At) < 80f) { Game.Player.WantedLevel = Math.Max(Game.Player.WantedLevel, 3); Notification.Show("~r~Police raid at " + lab.Name + "!"); }
             else { lab.Supplies = Math.Max(0, lab.Supplies - 2); lab.Batch = ""; Notification.Show("~r~The police raided " + lab.Name + " while you were away: the batch and some supplies are gone."); }
+            Cutscene("first-raid", LabShots(lab, "Uncle Ray (phone)", "The cops hit " + lab.Name + ". Lay low. Let the heat die down before you cook again."));
             heat = Math.Max(0, heat - 25);
             Say("raid at " + lab.Name);
         }
@@ -369,11 +376,13 @@ public class FrankensteinEmpire : Script
             Notification.Show("~g~" + Game.GetLocalizedString(warZone) + " is yours.~s~ It pays every hour, and your dealers can work it.");
             AddXp(250, "turf war");
             Blips();
+            Cutscene("first-turf", Orbit(me.Position, 9f, 3f, "Uncle Ray (phone)", Game.GetLocalizedString(warZone) + " is yours. Taking a block is easy. Holding it is the job."));
             Say("took " + warZone);
             EndWar();
         }
         else if (lost)
         {
+            Cutscene("first-loss", Orbit(me.Position, 10f, 4f, "Uncle Ray (phone)", "You lost that one. It happens once. Don't let it happen twice."));
             if (turf.Remove(warZone)) { Blips(); Notification.Show("~r~" + warGang.Name + " took " + Game.GetLocalizedString(warZone) + " back."); }
             else Notification.Show("~r~The turf war in " + Game.GetLocalizedString(warZone) + " is lost.");
             Say("lost the war in " + warZone);
@@ -452,6 +461,9 @@ public class FrankensteinEmpire : Script
                 if (Game.Player.Money < l.Price) { Notification.Show("~r~Not enough money."); return; }
                 Game.Player.Money -= l.Price; l.Owned = true; l.Supplies = 2; Blips(); Save();
                 Notification.Show("~g~" + l.Name + " is yours.~s~ It comes with 2 supplies."); Say("bought " + l.Name);
+                Cutscene("bought-" + l.Id, LabShots(l, "Uncle Ray (phone)", l.Id == "grapeseed" ? "Grapeseed. Room to grow, and nobody out here asks questions." :
+                                                                        l.Id == "sandy" ? "Out in the desert nobody hears the cook. Keep the windows open." :
+                                                                        l.Id == "docks" ? "The docks. Ships in, product out. This is the big league." : "Yours now. Make it work."));
             }));
         }
         else
@@ -530,6 +542,156 @@ public class FrankensteinEmpire : Script
         catch (Exception e) { Notification.Show("~r~Couldn't switch: " + e.Message); }
     }
 
+    // ---------- cutscenes ----------
+
+    class Shot { public Vector3 From, To, Look; public int Ms; public string Who = "", Line = ""; }
+
+    readonly HashSet<string> seen = new HashSet<string>();
+    readonly Queue<KeyValuePair<string, List<Shot>>> queued = new Queue<KeyValuePair<string, List<Shot>>>();
+    List<Shot> playing;
+    string playingId = "";
+    int shotAt, shotStart;
+    Camera cam;
+    bool skipKey;
+
+    static readonly string[] RankLines =
+    {
+        "",
+        "People on the street know your face now. There's a farm up in Grapeseed going cheap.",
+        "Weed pays the bills. Meth pays for everything else. There's a trailer in Sandy Shores.",
+        "You can't be everywhere. Hire hands you trust and let the labs run themselves.",
+        "The gangs have noticed you. Their corners, their rules. Unless you take them.",
+        "There's a warehouse at the docks, and a coke connect who'll only talk to you now.",
+        "Crews call you before they move. That's power. Don't waste it.",
+        "Whole blocks answer to you now. So do the cops' notebooks.",
+        "You're not on the street any more. You are the street.",
+        "",
+    };
+
+    /// <summary>Queue a cutscene. Story plays each one once per save; Creative only when asked from its tools.</summary>
+    void Cutscene(string id, List<Shot> shots, bool replay = false)
+    {
+        if (!replay && (creative || seen.Contains(id))) return;
+        if (!replay) { seen.Add(id); Save(); }
+        queued.Enqueue(new KeyValuePair<string, List<Shot>>(id, shots));
+    }
+
+    /// <summary>Plays the next queued cutscene once you're safe (no wanted level, no turf war, no menu open).</summary>
+    void Scenes(Ped me)
+    {
+        if (playing == null)
+        {
+            if (queued.Count == 0 || me.IsDead || Game.Player.WantedLevel > 0 || warZone.Length > 0 || menuOpen) return;
+            var next = queued.Dequeue();
+            playing = next.Value;
+            playingId = next.Key;
+            shotAt = 0;
+            shotStart = Game.GameTime;
+            skipKey = false;
+            cam = World.CreateCamera(playing[0].From, Vector3.Zero, 48f);
+            World.RenderingCamera = cam;
+            Game.Player.CanControlCharacter = false;
+            me.IsInvincible = true;
+            Say("cutscene " + playingId);
+            return;
+        }
+        var s = playing[shotAt];
+        float t = Math.Min(1f, (Game.GameTime - shotStart) / (float)Math.Max(1, s.Ms));
+        float ease = t * t * (3f - 2f * t);
+        cam.Position = Vector3.Lerp(s.From, s.To, ease);
+        cam.PointAt(s.Look);
+        Function.Call(Hash.HIDE_HUD_AND_RADAR_THIS_FRAME);
+        // letterbox, the speaker and the line, like a film
+        new ContainerElement(new PointF(0, 0), new SizeF(1280, 78), Color.Black).Draw();
+        new ContainerElement(new PointF(0, 642), new SizeF(1280, 78), Color.Black).Draw();
+        new TextElement("Enter / A: skip", new PointF(1260, 30), 0.3f, Color.FromArgb(150, 150, 160), Font.ChaletLondon, Alignment.Right).Draw();
+        if (s.Who.Length > 0) new TextElement(s.Who, new PointF(640, 650), 0.34f, Color.FromArgb(200, 170, 255), Font.ChaletLondon, Alignment.Center).Draw();
+        if (s.Line.Length > 0) new TextElement(s.Line, new PointF(640, 674), 0.42f, Color.White, Font.ChaletLondon, Alignment.Center).Draw();
+        if (Function.Call<bool>(Hash.IS_DISABLED_CONTROL_JUST_PRESSED, 2, (int)GTA.Control.FrontendAccept) || skipKey) { skipKey = false; Say("cutscene " + playingId + " skipped"); EndScene(); return; }
+        if (t < 1f) return;
+        if (++shotAt >= playing.Count) { EndScene(); return; }
+        shotStart = Game.GameTime;
+    }
+
+    void EndScene()
+    {
+        if (cam != null) { World.RenderingCamera = null; cam.Delete(); cam = null; }
+        if (playing == null) return;
+        playing = null;
+        var me = Game.Player.Character;
+        Game.Player.CanControlCharacter = true;
+        if (me != null && me.Exists()) me.IsInvincible = false;
+    }
+
+    static Shot Fly(Vector3 from, Vector3 to, Vector3 look, int ms, string who, string line) { return new Shot { From = from, To = to, Look = look, Ms = ms, Who = who, Line = line }; }
+
+    /// <summary>A slow half circle round a spot, in two shots.</summary>
+    static List<Shot> Orbit(Vector3 at, float r, float h, string who, string line)
+    {
+        var look = at + new Vector3(0, 0, 0.8f);
+        Func<float, Vector3> p = a => at + new Vector3((float)Math.Cos(a) * r, (float)Math.Sin(a) * r, h);
+        return new List<Shot> { Fly(p(0.2f), p(1.4f), look, 4500, who, line), Fly(p(1.4f), p(2.6f), look, 4500, who, "") };
+    }
+
+    /// <summary>Drop in from the sky onto a property, then hold on it.</summary>
+    static List<Shot> LabShots(Lab l, string who, string line)
+    {
+        var look = l.At + new Vector3(0, 0, 1.5f);
+        return new List<Shot>
+        {
+            Fly(l.At + new Vector3(70f, 60f, 45f), l.At + new Vector3(22f, 18f, 9f), look, 4500, "", l.Name.ToUpperInvariant()),
+            Fly(l.At + new Vector3(18f, 14f, 6f), l.At + new Vector3(9f, 4f, 3f), look, 5500, who, line),
+        };
+    }
+
+    List<Shot> RankShots(int r)
+    {
+        if (r == Ranks.Length - 1) return KingpinShots();
+        var shots = Orbit(Game.Player.Character.Position, 6f, 2.2f, "", "RANK UP  ·  " + Ranks[r].ToUpperInvariant());
+        shots[1].Who = "Uncle Ray (phone)";
+        shots[1].Line = RankLines[r];
+        return shots;
+    }
+
+    List<Shot> IntroShots(Lab start)
+    {
+        var city = new Vector3(-75f, -819f, 320f);
+        var look = start.At + new Vector3(0, 0, 2f);
+        var me = Game.Player.Character.Position;
+        return new List<Shot>
+        {
+            Fly(city + new Vector3(300f, 200f, 120f), city + new Vector3(-100f, -150f, 60f), city - new Vector3(0, 0, 250f), 6000, "", "LOS SANTOS"),
+            Fly(start.At + new Vector3(160f, 120f, 90f), start.At + new Vector3(24f, 20f, 10f), look, 6000, "Uncle Ray (phone)", "Kid, it's Ray. I'm out of the game. The house in Strawberry is yours now."),
+            Fly(start.At + new Vector3(14f, 10f, 5f), start.At + new Vector3(8f, 3f, 2.5f), look, 6000, "Uncle Ray (phone)", "There's a grow out back and enough supplies to start. Keep it small. Keep it quiet."),
+            Fly(me + new Vector3(4f, 4f, 2f), me + new Vector3(2.5f, -2f, 1.6f), me + new Vector3(0, 0, 0.7f), 6000, "Uncle Ray (phone)", "Grow it, package it, sell it. Do it right and people notice. That's the problem, and the point."),
+        };
+    }
+
+    List<Shot> KingpinShots()
+    {
+        var city = new Vector3(-75f, -819f, 320f);
+        var me = Game.Player.Character.Position;
+        return new List<Shot>
+        {
+            Fly(city + new Vector3(-400f, -300f, 200f), city + new Vector3(250f, -200f, 150f), city - new Vector3(0, 0, 250f), 7000, "", "KINGPIN"),
+            Fly(city + new Vector3(250f, -200f, 150f), city + new Vector3(300f, 250f, 120f), city - new Vector3(0, 0, 250f), 6000, "Uncle Ray (phone)", "Kingpin. Los Santos runs on your product now."),
+            Fly(me + new Vector3(6f, 6f, 3f), me + new Vector3(3f, -2f, 1.8f), me + new Vector3(0, 0, 0.7f), 6000, "Uncle Ray (phone)", "Just remember how it started. One house in Strawberry."),
+        };
+    }
+
+    void CutsceneMenu()
+    {
+        var me = Game.Player.Character;
+        var list = new List<KeyValuePair<string, Action>>();
+        list.Add(Item("Intro", () => Cutscene("intro", IntroShots(labs.First(l => l.Id == "strawberry")), true)));
+        for (int r = 1; r < Ranks.Length; r++) { int rr = r; list.Add(Item("Rank up: " + Ranks[r], () => Cutscene("rank-" + rr, RankShots(rr), true))); }
+        foreach (var l in labs) { var lab = l; list.Add(Item("Bought: " + l.Name, () => Cutscene("bought-" + lab.Id, LabShots(lab, "Uncle Ray (phone)", "Yours now. Make it work."), true))); }
+        list.Add(Item("First meth", () => Cutscene("first-meth", LabShots(labs.First(l => l.Id == "sandy"), "Uncle Ray (phone)", "That's the real stuff now. Careful who you sell it to."), true)));
+        list.Add(Item("First raid", () => Cutscene("first-raid", LabShots(labs[0], "Uncle Ray (phone)", "The cops hit " + labs[0].Name + ". Lay low."), true)));
+        list.Add(Item("First turf won", () => Cutscene("first-turf", Orbit(me.Position, 9f, 3f, "Uncle Ray (phone)", "Taking a block is easy. Holding it is the job."), true)));
+        Open("CUTSCENES", list);
+    }
+
     // ---------- the look, towards the concept art ----------
 
     /// <summary>The concept art's film grade over GTA V's own lighting: one of GTA V's own film filters, at a
@@ -583,6 +745,7 @@ public class FrankensteinEmpire : Script
         if (g != null && warZone.Length == 0) list.Add(Item("Start a turf war here (" + g.Name + ")", () => BeginWar(zone, g)));
         if (warZone.Length > 0) list.Add(Item("Win this turf war", () => { foreach (var p in warPeds) if (p != null && p.Exists()) p.Kill(); }));
         list.Add(Item("Take every gang's turf", () => { foreach (var x in gangs) foreach (var z in x.Zones) turf.Add(z); Save(); }));
+        list.Add(Item("Cutscenes...", CutsceneMenu));
         list.Add(Item("Clear my turf, dealers and gang feelings", () => { turf.Clear(); dealers.Clear(); foreach (var x in gangs) x.Rep = 0; Save(); }));
         foreach (var l in labs)
         {
@@ -627,6 +790,7 @@ public class FrankensteinEmpire : Script
             foreach (var l in labs) if (l.Rank > before && l.Rank <= Rank) { now.Add(l.Name); }
             Blips();
             Screen.ShowSubtitle("~p~Rank up: " + Ranks[Rank] + "~s~" + (now.Count > 0 ? "  ·  Unlocked: " + string.Join(", ", now.ToArray()) : ""), 8000);
+            for (int r = before + 1; r <= Rank; r++) Cutscene("rank-" + r, RankShots(r));
             Say("rank " + Ranks[Rank] + " (" + why + ")");
         }
     }
@@ -641,6 +805,7 @@ public class FrankensteinEmpire : Script
         start.Supplies = 3;
         quest = 0;
         Screen.ShowSubtitle("Your uncle left you a stash house in Strawberry and a few supplies. Start small.", 9000);
+        Cutscene("intro", IntroShots(start));
         QuestWaypoint();
         Save();
         Say("new story empire");
@@ -728,7 +893,8 @@ public class FrankensteinEmpire : Script
 
     void OnKeyDown(object sender, KeyEventArgs e)
     {
-        if (!on || e.KeyCode != Keys.F5) return;
+        if (on && playing != null && (e.KeyCode == Keys.Enter || e.KeyCode == Keys.Space)) { skipKey = true; return; }
+        if (!on || e.KeyCode != Keys.F5 || playing != null) return;
         if (menuOpen) menuOpen = false; else MainMenu();
     }
 
@@ -814,6 +980,7 @@ public class FrankensteinEmpire : Script
         foreach (var b in rings) if (b != null && b.Exists()) b.Delete();
         Function.Call(Hash.CLEAR_TIMECYCLE_MODIFIER);
         foreach (var p in warPeds) if (p != null && p.Exists()) p.Delete();
+        EndScene();
     }
 
     // ---------- saving: one key=value line each ----------
@@ -827,7 +994,7 @@ public class FrankensteinEmpire : Script
             var lines = new List<string> { "heat=" + heat, "earned=" + earned, "turf=" + string.Join(",", turf.ToArray()),
                                            "dealers=" + string.Join(",", dealers.Select(kv => kv.Key + ":" + kv.Value).ToArray()),
                                            "xp=" + xp, "quest=" + quest, "made=" + madeCount, "packed=" + packedCount, "sold=" + soldCount,
-                                           "wars=" + warsWon, "creativeHeat=" + (creativeHeat ? 1 : 0), "look=" + look };
+                                           "wars=" + warsWon, "creativeHeat=" + (creativeHeat ? 1 : 0), "look=" + look, "seen=" + string.Join(",", seen.ToArray()) };
             foreach (var p in Products) lines.Add("stock." + p + "=" + stock[p]);
             foreach (var l in labs)
             {
@@ -864,6 +1031,7 @@ public class FrankensteinEmpire : Script
                 else if (k == "wars" && int.TryParse(v, out n)) warsWon = n;
                 else if (k == "creativeHeat") creativeHeat = v == "1";
                 else if (k == "look" && int.TryParse(v, out n)) look = n;
+                else if (k == "seen") foreach (var x in v.Split(',')) { if (x.Length > 0) seen.Add(x); }
                 else if (k == "turf") foreach (var z in v.Split(',')) { if (z.Length > 0) turf.Add(z); }
                 else if (k == "dealers") foreach (var d in v.Split(',')) { var b = d.Split(':'); if (b.Length == 2 && int.TryParse(b[1], out n)) dealers[b[0]] = n; }
                 else if (k.StartsWith("stock.") && stock.ContainsKey(k.Substring(6)) && int.TryParse(v, out n)) stock[k.Substring(6)] = n;
