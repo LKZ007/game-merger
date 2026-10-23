@@ -1,4 +1,13 @@
-## Frankenstein 3.39.0
+## Frankenstein 3.40.0
+
+- **Every merge is now checked against one minimum standard: everything the Schedule I merge has.** That means the main menu, loading screen, Profiles, in-game Creative, the item spawner, own weapons with real stats, a crosshair per weapon, own cars, gangs and NPCs, the controller, Save Game and debug logs.
+  - Each merge card has a **Standard x/12** tag. Click it to see the checklist, with an honest note on each line: built by Frankenstein, done by the game itself, partly there, still to come, or not possible in that game.
+  - Frankenstein installs and updates its own mod for each game by itself, so the lines it can build need nothing from you.
+  - **Schedule I:** meets all 12.
+  - **GTA V and Cyberpunk:** some lines are still partly there or to come, like own weapon models, own cars and gangs. GTA V's title screen can't be modded.
+  - **Other games:** they get Frankenstein's own mod later. Until then the checklist says which lines are still to come.
+
+### Also in 3.39.0
 
 - **Save Game in the pause menu.** It sits under the game's own list. Click it, press Y on a controller or Ctrl+S. The game saves the same way it does when you sleep, and "Game saved" shows when it's done.
 - **The Creative hint bar isn't cut off any more.** It's sized to fit its text, and it's hidden while the pause menu is open.
@@ -28,9 +37,3 @@
   - **RPG and Grenade Launcher:** a dotted arc showing where the shot will land.
   - Each gun's spread is set to match its crosshair.
 - Not tested in game yet. Guns you got before this update stay as the base gun.
-
-### Also in 3.37.1
-
-- **Dropping works for weapons too.** Press G or d-pad down to drop what's in your hand. With the inventory open, LB/RB pick a slot first. Frankenstein tries the game's own drop and checks the item really left your hand. The game doesn't let some things (like guns) be dropped, so for those the slot is just emptied: get them back from F6 any time. What happened is written to `UserData\Frankenstein\drop-debug.txt`.
-- **A new Creative world starts empty.** No starter pistol, mags or shells: your hotbar is cleared once when the world starts, and the merge's starter kit is only given in Survival.
-- Not tested in game yet.

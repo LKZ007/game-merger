@@ -16,7 +16,7 @@ import urllib.parse
 import uuid
 import webbrowser
 
-from . import installer, storymode, accounts, devices, achievements, ai, autorecipe, controller, covers, minecraft, modsources, storeinfo, discord, profiles, detect, downloader, gallery, network, nexus, paths, permissions, saves, scan, sharing, updater
+from . import installer, storymode, accounts, devices, achievements, ai, autorecipe, controller, covers, minecraft, modsources, storeinfo, discord, profiles, detect, downloader, gallery, network, nexus, paths, permissions, saves, scan, sharing, updater, standard
 from .version import VERSION
 from .installer import MODE_COPY, MODE_HARDLINK, MODE_INPLACE, Merge, MergeError, find_clashes, preview
 from . import carryover, mergeplan, playas, recipes
@@ -1542,6 +1542,13 @@ class Api:
             raise MergeError("Pick a style to merge in first.")
         return self._plan(r, t)
 
+    def merge_standard(self, merge_id):
+        """This merge against the minimum standard (everything the Schedule I merge has), line by line."""
+        m = Merge.load(merge_id)
+        out = standard.check(m.data.get("recipe_id"))
+        out["game"] = m.data.get("game_name", "")
+        return out
+
     def merge_plan_of(self, merge_id):
         m = Merge.load(merge_id)
         r = self._recipe(m.data.get("recipe_id"))
@@ -2929,6 +2936,7 @@ class Api:
                         "mc_loader": m.data.get("mc_loader"), "mc_version": m.data.get("mc_version"),
                         "story": storymode.depth(self._recipe(m.data.get("recipe_id")))["label"],
                         "creative": True, "adds": len([a for a in m.data.get("adds", []) if a.get("ok")]),
+                        "standard": {k: v for k, v in standard.check(m.data.get("recipe_id")).items() if k != "rows"},
                         "pad": "native" if not self._mapper_wanted(m, self._pad_status(m.data.get("game_name", ""))) else "mapped"})
         return out
 

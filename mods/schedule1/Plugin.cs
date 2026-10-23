@@ -15,7 +15,7 @@ namespace Frankenstein
     {
         /// <summary>The Frankenstein release this mod came with (equal to gamemerger/version.py; a test checks).
         /// Shown on F6's title and in MelonLoader's log, where the app reads it back for the merge's card.</summary>
-        public const string Version = "3.39.0";
+        public const string Version = "3.40.0";
         float _next;
         public static bool MenuAllowed = true;
         public static System.Collections.Generic.List<string> Kit = new System.Collections.Generic.List<string>();

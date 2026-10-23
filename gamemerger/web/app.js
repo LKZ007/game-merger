@@ -1,5 +1,5 @@
 "use strict";
-window.APP_BUILD = "3.39.0";  // must match index.html: a mixed-up install is caught at start
+window.APP_BUILD = "3.40.0";  // must match index.html: a mixed-up install is caught at start
 
 // ---------- talking to the Python side ----------
 const TOKEN = document.querySelector('meta[name="gm-token"]')?.content;
@@ -933,6 +933,14 @@ document.addEventListener("click", (e) => {
   if (a) { e.preventDefault(); call("open_url", a.dataset.ext); }
 });
 
+// the minimum standard (everything the Schedule I merge has), line by line with an honest note
+function standardHtml(r) {
+  const mark = { built: "✓", native: "✓", partial: "◐", planned: "○", "can't": "✕" };
+  const word = { built: "Built by Frankenstein", native: "The game does it itself", partial: "Partly", planned: "Still to come", "can't": "Not possible in this game" };
+  return `<p class="muted">Every merge gets everything the Schedule I merge has. ${esc(r.game)} meets ${r.met} of ${r.total}; Frankenstein builds and updates the lines it can by itself.</p>
+    <ul class="standard">${r.rows.map((x) => `<li class="${x.met ? "good" : ""}"><strong>${mark[x.level] || "○"} ${esc(x.name)}</strong> <span class="tag">${esc(word[x.level] || x.level)}</span><div class="muted small">${esc(x.note || x.what)}</div></li>`).join("")}</ul>`;
+}
+
 // ---------- my merges ----------
 async function loadMerges() {
   const el = $("#view-merges");
@@ -944,7 +952,7 @@ async function loadMerges() {
       <div class="merge-info">
         <div class="merge-name">${esc(m.name)}</div>
         <div class="muted">${m.tagline ? `<em>${esc(m.tagline)}</em> · ` : ""}${esc(m.game)} × ${esc(m.theme)}</div>
-        <div class="row small"><span class="tag">${esc(m.mode_label)}</span><span class="tag">${m.mods.length} installed</span><span class="tag" title="How deep this merge's story goes in this game">${esc(m.story || "")}</span>${m.has_saves ? `<span class="tag">Own saves</span>` : ""}${m.packed?.on ? `<span class="tag good" title="Only the files this merge changed and its saves are kept (${fmtGB(m.packed.kept)}). Play rebuilds the copy from your installed game first: about ${fmtSecs(m.packed.unpack_secs)}${m.packed.measured ? "" : " (estimate)"}.">📦 Packed · ${fmtGB(m.packed.saved)} saved</span>` : ""}${m.offline_lock ? `<span class="tag" title="Starts in offline mode so mods can't reach online play">Online locked</span>` : ""}<button class="tag tag-btn" data-act="pad" title="${m.pad === "native" ? "This game supports controllers itself" : "Frankenstein's key mapper runs while you play. Click to change the buttons."}">🎮 ${m.pad === "native" ? "Controller" : "Controller (mapped)"}</button>${m.playing ? `<span class="tag live">Playing now</span>` : ""}${m.status === "restored" ? `<span class="tag">Mods removed</span>` : ""}${m.originals ? `<span class="tag ${/Verify|put your originals back/.test(m.originals) ? "bad" : ""}" title="${esc(m.originals)}">${/Verify|put your originals back/.test(m.originals) ? "⚠ Originals" : "✓ Originals untouched"}</span>` : ""}${m.save_fix ? `<span class="tag" title="A damaged save was swapped for its last good copy after you played">Save repaired</span>` : ""}</div>
+        <div class="row small"><span class="tag">${esc(m.mode_label)}</span><span class="tag">${m.mods.length} installed</span><span class="tag" title="How deep this merge's story goes in this game">${esc(m.story || "")}</span>${m.has_saves ? `<span class="tag">Own saves</span>` : ""}${m.packed?.on ? `<span class="tag good" title="Only the files this merge changed and its saves are kept (${fmtGB(m.packed.kept)}). Play rebuilds the copy from your installed game first: about ${fmtSecs(m.packed.unpack_secs)}${m.packed.measured ? "" : " (estimate)"}.">📦 Packed · ${fmtGB(m.packed.saved)} saved</span>` : ""}${m.offline_lock ? `<span class="tag" title="Starts in offline mode so mods can't reach online play">Online locked</span>` : ""}${m.standard ? `<button class="tag tag-btn ${m.standard.met === m.standard.total ? "good" : ""}" data-act="standard" title="Frankenstein's minimum standard: everything the Schedule I merge has, checked for this game">${m.standard.met === m.standard.total ? "✓" : "◐"} Standard ${m.standard.met}/${m.standard.total}</button>` : ""}<button class="tag tag-btn" data-act="pad" title="${m.pad === "native" ? "This game supports controllers itself" : "Frankenstein's key mapper runs while you play. Click to change the buttons."}">🎮 ${m.pad === "native" ? "Controller" : "Controller (mapped)"}</button>${m.playing ? `<span class="tag live">Playing now</span>` : ""}${m.status === "restored" ? `<span class="tag">Mods removed</span>` : ""}${m.originals ? `<span class="tag ${/Verify|put your originals back/.test(m.originals) ? "bad" : ""}" title="${esc(m.originals)}">${/Verify|put your originals back/.test(m.originals) ? "⚠ Originals" : "✓ Originals untouched"}</span>` : ""}${m.save_fix ? `<span class="tag" title="A damaged save was swapped for its last good copy after you played">Save repaired</span>` : ""}</div>
         <div class="muted small" title="${esc(m.folder)}">${esc(m.folder)}</div>
       </div>
       <div class="merge-actions">
@@ -1427,6 +1435,7 @@ async function mergeAction(id, act) {
       loadPlan(() => call("merge_plan_of", id), $("#planM"));
       await done;
     }
+    else if (act === "standard") await modal("Minimum standard: " + m.name, standardHtml(await call("merge_standard", id)));
     else if (act === "adds") await modal("What " + m.name + " adds", addsHtml(await call("merge_adds", id)));
     else if (act === "autofill") {
       const r = await followJob(await call("merge_autofill", id), "Filling in " + m.name);

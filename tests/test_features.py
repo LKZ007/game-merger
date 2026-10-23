@@ -304,6 +304,27 @@ class FeatureChecklist(unittest.TestCase):
         self.assertNotIn('merge_id + "~creative" if creative', api, "one set of saves")
         self.assertIn("_members", read(ROOT, "mods", "schedule1", "Rt.cs"))  # reflection cached: less lag
 
+    def test_340_minimum_standard_for_every_merge(self):
+        from gamemerger import standard
+        from gamemerger.api import BUILTIN, Api
+        keys = [k for k, _n, _w in standard.STANDARD]
+        for want in ("menu", "loading", "profiles", "creative", "spawner", "weapons", "crosshairs", "cars", "npcs", "controller", "save", "debug"):
+            self.assertIn(want, keys)                                   # everything the Schedule I merge has
+        for host in list(standard.HOSTS) + [None]:
+            r = standard.check(host)
+            self.assertEqual(r["total"], len(keys))
+            for row in r["rows"]:
+                self.assertIn(row["level"], standard.LEVELS)
+                if not row["met"]:
+                    self.assertTrue(row["note"], (host, row["id"]))     # an honest note wherever it falls short
+        self.assertEqual(standard.check("schedule1")["met"], len(keys))  # the reference meets every line
+        for host in BUILTIN:
+            self.assertIn(host, standard.HOSTS)                         # every Host with Frankenstein's own mod is rated
+        self.assertTrue(hasattr(Api, "merge_standard"))
+        js = read(PKG, "web", "app.js")
+        self.assertIn('data-act="standard"', js)                        # the checklist is on the merge card
+        self.assertIn("function standardHtml", js)
+
     def test_339_save_button_hint_bar_car_body_hidden(self):
         dll = open(os.path.join(PKG, "mods", "schedule1", "Frankenstein.dll"), "rb").read()
         for word in ("Save Game", "Game saved", "garage-debug.txt"):
