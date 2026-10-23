@@ -19,7 +19,7 @@ import webbrowser
 from . import installer, storymode, accounts, devices, achievements, ai, autorecipe, controller, covers, minecraft, modsources, storeinfo, discord, profiles, detect, downloader, gallery, network, nexus, paths, permissions, saves, scan, sharing, updater, standard
 from .version import VERSION
 from .installer import MODE_COPY, MODE_HARDLINK, MODE_INPLACE, Merge, MergeError, find_clashes, preview
-from . import carryover, mergeplan, playas, recipes
+from . import carryover, eldenring, mergeplan, playas, recipes
 from .recipes import load_recipes, resource_dir
 
 SHARE_TYPES = ("Shared merges (*.gmerge)", "All files (*.*)")
@@ -96,6 +96,14 @@ BUILTIN = {
                             "skipping the tutorial), Multiplayer, Settings, Profiles (a card per save) and Quit; each save keeps its own mode. While you play: F8 switches this save's mode, F6 (or Back + Y) for "
                             "every item, F9 for the gangs, F10 for who's who on the streets (Hood Warfare merges), T to throw a grenade. "
                             "Controller: hold View for a wheel with all of it, d-pad down drops what's in your hand."},
+    "eldenring": {"label": "Frankenstein's Elden Ring mod", "dest": eldenring.MOD_DIR, "needs": ["modengine2", "practicetool"],
+                  "settings": eldenring.MOD_DIR + "/settings.json",
+                  "what": "House kits (wand, robes, stats and Hogwarts spells as sorceries) built into the merge copy's own "
+                          "regulation on every Play, offline through Mod Engine 2, plus Creative tools with an item spawner.",
+                  "ingame": "Make a new character and pick your house's class (Hero = Gryffindor, Prisoner = Slytherin, "
+                            "Astrologer = Ravenclaw, Confessor = Hufflepuff), or keep playing your own characters. Creative "
+                            "tools: 0 opens the menu, both sticks open the controller wheel; Ctrl+U item spawner, 1 no damage, "
+                            "3 unlimited spells, F2 fly, F3 Torrent flies like a broom, 8 speed, 9 runes."},
     "cyberpunk2077": {"label": "Frankenstein sandbox menu", "dest": "bin/x64/plugins/cyber_engine_tweaks/mods",
                       "settings": "bin/x64/plugins/cyber_engine_tweaks/mods/frankenstein_items/settings.json",
                       "bridge": "bin/x64/plugins/cyber_engine_tweaks/mods/frankenstein_items/commands.json",
@@ -549,7 +557,8 @@ class Api:
     # files every install of Frankenstein must have (the app's own pages and its mods for each game)
     REQUIRED = ["web/index.html", "web/app.js", "web/app.css", "recipes/cyberpunk2077.json", "recipes/schedule1.json",
                 "recipes/gta5.json", "mods/schedule1/Frankenstein.dll", "mods/cyberpunk2077/frankenstein_items/init.lua",
-                "mods/gta5/Frankenstein.3.cs", "mods/gta5/FrankensteinMenu.3.cs"]
+                "mods/gta5/Frankenstein.3.cs", "mods/gta5/FrankensteinMenu.3.cs",
+                "recipes/eldenring.json", "mods/eldenring/README.txt"]
 
     def _self_check(self):
         """Run at every start (in the background): check Frankenstein's own files and every merge, and repair what
@@ -609,6 +618,9 @@ class Api:
         if os.path.isfile(rec):
             shutil.copy2(rec, backup)
         out = []
+        if self._adopt_builtin(m):
+            r = self._recipe(m.data.get("recipe_id"))
+            out.append("moved onto Frankenstein's own %s recipe" % (r.name if r else "game"))
         if m.data.get("upgraded", 1) < self.UPGRADE and self._upgrade(m):
             out.append("brought up to this version's merge standard")
         b = BUILTIN.get(r.id if r else "")
@@ -648,6 +660,33 @@ class Api:
         if not out and os.path.isfile(backup):
             os.remove(backup)
         return out
+
+    def _adopt_builtin(self, m):
+        """A merge made before its Host game had a recipe of its own (Elden Ring merges from 3.41 and older) moves onto it,
+        in place: the same game copy and saves, a backup of its record first, and the new recipe's parts in What it adds.
+        Mods it installed stay installed."""
+        rid = m.data.get("recipe_id") or ""
+        if not rid.startswith("auto-") or not os.path.isdir(m.target_path or ""):
+            return False
+        r = next((x for x in self._hand if x.id in BUILTIN and x.id == "eldenring" and x.matches_folder(m.target_path)), None)
+        if not r:
+            return False
+        rec = os.path.join(Merge.record_dir(m.id), "manifest.json")
+        if os.path.isfile(rec):
+            shutil.copy2(rec, os.path.join(Merge.record_dir(m.id), "manifest.before-%s.bak.json" % r.id))
+        source = m.data.get("source_name") or (m.data.get("theme_name") or "").split(" style")[0]
+        t = next((t for t in r.themes if any(x in source.lower() for x in t.source_match)), None)
+        m.data.update(recipe_id=r.id, adopted_from=rid)
+        try:
+            saves.create_slot(m.id, r)  # its own saves, starting as a copy of your characters (originals untouched)
+        except OSError:
+            pass
+        if t:
+            m.data.update(theme_id=t.id, theme_name=t.name)
+            keep = [a for a in m.data.get("adds", []) if a.get("ok") and a.get("source") not in ("Built in", "Stand-in")]
+            m.data["adds"] = [self._standin_add(r, sl, "", []) for sl in t.slots] + keep
+        m.save()
+        return True
 
     def self_check_result(self, run=False):
         """The last self-check (or a new one with run=True, from Settings)."""
@@ -2201,7 +2240,12 @@ class Api:
         have = {i["label"] for i in m.data.get("installs", [])}
         loader, version = m.data.get("mc_loader"), m.data.get("mc_version")
         for slot in slots:
-            if slot.name in skip_slots or not getattr(slot, "search", ""):
+            if slot.name in skip_slots:
+                continue
+            if not getattr(slot, "search", ""):
+                if getattr(slot, "builtin", ""):  # Frankenstein's own mod does this part: nothing to download
+                    adds.append(self._standin_add(r, slot, prefix, []))
+                    job.write("✔ %s: %s" % (slot.name, adds[-1]["mod"]))
                 continue
             job.write("Looking for %s …" % slot.name.lower())
             gh = getattr(slot, "github", "")
@@ -2401,8 +2445,10 @@ class Api:
         b = BUILTIN.get(r.id if r else "", {})
         if not b.get("bridge"):
             return {"available": False, "items": [], "live": False,
-                    "note": "Frankenstein doesn't have its own mod for this game yet, so the Spawner can't reach it. "
-                            "Use the game's sandbox tools in Creative instead."}
+                    "note": ("Elden Ring's item spawner is inside the game: play Creative, then Ctrl+U (or the controller "
+                             "wheel: press both sticks)." if r and r.id == "eldenring" else
+                             "Frankenstein doesn't have its own mod for this game yet, so the Spawner can't reach it. "
+                             "Use the game's sandbox tools in Creative instead.")}
         items = []
         if r.id == "gta5":
             items = [{"kind": k, "id": i, "name": n, "cat": c} for k, i, n, c in self.GTA_CATALOG]
@@ -2492,6 +2538,14 @@ class Api:
                      "carry": carryover.settings(r.id, m.data.get("carry"))}
         if r.id == "schedule1":
             extra_all.update(self._schedule1_extras(m, r, source))
+        if r.id == "eldenring":
+            try:
+                got = eldenring.build(m.target_path, houses=eldenring.is_hogwarts(source) or bool(m.data.get("er_kits")))
+            except Exception as e:
+                got = {"ok": False, "error": str(e)[:300]}
+            m.data["er_build"] = dict(got, at=time.time())
+            m.save()
+            extra_all.update(er=got, spellbook=eldenring.spellbook(), houses=eldenring.houses_text())
         kit = KITS.get(m.data.get("theme_id"))
         if m.data.get("story_kit"):
             kit = {"name": "%s starter kit" % (m.data.get("source_name") or m.name), "items": m.data["story_kit"]}
@@ -3109,7 +3163,13 @@ class Api:
         # modded copies start offline-only where the game supports it, so mods never reach online modes;
         # creative mode always does
         args = list(r.launch_args) if r and (m.mode != MODE_INPLACE or creative) else []
-        subprocess.Popen([exe] + args, cwd=os.path.dirname(exe))
+        cmd = eldenring.launch_cmd(m.target_path) if r and r.id == "eldenring" else None
+        if cmd:  # Mod Engine 2 starts the copy's eldenring.exe offline with Frankenstein's mod loaded
+            subprocess.Popen(cmd, cwd=os.path.dirname(cmd[0]))
+            if creative:
+                eldenring.start_tools_when_ready(m.target_path, saves.running)
+        else:
+            subprocess.Popen([exe] + args, cwd=os.path.dirname(exe))
         self._discord_playing(m, r.processes or [os.path.basename(exe)])
         self._start_mapper(m, r.processes or [os.path.basename(exe)])
         return True
@@ -3214,9 +3274,15 @@ class Api:
         if creative:
             tips.insert(0, "Creative uses this merge's saves too, and it always starts offline where the game allows it.")
         tips.append("If it crashes, press Fix crash in My merges.")
+        trying = []
+        if r and r.id == "eldenring" and eldenring.is_hogwarts(m.data.get("source_name") or m.data.get("theme_name", "")):
+            trying = [eldenring.lookalike(m.data.get("carry"))] + eldenring.houses_text() + ["Spellbook: " + "; ".join(eldenring.spellbook())]
+            if (m.data.get("er_build") or {}).get("error"):
+                tips.insert(0, "House kits weren't built last time (%s), so the classes are Elden Ring's own. "
+                               "frankenstein-debug.txt in the merge's frankenstein folder has the details." % m.data["er_build"]["error"][:120])
         return {"headline": "%s: %s with %s style%s" % (m.name, m.data.get("game_name", ""), m.data.get("source_name") or m.data.get("theme_name", ""),
                                                          " · Creative" if creative else ""),
-                "tagline": m.data.get("tagline", ""), "new": pretty[:8], "try": [], "keys": keys, "quest": quest, "tips": tips,
+                "tagline": m.data.get("tagline", ""), "new": pretty[:8], "try": trying, "keys": keys, "quest": quest, "tips": tips,
                 "mods": mods}
 
     def merge_rundown(self, merge_id, creative=False):

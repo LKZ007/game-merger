@@ -47,6 +47,17 @@ CAN = {
         "loading": ("built", "Frankenstein shows a merged title card when the world loads, and its panel on the main menu."),
         "menu": ("built", "Frankenstein's panel sits on Schedule I's main menu, under Continue and New game."),
     },
+    "eldenring": {
+        "lighting": ("stand-in", "Elden Ring's own weather and time of day; sit at a Site of Grace to pass time to night."),
+        "zone": ("can't", "Elden Ring's maps are packed in its encrypted archives, so Frankenstein can't build a zone in them."),
+        "areas": ("stand-in", "The Academy of Raya Lucaria stands in for the school; Liurnia and Caelid for the Forbidden Forest and the wilds."),
+        "terrain": ("mod", "Texture and map mods made for Elden Ring (one-click picks)."),
+        "modes": ("built", "Duelling and Creative come from Frankenstein's house kits and Creative tools."),
+        "hud": ("can't", "Elden Ring's HUD is packed in its archives; only a HUD mod can change it."),
+        "hud_replace": ("mod", "A HUD mod made for Elden Ring (one-click picks)."),
+        "loading": ("stand-in", "Frankenstein shows its merged loading screen while the game starts."),
+        "menu": ("stand-in", "The merge's options stay in Frankenstein's launcher; the house pick is Elden Ring's own class pick."),
+    },
     "gta5": {
         "lighting": ("built", "Frankenstein's GTA V script sets the weather and time to the Extension's look."),
         "zone": ("built", "Frankenstein's GTA V script builds the zone where you stand, from GTA V's own props and cars (F10 menu)."),
@@ -86,6 +97,21 @@ SHOWCASE = {
         "hud": "Forza-style speedometer: big speed, a speed bar, event name, timer, position and drift score",
         "loading": "Merged title and festival loading screen while Cyberpunk starts",
         "items": "Forza garage: the real Porsche 911 Turbo and Cyberpunk's fastest cars, one click into your garage; tuning for every car",
+    },
+    ("eldenring", "hogwarts"): {
+        "zone": "No new zone: the Academy of Raya Lucaria, a school of sorcerers, is the castle",
+        "areas": ["The Academy of Raya Lucaria is the school, with its own sorcerers as rival students",
+                  "Liurnia's lakes and woods are the Forbidden Forest and the Black Lake",
+                  "Caelid's rot and Limgrave's ruins are where the creatures roam"],
+        "lighting": "Elden Ring's own nights and mists",
+        "terrain": "The Lands Between stay Elden Ring's own",
+        "modes": ["House pick at character creation: Gryffindor, Slytherin, Ravenclaw or Hufflepuff, each with robes, stats and a house spell",
+                  "Duelling with the Hogwarts spellbook: Stupefy, Protego, Expelliarmus, Depulso, Incendio, Accio, Glacius, Bombarda, Lumos",
+                  "Creative: item spawner, fly, a flying Torrent as the broom, no damage and unlimited spells"],
+        "hud": "Elden Ring's own HUD",
+        "loading": "A merged Elden Ring x Hogwarts Legacy loading screen while the game starts",
+        "items": "A wand (the Astrologer's Staff) with nine Hogwarts spells as sorceries, house robes from Elden Ring's own sets, "
+                 "and every item from the Creative item spawner",
     },
     ("schedule1", "hoodwarfare"): {
         "zone": "The Block: a Hood Warfare street corner built from Schedule I's own props (dumpsters, fences, cars, crates) "

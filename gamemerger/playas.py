@@ -17,6 +17,7 @@ STYLES = [
     (r"stick fight|stickman", "stick", "a Stick Fight fighter", "light and quick, goes flying when hit"),
     (r"\bdc\b|batman|superman|injustice|justice league|arkham|marvel|spider-?man|avengers|x-men|hero",
      "superhero", "a superhero", "super jump, fast sprint, hard to hurt"),
+    (r"hogwarts|harry potter|wizarding", "wizard", "a young witch or wizard", "casts spells from a wand, duels, flies a broom"),
     (r"elden ring|dark souls|souls|skyrim|witcher|for honor|chivalry|knight|mordhau",
      "knight", "an armoured knight", "heavy, tough, slow swagger"),
     (r"call of duty|battlefield|halo|rainbow six|counter-?strike|arma|squad|ready or not|helldivers",
@@ -37,6 +38,9 @@ HOSTS = {
     "cyberpunk2077": {"how": "Frankenstein's sandbox menu (press ~, This merge tab): plays as %s with the moves it can "
                              "give V: %s. V's body stays V's unless a character mod is added.",
                       "close": "stand-in: V keeps their body, the moves and name change"},
+    "eldenring": {"how": "Frankenstein's Elden Ring mod: make a new character, pick the class for your house and the creator for "
+                         "%s's look (a lookalike, Elden Ring's own creator); they start with the wand, robes and spells. Moves: %s.",
+                  "close": "lookalike: Elden Ring's character creator with the house kit, not the exact face"},
     "schedule1": {"how": "Frankenstein's Schedule I mod shows who you play as (%s) on screen, and the story treats you "
                          "as them. Their moves (%s) need a character mod.",
                   "close": "stand-in: name and story only, the body stays yours"},
@@ -97,11 +101,16 @@ def host_text(recipe_id, source_name):
     key, who, moves = style(source_name)
     if recipe_id == "gta5":
         return h["how"] % (GTA_LOOK.get(key, GTA_LOOK[""]), moves)
+    if recipe_id == "eldenring" and key != "wizard":
+        return ""  # Frankenstein's Elden Ring mod only has the house kits to give
+
     return h["how"] % (who, moves)
 
 
 def closeness(recipe_id, source_name):
     h = HOSTS.get(recipe_id)
+    if recipe_id == "eldenring" and source_name and style(source_name)[0] != "wizard":
+        h = None
     return h["close"] if h else "only with a character mod (picks below); otherwise a stand-in in the story"
 
 

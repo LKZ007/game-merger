@@ -105,7 +105,7 @@ class FeatureChecklist(unittest.TestCase):
         from gamemerger.api import Api, BUILTIN
         for f in BUNDLED + Api.REQUIRED:
             self.assertTrue(os.path.isfile(os.path.join(PKG, *f.split("/"))), f)
-        self.assertEqual(set(BUILTIN), {"schedule1", "cyberpunk2077", "gta5"})
+        self.assertEqual(set(BUILTIN), {"schedule1", "cyberpunk2077", "gta5", "eldenring"})
         lua = read(PKG, *BUNDLED[1].split("/"))
         self.assertEqual([x for x in LUA if x not in lua], [])
 
@@ -334,6 +334,26 @@ class FeatureChecklist(unittest.TestCase):
         self.assertIn("Pad.Pressed & Pad.A", ch)                   # on a controller
         self.assertIn('s.Mode != "creative"', ch)                  # characters come from story saves
         self.assertNotIn("File.Write", ch.replace("File.WriteAllLines(Path.Combine(dir, \"character-debug.txt\")", ""))  # story saves are only read
+
+    def test_342_elden_ring_host_with_hogwarts_kits(self):
+        from gamemerger import eldenring, recipes, standard
+        from gamemerger.api import BUILTIN, Api
+        r = next(x for x in recipes.load_recipes() if x.id == "eldenring")
+        self.assertIn("1245620", r.steam_appids)
+        self.assertEqual(set(BUILTIN["eldenring"]["needs"]), set(r.frameworks))      # Mod Engine 2 and the Creative tools
+        t = r.theme("hogwarts")
+        self.assertTrue(t.slots[0].hero and t.slots[0].builtin)                      # the wand and spells first
+        self.assertTrue(all(s.builtin for s in t.slots))                            # no part left empty
+        self.assertEqual({h["house"] for h in eldenring.HOUSES}, {"Gryffindor", "Slytherin", "Ravenclaw", "Hufflepuff"})
+        self.assertEqual(len(eldenring.SPELLS), 9)
+        self.assertIn("eldenring", standard.HOSTS)
+        self.assertTrue(hasattr(Api, "_adopt_builtin"))                              # older Elden Ring merges move onto it
+        api = read(PKG, "api.py")
+        self.assertIn("eldenring.launch_cmd", api)                                   # Play goes through Mod Engine 2
+        self.assertIn("start_tools_when_ready", api)                                 # Creative tools in Creative
+        self.assertIn("eldenring.build(", api)                                       # house kits on every Play
+        self.assertIn("hogwartslegacy", read(PKG, "carryover.py"))                   # the Hogwarts Legacy character is read
+        self.assertIn('radial_menu_open = "l3+r3"', read(PKG, "eldenring.py"))       # one controller wheel
 
     def test_340_minimum_standard_for_every_merge(self):
         from gamemerger import standard

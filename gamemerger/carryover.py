@@ -18,9 +18,11 @@ import re
 SAVES = {
     "schedule1": [r"%USERPROFILE%\AppData\LocalLow\TVGS\Schedule I\Saves\*\SaveGame_*"],
     "cyberpunk2077": [r"%USERPROFILE%\Saved Games\CD Projekt Red\Cyberpunk 2077\*"],
+    "hogwartslegacy": [r"%LOCALAPPDATA%\Hogwarts Legacy\Saved\SaveGames\*"],
 }
 # names the Extension game goes by, to find its save rules
-MATCH = [(r"schedule", "schedule1"), (r"cyberpunk", "cyberpunk2077")]
+MATCH = [(r"schedule", "schedule1"), (r"cyberpunk", "cyberpunk2077"), (r"hogwarts", "hogwartslegacy")]
+HOUSES = ("Gryffindor", "Hufflepuff", "Ravenclaw", "Slytherin")
 
 # the abilities a character can bring, and what they become in each Host: (power id, how it's done there, level)
 # power ids are what Frankenstein's own mod for the Host understands.
@@ -28,7 +30,8 @@ POWERS = {
     "slow_time": {"name": "Slow time (Sandevistan, Kerenzikov, bullet time)",
                   "gta5": ("slowmo", "F6 slows time around you", "built"),
                   "cyberpunk2077": ("slowmo", "Slow time button (press ~, This merge > Your character)", "built"),
-                  "schedule1": ("", "Not possible in Schedule I yet; it's on your card", "can't")},
+                  "schedule1": ("", "Not possible in Schedule I yet; it's on your card", "can't"),
+                  "eldenring": ("", "Elden Ring has no slow time; it's on your card", "can't")},
     "tough": {"name": "Tough (armour, Body, Vigor, cyberware plating)",
               "gta5": ("tough", "Double health and full armour that refills", "built"),
               "cyberpunk2077": ("tough", "Hard to hurt (god mode while it's on)", "built"),
@@ -52,11 +55,13 @@ POWERS = {
     "magic": {"name": "Magic (spells, incantations, sorceries)",
               "gta5": ("magic", "Fire punches and a fire trail (spells as GTA V effects)", "built"),
               "cyberpunk2077": ("", "Quickhacks stand in for spells; it's on your card", "stand-in"),
+              "eldenring": ("magic", "Your house's wand and the Hogwarts spellbook as sorceries (new characters), or the item spawner", "built"),
               "schedule1": ("", "Not possible in Schedule I yet; it's on your card", "can't")},
     "rich": {"name": "Money (cash, eddies, runes, bank)",
              "gta5": ("money", "Your money, as GTA V cash (once)", "built"),
              "cyberpunk2077": ("money", "Your money, as eddies (once)", "built"),
-             "schedule1": ("money", "Your money, as cash (once)", "built")},
+             "schedule1": ("money", "Your money, as cash (once)", "built"),
+             "eldenring": ("", "Runes from the Creative tools (key 9 gives 100,000)", "stand-in")},
 }
 
 
@@ -108,6 +113,68 @@ def _walk_json(folder, limit=400):
     return out
 
 
+def hogwarts_save(folder):
+    """Name, house and level from a Hogwarts Legacy save: the save holds a SQLite database, read from a temporary copy.
+    {} when it can't be read. The save itself is only ever read."""
+    import sqlite3
+    import struct
+    import tempfile
+    saves = sorted(glob.glob(os.path.join(folder, "**", "*.sav"), recursive=True), key=os.path.getmtime)
+    if not saves:
+        return {}
+    try:
+        with open(saves[-1], "rb") as f:
+            raw = f.read()
+    except OSError:
+        return {}
+    at = raw.find(b"SQLite format 3\0")
+    if at < 4:
+        return {}
+    size, = struct.unpack_from("<i", raw, at - 4)
+    db = raw[at:at + size] if 0 < size <= len(raw) - at else raw[at:]
+    out = {}
+    fd, tmp = tempfile.mkstemp(suffix=".db")
+    try:
+        with os.fdopen(fd, "wb") as f:
+            f.write(db)
+        con = sqlite3.connect(tmp)
+        try:
+            tables = [t for (t,) in con.execute("select name from sqlite_master where type='table'")]
+            for t in tables:
+                try:
+                    cols = [c[1] for c in con.execute('pragma table_info("%s")' % t.replace('"', ''))]
+                    rows = con.execute('select * from "%s" limit 5000' % t.replace('"', '')).fetchall()
+                except sqlite3.Error:
+                    continue
+                for row in rows:
+                    vals = [str(v) for v in row]
+                    for i, v in enumerate(vals):
+                        key = {"playerfirstname": "first", "playerlastname": "last", "houseid": "house",
+                               "playerhouseid": "house", "playerlevel": "level", "experiencelevel": "level"}.get(v.lower())
+                        if key and key not in out:
+                            pick = [x for j, x in enumerate(vals) if j > i and x and x != v and x.lower() != "none"]
+                            if "datavalue" in [c.lower() for c in cols]:
+                                pick = [vals[[c.lower() for c in cols].index("datavalue")]] + pick
+                            if pick:
+                                out[key] = pick[0]
+                    if "house" not in out:
+                        for v in vals:
+                            if v in HOUSES:
+                                out["house"] = v
+        finally:
+            con.close()
+    except sqlite3.Error:
+        pass
+    finally:
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+    if out.get("house") and out["house"] not in HOUSES:
+        out["house"] = next((h for h in HOUSES if h.lower() in out["house"].lower()), "")
+    return out
+
+
 def _num(v):
     try:
         return float(v)
@@ -151,6 +218,15 @@ def read(source_name, roots=None):
                        "are inside the packed save, so tick those by hand.")
         top = {"Body": "tough", "Reflexes": "agile", "Technical": "strength", "Intelligence": "hacker", "Cool": "stealth"}
         card["abilities"] = [top[k] for k, v in sorted(stats.items(), key=lambda x: -x[1]) if k in top and v >= 6][:3]
+    elif gid == "hogwartslegacy":
+        hl = hogwarts_save(folder)
+        card["name"] = " ".join(x for x in (hl.get("first"), hl.get("last")) if x)
+        card["house"] = hl.get("house", "")
+        card["level"] = int(_num(hl.get("level")) or 0)
+        card["read"] = [k for k in ("name", "house", "level") if card.get(k)]
+        card["how"] = ("Read from your Hogwarts Legacy save: %s." % ", ".join(card["read"]) if card["read"] else
+                       "Your Hogwarts Legacy save was found but its character couldn't be read: pick your house by hand.")
+        card["abilities"] = ["magic"] + (["tough"] if card["level"] >= 20 else [])
     return card
 
 
@@ -174,4 +250,4 @@ def settings(host_id, card):
     ps = powers_for(host_id, card.get("abilities", []))
     return {"id": str(card.get("saved", 0)), "name": card.get("name", ""), "from": card.get("from", ""),
             "money": int(card.get("money") or 0), "level": int(card.get("level") or 0),
-            "powers": [p["power"] for p in ps if p["power"]], "card": ["%s: %s" % (p["name"].split(" (")[0], p["how"]) for p in ps]}
+            "powers": [p["power"] for p in ps if p["power"]], "house": card.get("house", ""), "card": ["%s: %s" % (p["name"].split(" (")[0], p["how"]) for p in ps]}
