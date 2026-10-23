@@ -304,6 +304,28 @@ class FeatureChecklist(unittest.TestCase):
         self.assertNotIn('merge_id + "~creative" if creative', api, "one set of saves")
         self.assertIn("_members", read(ROOT, "mods", "schedule1", "Rt.cs"))  # reflection cached: less lag
 
+    def test_341_merge_terminal(self):
+        import tempfile
+        from gamemerger import installer
+        from gamemerger.api import Api, Job, TERMINAL_PAGE
+        with tempfile.TemporaryDirectory() as d:
+            src, dst = os.path.join(d, "game"), os.path.join(d, "merge")
+            os.makedirs(os.path.join(src, "data"))
+            for f in ("game.exe", os.path.join("data", "a.pak")):
+                with open(os.path.join(src, f), "wb") as fh:
+                    fh.write(b"x" * 2048)
+            j = Job()
+            installer.clone_tree(src, dst, hardlink=False, trace=j.step)
+            self.assertEqual(j.traced, 2)                               # every file is shown as it's copied
+            self.assertTrue(any("a.pak" in t and t.startswith("copy") for t in j.trace))
+        j = Job()
+        for i in range(Job.TRACE_KEEP + 50):
+            j.write("line %d" % i)
+        self.assertEqual(len(j.trace), Job.TRACE_KEEP)                  # the window's buffer stays small
+        self.assertTrue(hasattr(Api, "job_terminal"))
+        self.assertIn("function feed(", TERMINAL_PAGE)
+        self.assertIn('call("job_terminal"', read(PKG, "web", "app.js"))  # merges open it
+
     def test_341_creative_character(self):
         dll = open(os.path.join(PKG, "mods", "schedule1", "Frankenstein.dll"), "rb").read()
         for word in ("Quick start", "Make a new character", "character-debug.txt", "CharacterCreator", "FromJsonOverwrite"):

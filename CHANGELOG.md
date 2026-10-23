@@ -3,6 +3,11 @@
 Every release, newest first. Downloads are on the [releases page](https://github.com/LKZ007/game-merger/releases).
 The app was called Game Merger before 3.8.0.
 
+## v3.41.1 (2026-10-23)
+- **Merge terminal.** While a merge is made, filled in, upgraded or unpacked, a small terminal window opens beside Frankenstein and shows the game being rebuilt live: each file copied or linked with its size, each mod installed and each part filled.
+  - It's black and Frankenstein purple, with a progress bar, and closes itself a few seconds after the merge finishes.
+  - The usual merge dialog stays as it is.
+
 ## v3.41.0 (2026-10-23)
 - **Your Creative character.** When the game's character creator opens in a new Creative world, Frankenstein asks first:
   - **Quick start:** skips character creation and uses your latest story character's look, or the game's default if you have none.

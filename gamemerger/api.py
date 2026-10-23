@@ -34,14 +34,51 @@ def default_destination(base_path):
 
 
 class Job:
+    TRACE_KEEP = 600  # the terminal window shows the latest lines; older ones are dropped
+
     def __init__(self):
         self.id = uuid.uuid4().hex[:10]
         self.log, self.progress = [], None
         self.done, self.error, self.result = False, None, None
+        self.trace, self.traced = [], 0  # every step in detail (each file copied), for the merge terminal
 
     def write(self, text):
         self.log.append(text)
+        self.step("» " + text)
 
+    def step(self, line):
+        self.trace.append(line)
+        self.traced += 1
+        if len(self.trace) > self.TRACE_KEEP:
+            del self.trace[:len(self.trace) - self.TRACE_KEEP]
+
+
+# The merge terminal: a hacker-style window that streams the rebuild, black and Frankenstein purple.
+TERMINAL_PAGE = """<!doctype html><meta charset=utf-8><title>Frankenstein terminal</title>
+<style>
+html,body{margin:0;height:100%;background:#07040d;color:#c9b8ff;font:12.5px/1.45 Consolas,'Cascadia Mono',monospace;overflow:hidden}
+body:after{content:'';position:fixed;inset:0;pointer-events:none;background:repeating-linear-gradient(0deg,rgba(0,0,0,.18) 0 1px,transparent 1px 3px)}
+#top{padding:8px 12px;border-bottom:1px solid #2a1846;color:#a78bfa;letter-spacing:1px;text-transform:uppercase;font-size:11px;display:flex;gap:10px;align-items:center}
+#top b{color:#e9e2ff}#pct{margin-left:auto;color:#86efac}
+#bar{height:3px;background:#1a1030}#bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,#7c3aed,#c084fc);box-shadow:0 0 8px #a855f7}
+#out{position:absolute;top:36px;bottom:0;left:0;right:0;overflow:auto;padding:8px 12px;white-space:pre-wrap;word-break:break-all}
+.f{color:#7d6aa8}.l{color:#d8ccff}.m{color:#86efac}.e{color:#fda4af}
+#cur{display:inline-block;width:8px;height:14px;background:#c084fc;vertical-align:-2px;animation:b 1s steps(1) infinite}@keyframes b{50%{opacity:0}}
+</style><div id=top><span>&#9670; Frankenstein</span><b>{TITLE}</b><span id=pct></span></div><div id=bar><i></i></div>
+<div id=out><span id=cur></span></div>
+<script>
+const out=document.getElementById('out'),cur=document.getElementById('cur');
+function cls(t){return t.startsWith('» ')?(/fail|couldn|error|✖/i.test(t)?'e':/install|built|mod|added|filled/i.test(t)?'m':'l'):'f'}
+function feed(lines,p,done){
+  const frag=document.createDocumentFragment();
+  for(const t of lines){const d=document.createElement('div');d.className=cls(t);d.textContent=(t.startsWith('» ')?'> '+t.slice(2):'  '+t);frag.appendChild(d)}
+  out.insertBefore(frag,cur);
+  while(out.childNodes.length>900)out.removeChild(out.firstChild);
+  if(p&&p[1]){const v=100*p[0]/p[1];document.querySelector('#bar i').style.width=v.toFixed(1)+'%';document.getElementById('pct').textContent=v.toFixed(0)+'% · '+p[0]+'/'+p[1]}
+  if(done){const d=document.createElement('div');d.className='m';d.textContent='> done. this window closes by itself.';out.insertBefore(d,cur);document.getElementById('pct').textContent='100%';document.querySelector('#bar i').style.width='100%'}
+  out.scrollTop=out.scrollHeight;
+}
+</script>"""
 
 # Frankenstein's own mod per game: where it goes in the game folder, and where its settings file is.
 # "bridge": the file Frankenstein's Spawner (in the app) writes requests to while you play.
@@ -2582,7 +2619,7 @@ class Api:
             base, mode = paths.sub("mc-empty"), MODE_COPY
         merge = Merge.create(r, t, base, destination, mode, name,
                              appid=g.appid if g.source == "Steam" else "", log=job.write,
-                             progress=lambda d, n: setattr(job, "progress", [d, n]))
+                             progress=lambda d, n: setattr(job, "progress", [d, n]), trace=job.step)
         merge.data["cover_appid"] = covers.appid_for(g) or ""
         merge.data["source_appid"] = t.source_appid
         merge.data["source_name"] = t.from_game.split(" /")[0]
@@ -2902,6 +2939,48 @@ class Api:
             finally:
                 shutil.rmtree(folder, ignore_errors=True)
         return self._run(work)
+
+    def job_terminal(self, job_id, title=""):
+        """A small terminal window beside the app that shows the game being rebuilt, step by step (each file
+        copied or linked, each mod, each part filled), in Frankenstein's purple."""
+        if self._window is None or job_id not in self._jobs:
+            return False
+        import webview
+        import html as h
+        j = self._jobs[job_id]
+        try:
+            sc = list(webview.screens)[0]
+            x, y = sc.x + sc.width - 640, sc.y + 60
+        except Exception:
+            x = y = None
+        page = TERMINAL_PAGE.replace("{TITLE}", h.escape(title or "Merging"))
+        try:
+            win = webview.create_window("Frankenstein terminal", html=page, x=x, y=y, width=600, height=420, on_top=True, resizable=True)
+        except Exception:
+            return False
+
+        def feed():
+            seen = 0
+            time.sleep(0.8)
+            while True:
+                gone = j.traced - len(j.trace)  # lines dropped before the window read them
+                lines = j.trace[max(0, seen - gone):]
+                seen = j.traced
+                p = j.progress
+                try:
+                    win.evaluate_js("feed(%s, %s, %s)" % (json.dumps(lines[-250:]), json.dumps(p), "true" if j.done else "false"))
+                except Exception:
+                    return  # the window was closed
+                if j.done:
+                    time.sleep(8)
+                    try:
+                        win.destroy()
+                    except Exception:
+                        pass
+                    return
+                time.sleep(0.25)
+        threading.Thread(target=feed, daemon=True).start()
+        return True
 
     def job(self, job_id, since=0):
         j = self._jobs[job_id]

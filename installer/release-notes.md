@@ -1,4 +1,10 @@
-## Frankenstein 3.41.0
+## Frankenstein 3.41.1
+
+- **Merge terminal.** While a merge is made, filled in, upgraded or unpacked, a small terminal window opens beside Frankenstein and shows the game being rebuilt live: each file copied or linked with its size, each mod installed and each part filled.
+  - It's black and Frankenstein purple, with a progress bar, and closes itself a few seconds after the merge finishes.
+  - The usual merge dialog stays as it is.
+
+### Also in 3.41.0
 
 - **Your Creative character.** When the game's character creator opens in a new Creative world, Frankenstein asks first:
   - **Quick start:** skips character creation and uses your latest story character's look, or the game's default if you have none.
@@ -13,11 +19,4 @@
 - **Dropping, and anything that needs to know what's in your hand, now reads your hand properly.** Before, the mod couldn't tell which hotbar slot you were holding, so drop said there was nothing in your hand.
   - The same problem also kept the own guns' models, crosshairs and the launcher's grenades from switching on.
   - Frankenstein now tries several ways to read the held slot: the inventory's own index, its equipped slot, then each slot. The way that worked is written to `drop-debug.txt`.
-- Not tested in game yet.
-
-### Also in 3.40.1
-
-- **Own guns: a fuller check of why they still spawn as the base gun.** On 3.38 the sniper, AK, Uzi, RPG and launcher still came out as the revolver, M1911 and shotgun. That means the game didn't take Frankenstein's new items.
-  - Frankenstein now finds the game's item registry more reliably and writes every step to `UserData\Frankenstein\ownitems-debug.txt`, including where it stopped.
-  - Each time you take one of these guns from F6, it also writes what actually landed in your hotbar (item, name, icon).
 - Not tested in game yet.

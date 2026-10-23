@@ -1,5 +1,5 @@
 "use strict";
-window.APP_BUILD = "3.41.0";  // must match index.html: a mixed-up install is caught at start
+window.APP_BUILD = "3.41.1";  // must match index.html: a mixed-up install is caught at start
 
 // ---------- talking to the Python side ----------
 const TOKEN = document.querySelector('meta[name="gm-token"]')?.content;
@@ -868,6 +868,8 @@ function sparks(cv, delay) {
 // Shows a progress window for a background job until it finishes.
 async function followJob(id, title) {
   $("#modalTitle").textContent = title;
+  // merges also get the little terminal window that streams the rebuild, file by file
+  if (/^(Merging|Filling|Upgrading|Unpacking|Rebuilding)/.test(title) && state.settings?.merge_terminal !== false) call("job_terminal", id, title).catch(() => {});
   $("#modalBody").innerHTML = `<div class="bar indeterminate" id="jobBar"><div></div></div><div class="log" id="jobLog"></div>`;
   $("#modalActions").innerHTML = "";
   $("#modal").classList.remove("hidden");

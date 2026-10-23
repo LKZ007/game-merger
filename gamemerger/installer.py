@@ -70,7 +70,11 @@ def tree_size(src):
     return total, count
 
 
-def clone_tree(src, dst, hardlink=True, log=_noop, progress=_noop):
+def _size(n):
+    return "%.1f MB" % (n / 1e6) if n >= 1e6 else "%d KB" % max(1, n // 1000)
+
+
+def clone_tree(src, dst, hardlink=True, log=_noop, progress=_noop, trace=_noop):
     """Copy a game folder. With hardlink=True, unchanged files are shared with the
     original (falls back to real copies if the target is on another drive)."""
     total, count = tree_size(src)
@@ -101,6 +105,10 @@ def clone_tree(src, dst, hardlink=True, log=_noop, progress=_noop):
                     shutil.copy2(s, d)
             else:
                 shutil.copy2(s, d)
+            try:
+                trace("%s %s  (%s)" % ("link" if hardlink else "copy", os.path.join(rel_dir, f) if rel_dir != "." else f, _size(os.path.getsize(d))))
+            except OSError:
+                pass
             done += 1
             if done % 200 == 0 or done == count:
                 progress(done, count)
@@ -350,7 +358,7 @@ class Merge:
         return out
 
     @classmethod
-    def create(cls, recipe, theme, base_path, target_parent, mode, name, appid="", log=_noop, progress=_noop):
+    def create(cls, recipe, theme, base_path, target_parent, mode, name, appid="", log=_noop, progress=_noop, trace=_noop):
         name = safe_name(name)
         if mode == MODE_INPLACE:
             target = base_path
@@ -379,7 +387,7 @@ class Merge:
             with open(os.path.join(target, COPY_MARKER), "w", encoding="utf-8") as f:
                 f.write("Made by Frankenstein from %s\n" % base_path)
             log("Copying %s to %s ..." % (base_path, target))
-            linked = clone_tree(base_path, target, hardlink=(mode == MODE_HARDLINK), log=log, progress=progress)
+            linked = clone_tree(base_path, target, hardlink=(mode == MODE_HARDLINK), log=log, progress=progress, trace=trace)
             if mode == MODE_HARDLINK and not linked:
                 m.data["mode"] = MODE_COPY
             elif mode == MODE_HARDLINK:
