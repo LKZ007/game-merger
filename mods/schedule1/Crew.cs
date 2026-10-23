@@ -76,7 +76,7 @@ namespace Frankenstein
             public Person P;
             public bool Placed;
             public int Stop;
-            public float NextMove, BusyUntil, NextFight, DownSince = -1;
+            public float NextMove, BusyUntil, NextFight, NextThink, DownSince = -1;
             public string Doing = "on the way";
             public NPC Target;
         }
@@ -138,7 +138,7 @@ namespace Frankenstein
             { "Suburbia", new[] { "Sherman House", "Kennedy House", "Holt House", "Wilkinson House" } },
         };
 
-        static string File_ => Path.Combine(MelonEnvironment.UserDataDirectory, "Frankenstein", MainMenu.Creative ? "crew-creative.json" : "crew.json");
+        static string File_ => Mode.DataFile("crew");  // one per save
 
         static void Say(string s)
         {
@@ -276,6 +276,11 @@ namespace Frankenstein
         {
             var n = l.Npc;
             if (n == null) return;
+            // far from you nobody sees them: they think every 6 seconds instead of every 1.5
+            var me = Player.Local;
+            if (me != null && l.Placed && Time.unscaledTime < l.NextThink)
+                return;
+            l.NextThink = me != null && Vector3.Distance(n.Position, me.Position) > 120f ? Time.unscaledTime + 6f : 0f;
             var route = Route(l.P.Gang, l);
             if (route == null) { l.Doing = "waiting for the town"; return; }
             float now = Time.unscaledTime;
@@ -540,10 +545,14 @@ namespace Frankenstein
         }
 
         // ---------- saved ----------
+        static string _loadedFor;
+
         static void Load()
         {
-            if (_loaded) return;
+            if (_loaded && _loadedFor == File_) return;
             _loaded = true;
+            _loadedFor = File_;
+            _chapter.Clear(); _bank.Clear(); _points.Clear();
             try
             {
                 if (!File.Exists(File_)) return;
@@ -579,6 +588,9 @@ namespace Frankenstein
         }
 
         // ---------- F10: who's who ----------
+        public static void Toggle() { if (Gangs.On && _inTown) _open = !_open; }
+        public static void Close() => _open = false;
+
         public static void Draw()
         {
             if (!_open || !_inTown || !Gangs.On) return;

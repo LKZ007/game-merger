@@ -48,6 +48,20 @@ namespace Frankenstein
 
         static string Save => Path.Combine(MelonEnvironment.UserDataDirectory, "Frankenstein", "explosives.txt");
 
+        static float _nextTrack, _nextGunLook;
+        static object _gunSeen;
+
+        /// <summary>T, or Throw grenade on the controller wheel.</summary>
+        public static void ThrowNow()
+        {
+            if (Grenades > 0 || MainMenu.Creative)
+            {
+                if (!MainMenu.Creative) { Grenades--; Store(); }
+                Throw(false);
+            }
+            else ItemMenu.Notify("No grenades. Get them from the item menu (Weapons tab).");
+        }
+
         static void Load()
         {
             if (_loaded) return;
@@ -88,16 +102,12 @@ namespace Frankenstein
         public static void Update()
         {
             Load();
-            try { Track(); } catch (Exception e) { Warn("launcher", e); }
-            if (Input.GetKeyDown(KeyCode.T) && !ItemMenu.IsOpen && Time.timeScale > 0f)
+            if (Time.unscaledTime >= _nextTrack)
             {
-                if (Grenades > 0 || MainMenu.Creative)
-                {
-                    if (!MainMenu.Creative) { Grenades--; Store(); }
-                    Throw(false);
-                }
-                else ItemMenu.Notify("No grenades. Get them from the F6 menu (Weapons tab).");
+                _nextTrack = Time.unscaledTime + 0.12f;  // reading the hotbar every frame cost frames
+                try { Track(); } catch (Exception e) { Warn("launcher", e); }
             }
+            if (Input.GetKeyDown(KeyCode.T) && !ItemMenu.IsOpen && Time.timeScale > 0f) ThrowNow();
             float dt = Time.deltaTime;
             for (int i = _live.Count - 1; i >= 0; i--)
             {
@@ -151,7 +161,7 @@ namespace Frankenstein
 
         // ---------- the launcher: which slot it's in, and a grenade on every shot ----------
 
-        static List<object> Slots()
+        internal static List<object> Slots()
         {
             if (_inv == null) _inv = Rt.FindByName("PlayerInventory");
             if (_inv == null) return new List<object>();
@@ -160,7 +170,7 @@ namespace Frankenstein
             return Creative.Each(Rt.Get(inv, "hotbarSlots", "HotbarSlots")).ToList();
         }
 
-        static string Id(object slot) => Rt.Get(Rt.Get(slot, "ItemInstance"), "ID") as string;
+        internal static string Id(object slot) => Rt.Get(Rt.Get(slot, "ItemInstance"), "ID") as string;
 
         static void Track()
         {
@@ -177,7 +187,13 @@ namespace Frankenstein
             if (id == null || (_shotgun != null && id != _shotgun)) { if (id != null && _before == null) { _launcherSlot = -1; Store(); } return; }
             if (!(Rt.Get(slot, "IsEquipped", "isEquipped") is bool on) || !on) { _heldGun = null; return; }
             if (_gun == null) _gun = Rt.FindByName("Equippable_RangedWeapon");
-            var gun = _gun == null ? null : Rt.All(_gun).FirstOrDefault();
+            // finding the gun searches every object in the game: only now and then, or when the old one is gone
+            if (_gun != null && (_gunSeen == null || (_gunSeen is UnityEngine.Object g0 && g0 == null) || Time.unscaledTime >= _nextGunLook))
+            {
+                _nextGunLook = Time.unscaledTime + 1.5f;
+                _gunSeen = Rt.All(_gun).FirstOrDefault();
+            }
+            var gun = _gunSeen;
             var inst = Rt.Get(gun, "weaponItem", "itemInstance", "ItemInstance");
             if (gun == null || inst == null) return;
             int ammo = Convert.ToInt32(Rt.Get(inst, "Value") ?? 0);
@@ -188,7 +204,7 @@ namespace Frankenstein
 
         // ---------- grenades in flight ----------
 
-        static void Throw(bool launcher)
+        internal static void Throw(bool launcher)
         {
             var cam = Camera.main;
             if (cam == null) return;

@@ -15,7 +15,7 @@ namespace Frankenstein
     {
         /// <summary>The Frankenstein release this mod came with (equal to gamemerger/version.py; a test checks).
         /// Shown on F6's title and in MelonLoader's log, where the app reads it back for the merge's card.</summary>
-        public const string Version = "3.31.3";
+        public const string Version = "3.32.0";
         float _next;
         public static bool MenuAllowed = true;
         public static System.Collections.Generic.List<string> Kit = new System.Collections.Generic.List<string>();
@@ -26,7 +26,7 @@ namespace Frankenstein
         public override void OnInitializeMelon()
         {
             ReadSettings();
-            Melon<Plugin>.Logger.Msg("Frankenstein mod " + Version + " loaded for " + (MainMenu.Merge.Length > 0 ? MainMenu.Merge : "Schedule I") + (MainMenu.Creative ? " (Creative)" : "") + ".");
+            Melon<Plugin>.Logger.Msg("Frankenstein mod " + Version + " loaded for " + (MainMenu.Merge.Length > 0 ? MainMenu.Merge : "Schedule I") + (Mode.Pending == "creative" ? " (next game: Creative)" : "") + ".");
             World.Load();
             Story.Load();
             ItemMenu.Load();
@@ -45,7 +45,8 @@ namespace Frankenstein
                 foreach (var k in J.L(s, "shop")) Shop.Add(k.ToString());
                 ShopName = J.S(s, "shop_name", "hardware");
                 MainMenu.Merge = J.S(s, "merge");
-                MainMenu.Creative = J.S(s, "creative", "false").ToLowerInvariant() == "true";
+                // Creative is a mode on each save now (Mode): this only picks it for the next game started or loaded
+                if (J.S(s, "creative", "false").ToLowerInvariant() == "true") Mode.Pending = "creative";
                 foreach (var k in J.L(s, "rundown")) MainMenu.Rundown.Add(k.ToString());
                 var pa = s is System.Collections.Generic.Dictionary<string, object> d && d.TryGetValue("play_as", out var v) ? v : null;
                 var w = s is System.Collections.Generic.Dictionary<string, object> d2 && d2.TryGetValue("world", out var wv) ? wv : null;
@@ -79,10 +80,16 @@ namespace Frankenstein
 
         public override void OnUpdate()
         {
+            Pad.Update();
+            try { Mode.Tick(); } catch (Exception e) { Melon<Plugin>.Logger.Warning("Game mode: " + e.Message); }
+            try { Vehicles.Update(); } catch (Exception e) { Melon<Plugin>.Logger.Warning("Vehicles: " + e.Message); }
+            try { Fly.Update(); } catch (Exception e) { Melon<Plugin>.Logger.Warning("Fly: " + e.Message); }
+            try { Wheel.Update(); } catch (Exception e) { Melon<Plugin>.Logger.Warning("Wheel: " + e.Message); }
             ItemMenu.Update();
             MainMenu.Update();
             try { Creative.Update(); } catch (Exception e) { Melon<Plugin>.Logger.Warning("Creative: " + e.Message); }
             try { Gangs.Update(); } catch (Exception e) { Melon<Plugin>.Logger.Warning("Gangs: " + e.Message); }
+            try { OwnGuns.Update(); } catch (Exception e) { Melon<Plugin>.Logger.Warning("Own guns: " + e.Message); }
             try { Guns.Update(); } catch (Exception e) { Melon<Plugin>.Logger.Warning("Guns: " + e.Message); }
             try { Crew.Update(); } catch (Exception e) { Melon<Plugin>.Logger.Warning("Crew: " + e.Message); }
             try { Boom.Update(); } catch (Exception e) { Melon<Plugin>.Logger.Warning("Explosives: " + e.Message); }
@@ -99,8 +106,23 @@ namespace Frankenstein
             catch (Exception e) { Melon<Plugin>.Logger.Warning("Gun shop: " + e.Message); }
         }
 
+        public override void OnLateUpdate()
+        {
+            try { Fly.LateUpdate(); } catch (Exception e) { Melon<Plugin>.Logger.Warning("Fly: " + e.Message); }
+        }
+
         public override void OnGUI()
         {
+            Pad.GuiBegin();
+            DrawAll();
+            Pad.GuiEnd();
+        }
+
+        static void DrawAll()
+        {
+            try { Wheel.Draw(); } catch (Exception) { }
+            try { Fly.Draw(); } catch (Exception) { }
+            try { Vehicles.Draw(); } catch (Exception) { }
             ItemMenu.Draw();
             MainMenu.Draw();
             World.Draw();

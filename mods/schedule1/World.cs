@@ -48,6 +48,9 @@ namespace Frankenstein
         {
             _inTown = name != null && name.Length > 0 && name.IndexOf("Menu", StringComparison.OrdinalIgnoreCase) < 0;
             if (_inTown) _hintUntil = Time.unscaledTime + 25f;
+            Mode.Scene(_inTown);
+            Wheel.Scene(_inTown);
+            Fly.Scene(_inTown);  // first: which save this is, and its game mode
             Carry.Scene(_inTown);
             Gangs.Scene(_inTown);
             Crew.Scene(_inTown);
@@ -121,6 +124,9 @@ namespace Frankenstein
             RenderSettings.ambientLight = new Color(0.42f, 0.34f, 0.58f);
         }
 
+        public static void Toggle() { if (_inTown) { _open = !_open; _confirm = ""; } }
+        public static void Close() => _open = false;
+
         static bool OnBlock()
         {
             var me = Player.Local;
@@ -150,25 +156,25 @@ namespace Frankenstein
         {
             if (!_open) return;
             float pw = 380, px = 40, py = Screen.height * 0.25f;
-            // Creative, from inside the game: confirm, then the game restarts into Creative's own saves
-            string to = MainMenu.Creative ? "normal" : "creative";
+            // the game mode of the save you're in, like Minecraft's /gamemode: switched on the spot, kept with the save
+            string to = MainMenu.Creative ? "survival" : "creative";
             float top = Style.Length > 0 ? 300 : 110;
             GUI.Box(new Rect(px, py - top + 64, pw, top - 64 + (Style.Length > 0 ? 250 : 0)), "");
             float cy = py - top + 72;
             GUI.Label(new Rect(px + 12, cy, pw - 24, 22), "FRANKENSTEIN  ·  " + (MainMenu.Merge.Length > 0 ? MainMenu.Merge : "this merge") + (MainMenu.Creative ? "  ·  Creative" : ""));
             if (_confirm == to)
             {
-                GUI.Label(new Rect(px + 12, cy + 22, pw - 24, 36), "Save first (sleep, or the pause menu). Then the game restarts in " + (to == "creative" ? "Creative, with its own saves." : "your normal game."));
-                if (GUI.Button(new Rect(px + 12, cy + 58, (pw - 30) / 2, 28), "Yes, switch now")) { _confirm = ""; MainMenu.Switch(to); }
-                if (GUI.Button(new Rect(px + 18 + (pw - 30) / 2, cy + 58, (pw - 30) / 2, 28), "Cancel")) _confirm = "";
+                GUI.Label(new Rect(px + 12, cy + 22, pw - 24, 36), to == "creative" ? "This save becomes Creative: every item, unlimited. A copy of it is kept first." : "This save goes back to Survival: the normal rules.");
+                if (Pad.Button(new Rect(px + 12, cy + 58, (pw - 30) / 2, 28), "Yes, switch")) { _confirm = ""; Mode.Set(to); }
+                if (Pad.Button(new Rect(px + 18 + (pw - 30) / 2, cy + 58, (pw - 30) / 2, 28), "Cancel")) _confirm = "";
             }
-            else if (GUI.Button(new Rect(px + 12, cy + 26, pw - 24, 30), MainMenu.Creative ? "Back to my normal game" : "Switch to Creative (every item, its own saves)")) _confirm = to;
+            else if (Pad.Button(new Rect(px + 12, cy + 26, pw - 24, 30), "Game Mode: " + (MainMenu.Creative ? "Creative  ·  switch to Survival" : "Survival  ·  switch to Creative"))) _confirm = to;
             Carry.Draw(px + pw + 12, py - top + 64, 420);
             DrawTravel(px, py + (Style.Length > 0 ? 250 : 0) + 8, pw);
             if (Style.Length == 0) return;
             GUI.Label(new Rect(px + 12, py + 8, pw - 24, 22), Title + " in " + Host);
             GUI.Label(new Rect(px + 12, py + 32, pw - 24, 40), Zone);
-            if (GUI.Button(new Rect(px + 12, py + 76, pw - 24, 30), _hasSpot ? "Move the block here" : "Build the block here"))
+            if (Pad.Button(new Rect(px + 12, py + 76, pw - 24, 30), _hasSpot ? "Move the block here" : "Build the block here"))
             {
                 var me = Player.Local;
                 if (me != null)
@@ -178,12 +184,12 @@ namespace Frankenstein
                     catch (Exception e) { Warn(e); _note = "Couldn't build here."; }
                 }
             }
-            if (GUI.Button(new Rect(px + 12, py + 112, pw - 24, 30), _light ? "Light: back to normal" : "Light: " + (Lighting.Length > 0 ? Lighting : "the Extension's look")))
+            if (Pad.Button(new Rect(px + 12, py + 112, pw - 24, 30), _light ? "Light: back to normal" : "Light: " + (Lighting.Length > 0 ? Lighting : "the Extension's look")))
             {
                 _light = !_light;
                 if (!_light) RenderSettings.fog = false;
             }
-            if (GUI.Button(new Rect(px + 12, py + 148, pw - 24, 30), _holdStart >= 0 ? "Stop holding the block" : "Hold the block (3 minutes, $1500)"))
+            if (Pad.Button(new Rect(px + 12, py + 148, pw - 24, 30), _holdStart >= 0 ? "Stop holding the block" : "Hold the block (3 minutes, $1500)"))
             {
                 if (_holdStart >= 0) _holdStart = -1;
                 else if (!_hasSpot) _note = "Build the block first.";
@@ -201,7 +207,7 @@ namespace Frankenstein
             GUI.Label(new Rect(x + 12, y + 6, w - 24, 22), "TRAVEL  ·  new districts (experimental)");
             if (n == 0) { GUI.Label(new Rect(x + 12, y + 30, w - 24, 26), Expansion.Note.Length > 0 ? Expansion.Note : "Being built, a few seconds after the town loads..."); return; }
             for (int i = 0; i < n; i++)
-                if (GUI.Button(new Rect(x + 12, y + 30 + i * 30, w - 24, 26), Expansion.NameAt(i))) { Expansion.Travel(i); _open = false; }
+                if (Pad.Button(new Rect(x + 12, y + 30 + i * 30, w - 24, 26), Expansion.NameAt(i))) { Expansion.Travel(i); _open = false; }
         }
 
         static void Warn(Exception e) => Melon<Plugin>.Logger.Warning("World: " + e.Message);
@@ -210,7 +216,7 @@ namespace Frankenstein
         {
             if (!_inTown) return;
             if (Time.unscaledTime < _hintUntil)
-                GUI.Box(new Rect(16, Screen.height - 70, 420, 28), MainMenu.Creative ? "Creative · F8: back to your normal game" : "F8: Frankenstein menu · switch to Creative");
+                GUI.Box(new Rect(16, Screen.height - 70, 420, 28), (Pad.InUse ? "Hold View: Frankenstein wheel" : "F8: Frankenstein menu") + (MainMenu.Creative ? "  ·  Creative" : "  ·  Game Mode on F8"));
             DrawPanel();
             if (Style.Length == 0) return;
             if (_big == null) _big = new GUIStyle(GUI.skin.box) { fontSize = 46 };  // the box style centres its text

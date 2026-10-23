@@ -1,5 +1,5 @@
 "use strict";
-window.APP_BUILD = "3.31.3";  // must match index.html: a mixed-up install is caught at start
+window.APP_BUILD = "3.32.0";  // must match index.html: a mixed-up install is caught at start
 
 // ---------- talking to the Python side ----------
 const TOKEN = document.querySelector('meta[name="gm-token"]')?.content;
@@ -878,7 +878,8 @@ async function loadMerges() {
             </div></div>
         </div>
         ${m.ingame ? `<div class="ingame small" title="Frankenstein's own mod adds these to the game itself">🎮 <strong>In the game:</strong> ${esc(m.ingame)}</div>` : `<div class="ingame small muted">This game has no menu Frankenstein can add to, so Creative stays here.</div>`}
-        ${m.mod_check && !m.mod_check.loaded ? `<div class="ingame small warn" role="status">⚠ <strong>Last time you played:</strong> ${esc(m.mod_check.why)}</div>` : m.mod_check?.version ? `<div class="ingame small muted" title="Read from MelonLoader's log. F6's title in the game shows the same number.">✓ Frankenstein mod ${esc(m.mod_check.version)} ran last time you played.</div>` : ""}
+        ${m.mod_check && !m.mod_check.loaded ? `<div class="ingame small warn" role="status">⚠ <strong>Last time you played:</strong> ${esc(m.mod_check.why)}</div>` : m.mod_check?.version ? `<div class="ingame small muted" title="Read from MelonLoader's log. F6's title in the game shows the same number.">✓ Frankenstein mod ${esc(m.mod_check.version)} ran last time you played.${m.mod_check.guns ? ` ${esc(m.mod_check.guns)}.` : ""}</div>` : ""}
+        ${m.creative_folded?.moved ? `<div class="ingame small muted" role="status">✦ Your ${m.creative_folded.moved} Creative save${m.creative_folded.moved > 1 ? "s are" : " is"} now with your other saves${m.creative_folded.kept ? `; ${m.creative_folded.kept} couldn't fit and ${m.creative_folded.kept > 1 ? "are" : "is"} kept safe` : ""}. Creative is a Game Mode on each save now.</div>` : ""}
         ${m.pack_error ? `<div class="ingame small muted" role="status">📦 ${esc(m.pack_error)}</div>` : ""}
         ${m.builtin_error ? `<div class="ingame small warn" role="status">⚠ Frankenstein's own mod couldn't be added: ${esc(m.builtin_error)} It's tried again when you press Play.</div>` : ""}
       </div>
@@ -1151,7 +1152,7 @@ async function creativeSetup(m) {
     ${c.slots.length ? `<p class="muted">Or pick them yourself (they're only switched on in creative):</p>
       <div>${c.slots.map((x, i) => `<div class="row" style="padding:6px 0;border-top:1px solid var(--line)"><span class="grow">${esc(x.name)}</span><button class="btn" data-sb="${i}" type="button">Find</button></div>`).join("")}</div>` : ""}
     ${c.mods.length ? `<p class="muted small">Added: ${c.mods.map(esc).join(", ")}</p>` : ""}
-    <p class="muted small">${c.own_saves ? "Creative has its own saves (a copy of this merge's saves to start), so your normal progress stays clean. " : "This game's saves can't be told apart, so creative uses the same saves; make a new save slot in the game. "}${c.offline ? "It always starts offline, so none of this reaches online play." : "Don't take creative tools into online games."}</p>`;
+    <p class="muted small">Creative uses this merge's saves, like Minecraft: make a new save in the game for a creative world, or load one you have. ${c.offline ? "It always starts offline, so none of this reaches online play." : "Don't take creative tools into online games."}</p>`;
   const done = modal("Creative mode: " + m.name, body, [{ label: "Cancel", value: false }, { label: "Play creative", value: true, primary: true }]);
   if ($("#sbAuto")) $("#sbAuto").onclick = async () => {
     closeModal();

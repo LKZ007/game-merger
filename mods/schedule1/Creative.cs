@@ -12,7 +12,9 @@ namespace Frankenstein
     /// Reads the game's own hotbar and gun by name on either build; what it can't reach is logged once.</summary>
     internal static class Creative
     {
-        static float _next;
+        static float _next, _nextGuns;
+        static List<object> _guns = new List<object>();
+        static readonly Dictionary<string, MethodInfo> _methods = new Dictionary<string, MethodInfo>();
         static Type _inv, _gun;
         static readonly Dictionary<int, KeyValuePair<string, int>> _had = new Dictionary<int, KeyValuePair<string, int>>();
         static bool _warned;
@@ -36,8 +38,10 @@ namespace Frankenstein
         {
             if (_gun == null) _gun = Rt.FindByName("Equippable_RangedWeapon");
             if (_gun == null) return;
-            foreach (var w in Rt.All(_gun))
+            if (Time.unscaledTime >= _nextGuns) { _nextGuns = Time.unscaledTime + 2f; _guns = Rt.All(_gun); }
+            foreach (var w in _guns)
             {
+                if (w is UnityEngine.Object uo && uo == null) continue;
                 var size = Rt.Get(w, "MagazineSize");
                 var inst = Rt.Get(w, "weaponItem", "itemInstance", "ItemInstance");
                 if (size == null || inst == null) continue;
@@ -50,7 +54,10 @@ namespace Frankenstein
         static bool Call(object o, string method, params object[] args)
         {
             if (o == null) return false;
-            var m = o.GetType().GetMethods(BindingFlags.Public | BindingFlags.Instance)
+            var key = o.GetType().FullName + "|" + method + "|" + args.Length;
+            MethodInfo m;
+            if (!_methods.TryGetValue(key, out m))
+                _methods[key] = m = o.GetType().GetMethods(BindingFlags.Public | BindingFlags.Instance)
                      .FirstOrDefault(x => x.Name == method && x.GetParameters().Length >= args.Length &&
                                           x.GetParameters().Skip(args.Length).All(p => p.IsOptional));
             if (m == null) return false;

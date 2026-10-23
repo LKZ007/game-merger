@@ -8,10 +8,10 @@ using UnityEngine;
 
 namespace Frankenstein
 {
-    /// <summary>Frankenstein inside the game's own main menu, under Continue and New game: Creative (its own
-    /// saves), back to the normal game, and the merge's rundown. Creative needs the game to start again with other
-    /// saves, so the button leaves UserData/Frankenstein/switch.json and closes the game; Frankenstein starts it
-    /// again in that mode. While you play, the corner shows who you play as.</summary>
+    /// <summary>Frankenstein inside the game's own main menu, between New Game and Settings: "Game Mode", like
+    /// Minecraft's. It picks Survival or Creative for the game you start or load next, and each save keeps its
+    /// own mode (Mode). The corner lists your saves with their modes and the merge's rundown. While you play, the
+    /// corner shows who you play as.</summary>
     internal static class MainMenu
     {
         public static string Merge = "";
@@ -19,13 +19,13 @@ namespace Frankenstein
         public static List<string> Rundown = new List<string>();
         public static string Who = "", Moves = "", Close = "";
         static bool _inMenu, _showRundown;
-        static float _quitAt = -1;
         static string _note = "";
 
         // the Creative entry copied into the game's own list, under Continue and New game
         static GameObject _entry;
         static object _entryText;
-        static float _lookUntil, _nextLook;
+        static float _lookUntil, _nextLook, _nextLabel;
+        static string[][] _saves = new string[0][];
         static bool _injected;
 
         public static void Scene(string name)
@@ -34,11 +34,29 @@ namespace Frankenstein
             _injected = false;
             _entry = null;
             _lookUntil = _inMenu ? Time.unscaledTime + 30f : 0;
+            if (_inMenu) _saves = Mode.Saves();
         }
 
-        static string Label() => Creative ? "Back to normal game" : "Creative";
+        static bool NextCreative => Mode.Pending == "creative";
+        static string Label() => (Pad.InUse ? "(Y) " : "") + "Game Mode: " + (NextCreative ? "Creative" : "Survival");
 
         static int _tries;
+        static bool _wordsOnly;
+
+        /// <summary>The New Game text's place in the menu, written once to UserData/Frankenstein/menu-debug.txt
+        /// (and the log), so a menu this build lays out differently can be fixed from one file.</summary>
+        static void Describe(GameObject go)
+        {
+            try
+            {
+                var lines = new List<string>();
+                for (var t = go != null ? go.transform : null; t != null; t = t.parent)
+                    lines.Add(t.name + " [" + string.Join(", ", Rt.Comps(t.gameObject, typeof(Component), false).Select(Rt.TypeName).ToArray()) + "] children=" + t.childCount);
+                File.WriteAllText(Path.Combine(MelonEnvironment.UserDataDirectory, "Frankenstein", "menu-debug.txt"), string.Join("\n", lines.ToArray()));
+                Say("New Game is at: " + string.Join(" < ", lines.Select(l => l.Split(' ')[0]).ToArray()));
+            }
+            catch (Exception) { }
+        }
         static readonly HashSet<string> _said = new HashSet<string>();
         static object _bg;         // the row's own background picture: lit up on hover, like the game's rows
         static Color _bgColor;
@@ -72,6 +90,7 @@ namespace Frankenstein
                 if (_tries == 6) Say("no \"New Game\" text yet; texts on screen: " + string.Join(" | ", seen.ToArray()));
                 return;
             }
+            if (_tries == 1 || _tries == 6) Describe(Rt.GameObjectOf(newText));
             var newGo = Rt.GameObjectOf(newText);
             var near = Rt.GameObjectOf(nearText);
             if (newGo == null) { Say("New Game text has no object"); return; }
@@ -84,7 +103,8 @@ namespace Frankenstein
             else if (row.parent != null) row = row.parent;
             var list = row.parent;
             if (list == null) { Say("New Game row has no list"); return; }
-            _entry = UnityEngine.Object.Instantiate(row.gameObject, list);
+            // the whole row first; if this build won't let its scripts come off, just the row's words
+            _entry = UnityEngine.Object.Instantiate(_wordsOnly ? newGo : row.gameObject, list);
             _entry.name = "Frankenstein Creative";
             _entry.transform.SetSiblingIndex(row.GetSiblingIndex() + 1);
             // only the pictures and the words stay: buttons, triggers and the game's scripts all go
@@ -95,8 +115,20 @@ namespace Frankenstein
                 bool keep = n.EndsWith(".Image") || n.EndsWith(".RawImage") || n.Contains("TMP_Text") || n.Contains("TextMeshPro") ||
                             n.EndsWith("UI.Text") || n.EndsWith("Outline") || n.EndsWith("Shadow") || n.Contains("LayoutElement") || n.Contains("ContentSizeFitter");
                 if (keep) continue;
-                if (c is UnityEngine.Object o) { UnityEngine.Object.DestroyImmediate(o); removed++; }
+                if (c is UnityEngine.Object o)
+                {
+                    try { UnityEngine.Object.DestroyImmediate(o); removed++; }
+                    catch (Exception e)
+                    {
+                        Say("couldn't take " + n + " off the copied row (" + e.Message + "), so only its words are copied");
+                        _wordsOnly = true;
+                        UnityEngine.Object.Destroy(_entry);
+                        _entry = null;
+                        return;
+                    }
+                }
             }
+            _entry.SetActive(true);
             _entryText = null;
             foreach (var n in new[] { "TMPro.TMP_Text", "UnityEngine.UI.Text" })
                 if (_entryText == null) _entryText = Rt.CompInChildren(_entry, Rt.Find(n));
@@ -177,19 +209,9 @@ namespace Frankenstein
 
         static void Click()
         {
-            Rt.Set(_entryText, Creative ? "Starting your normal game…" : "Starting Creative…", "text");
-            Switch(Creative ? "normal" : "creative");
-        }
-
-        public static void Switch(string to)
-        {
-            try
-            {
-                File.WriteAllText(Path.Combine(MelonEnvironment.UserDataDirectory, "Frankenstein", "switch.json"), "{\"to\": \"" + to + "\"}");
-                _note = "Starting again in " + (to == "creative" ? "Creative" : "your normal game") + "…";
-                _quitAt = Time.unscaledTime + 1.5f;
-            }
-            catch (Exception e) { _note = "Couldn't switch: " + e.Message; }
+            Mode.Pending = NextCreative ? "survival" : "creative";
+            if (_entryText != null) Rt.Set(_entryText, Label(), "text");
+            _note = NextCreative ? "The game you start or load next will be Creative." : "The game you start or load next will be Survival.";
         }
 
         public static void Update()
@@ -207,7 +229,12 @@ namespace Frankenstein
             }
             if (_inMenu && _entry == null && _injected) { _injected = false; _lookUntil = Time.unscaledTime + 30f; }  // the menu was rebuilt
             try { Hover(); } catch (Exception e) { Say("click: " + e.Message); }
-            if (_quitAt > 0 && Time.unscaledTime >= _quitAt) { _quitAt = -1; Application.Quit(); }
+            if (_inMenu && (Pad.Pressed & Pad.Y) != 0) Click();  // controller: Y picks the mode
+            if (_inMenu && _injected && _entryText != null && Time.unscaledTime >= _nextLabel)
+            {
+                _nextLabel = Time.unscaledTime + 1f;
+                if (Rt.Text(_entryText) != Label()) Rt.Set(_entryText, Label(), "text");
+            }
         }
 
         public static void Draw()
@@ -217,30 +244,29 @@ namespace Frankenstein
                 if (Who.Length > 0) GUI.Label(new Rect(16, Screen.height - 34, 600, 24), "Playing as " + Who);
                 return;
             }
-            if (_injected)
+            // the corner: your saves with their modes, and the merge's rundown. If the game's list couldn't take
+            // the Game Mode entry, its button is here instead.
+            float w = 340, x = Screen.width - w - 24, y = 24;
+            int rows = (_injected ? 0 : 1) + 1 + _saves.Length + (_note.Length > 0 ? 1 : 0) + (_showRundown ? Math.Min(Rundown.Count, 12) : 0);
+            GUI.Box(new Rect(x, y, w, 40 + rows * 26), "");
+            GUI.Label(new Rect(x + 10, y + 6, w - 20, 22), "FRANKENSTEIN  ·  " + (Merge.Length > 0 ? Merge : "Schedule I"));
+            float cy = y + 32;
+            if (!_injected)
             {
-                // Creative is in the game's own list; the rundown sits in the corner, out of the way
-                float rw = 380, rx = Screen.width - rw - 24, ry = 24;
-                if (GUI.Button(new Rect(rx, ry, rw, 28), (_showRundown ? "Hide" : "What's in") + " " + (Merge.Length > 0 ? Merge : "this merge"))) _showRundown = !_showRundown;
-                if (_note.Length > 0) GUI.Label(new Rect(rx, ry + 32, rw, 24), _note);
-                if (!_showRundown) return;
-                GUI.Box(new Rect(rx, ry + 56, rw, 12 + 22 * Math.Min(Rundown.Count, 12)), "");
-                for (int i = 0; i < Rundown.Count && i < 12; i++)
-                    GUI.Label(new Rect(rx + 10, ry + 62 + 22 * i, rw - 20, 22), Rundown[i]);
-                return;
+                if (Pad.Button(new Rect(x + 10, cy, w - 20, 24), Label())) Click();
+                cy += 26;
             }
-            // the game's list couldn't take the entry: a small panel in the top right corner, away from the title
-            float w = 330, x = Screen.width - w - 24, y = 24;
-            float h = _showRundown ? 112 + 22 * Math.Min(Rundown.Count, 12) : 112;
-            GUI.Box(new Rect(x, y, w, h), "");
-            GUI.Label(new Rect(x + 10, y + 6, w - 20, 22), "FRANKENSTEIN" + (Creative ? "  ·  Creative" : ""));
-            if (GUI.Button(new Rect(x + 10, y + 30, w - 20, 30), Creative ? "Back to my normal game" : "Creative (every item, its own saves)"))
-                Switch(Creative ? "normal" : "creative");
-            if (GUI.Button(new Rect(x + 10, y + 66, w - 20, 26), _showRundown ? "Hide the rundown" : "What's in " + (Merge.Length > 0 ? Merge : "this merge"))) _showRundown = !_showRundown;
-            if (_note.Length > 0) GUI.Label(new Rect(x + 10, y + 94, w - 20, 22), _note);
+            foreach (var sv in _saves)
+            {
+                GUI.Label(new Rect(x + 10, cy, w - 20, 24), sv[0] + ":  " + (sv[1] == "creative" ? "Creative" : "Survival"));
+                cy += 26;
+            }
+            if (_note.Length > 0) { GUI.Label(new Rect(x + 10, cy, w - 20, 24), _note); cy += 26; }
+            if (Pad.Button(new Rect(x + 10, cy, w - 20, 24), (_showRundown ? "Hide" : "What's in") + " " + (Merge.Length > 0 ? Merge : "this merge"))) _showRundown = !_showRundown;
+            cy += 26;
             if (!_showRundown) return;
             for (int i = 0; i < Rundown.Count && i < 12; i++)
-                GUI.Label(new Rect(x + 10, y + 112 + 22 * i, w - 20, 22), Rundown[i]);
+                GUI.Label(new Rect(x + 10, cy + 22 * i, w - 20, 22), Rundown[i]);
         }
     }
 }

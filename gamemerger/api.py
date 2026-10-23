@@ -55,8 +55,10 @@ BUILTIN = {
                   "settings": "UserData/Frankenstein/settings.json", "bridge": "UserData/Frankenstein/commands.json",
                   "catalog": "UserData/Frankenstein/world.json",
                   "what": "Item menu: press F6 (or Back + Y) in game for every item, mods' items included.",
-                  "ingame": "On the main menu: Creative under New Game (its own saves). While you play: F6 (or Back + Y) for "
-                            "every item, F8 for Frankenstein's menu, F9 for the gangs and F10 for who's who on the streets (Hood Warfare merges), T to throw a grenade."},
+                  "ingame": "On the main menu: Game Mode under New Game picks Survival or Creative for the game you start or load, "
+                            "like Minecraft; each save keeps its own mode. While you play: F8 switches this save's mode, F6 (or Back + Y) for "
+                            "every item, F9 for the gangs, F10 for who's who on the streets (Hood Warfare merges), T to throw a grenade. "
+                            "Controller: hold View for a wheel with all of it."},
     "cyberpunk2077": {"label": "Frankenstein sandbox menu", "dest": "bin/x64/plugins/cyber_engine_tweaks/mods",
                       "settings": "bin/x64/plugins/cyber_engine_tweaks/mods/frankenstein_items/settings.json",
                       "bridge": "bin/x64/plugins/cyber_engine_tweaks/mods/frankenstein_items/commands.json",
@@ -789,7 +791,12 @@ class Api:
         if old and not why:
             why = ("The game ran an older Frankenstein mod (%s), not this app's %s. Press Play again: Frankenstein "
                    "now replaces it every time." % (ver if ver != "1.0.0" else "from before 3.31.1", VERSION))
-        return {"time": time.time(), "loaded": loaded and not bad and not old, "why": why, "version": ver}
+        guns = ""
+        for x in lines:
+            g = re.search(r"Guns source: (.+?)\.?\s*$", x)
+            if g:
+                guns = g.group(1)
+        return {"time": time.time(), "loaded": loaded and not bad and not old, "why": why, "version": ver, "guns": guns}
 
     def _switch_from_game(self, merge_id):
         """Creative from inside the game: Frankenstein's own mod leaves switch.json next to its settings and the
@@ -2276,7 +2283,8 @@ class Api:
         b = BUILTIN.get(r.id if r else "")
         if not b:
             return
-        on = bool(creative or self._settings.get("item_menu_normal"))
+        # Schedule I's mod opens its item menu in Creative saves by itself; the others are told per launch
+        on = bool((creative and r.id != "schedule1") or self._settings.get("item_menu_normal"))
         source = m.data.get("source_name") or m.data.get("theme_name", "")
         extra_all = {"creative": bool(creative), "merge": m.name, "rundown": self._ingame_rundown(m, creative),
                      "rundown_text": "\n".join(self._ingame_rundown(m, creative)),
@@ -2717,7 +2725,7 @@ class Api:
                         "offline_lock": bool(self._recipe(m.data.get("recipe_id")) and
                                              self._recipe(m.data.get("recipe_id")).launch_args and m.mode != MODE_INPLACE),
                         "ingame": self._ingame(m),
-                        "mod_check": m.data.get("mod_check"), "pack_error": m.data.get("pack_error", ""), "builtin_error": m.data.get("builtin_error", ""),
+                        "mod_check": m.data.get("mod_check"), "pack_error": m.data.get("pack_error", ""), "creative_folded": m.data.get("creative_folded"), "builtin_error": m.data.get("builtin_error", ""),
                         "playing": self._playing == m.id, "needs_upgrade": m.data.get("upgraded", 1) < self.UPGRADE, "originals": self._originals_note(m), "save_fix": m.data.get("save_fix"),
                         "sources": self._sources_for(self._recipe(m.data.get("recipe_id"))),
                         "mc_loader": m.data.get("mc_loader"), "mc_version": m.data.get("mc_version"),
@@ -2788,18 +2796,22 @@ class Api:
         self._award("first_play")
         if self._bump("plays") >= 10:
             self._award("ten_plays")
-        slot = merge_id + "~creative" if creative else merge_id
+        slot = merge_id  # one set of saves: Creative is a mode on each save now, not a second set
         cloud = self._settings.get("cloud_folder")
-        if cloud and r and r.saves and self._playing != merge_id and not creative:
+        if r and r.saves and self._playing != merge_id:
+            try:
+                folded = saves.fold_creative(merge_id, r.id)
+                if folded["moved"] or folded["kept"]:
+                    m.data["creative_folded"] = folded
+                    m.save()
+            except OSError:
+                pass
+        if cloud and r and r.saves and self._playing != merge_id:
             try:
                 saves.pull_cloud(merge_id, cloud, m.name)
             except OSError:
                 pass
         if r.saves and self._playing != merge_id:
-            if creative and not os.path.isdir(saves.slot_root(slot)):
-                # creative starts from a copy of the merge's normal saves, then goes its own way
-                if os.path.isdir(saves.slot_root(merge_id)):
-                    shutil.copytree(saves.slot_root(merge_id), saves.slot_root(slot))
             m.data["session_start"] = time.time()
             m.save()
             saves.swap_in(slot, r)
@@ -2911,7 +2923,7 @@ class Api:
                 break
         tips = ["This merge has its own saves, so your normal game is safe."] if r and r.saves else []
         if creative:
-            tips.insert(0, "Creative mode has its own saves too, and it always starts offline where the game allows it.")
+            tips.insert(0, "Creative uses this merge's saves too, and it always starts offline where the game allows it.")
         tips.append("If it crashes, press Fix crash in My merges.")
         return {"headline": "%s: %s with %s style%s" % (m.name, m.data.get("game_name", ""), m.data.get("source_name") or m.data.get("theme_name", ""),
                                                          " · Creative" if creative else ""),

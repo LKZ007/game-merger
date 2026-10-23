@@ -101,7 +101,20 @@ namespace Frankenstein
             catch (Exception) { return new List<object>(); }
         }
 
+        static readonly Dictionary<string, MemberInfo> _members = new Dictionary<string, MemberInfo>();
+
+        /// <summary>Cached: reflection lookups are slow, and the mod asks for the same few members every second.</summary>
         static MemberInfo Member(Type t, string name)
+        {
+            var key = t.FullName + "|" + name;
+            MemberInfo m;
+            if (_members.TryGetValue(key, out m)) return m;
+            m = FindMember(t, name);
+            _members[key] = m;
+            return m;
+        }
+
+        static MemberInfo FindMember(Type t, string name)
         {
             const BindingFlags f = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static |
                                    BindingFlags.IgnoreCase | BindingFlags.FlattenHierarchy;

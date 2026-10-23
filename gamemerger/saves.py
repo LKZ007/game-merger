@@ -433,3 +433,54 @@ def pull_cloud(merge_id, cloud_root, merge_name):
     shutil.rmtree(local, ignore_errors=True)
     shutil.copytree(src, local)
     return True
+
+
+def fold_creative(merge_id, recipe_id=""):
+    """Creative used to have its own saves (<merge>~creative). Now it's a mode on each save, like Minecraft, so
+    those saves move in with the merge's others, marked Creative where the game keeps a mode (Schedule I). Any
+    that would clash with a save of the same name stay in <merge>~creative-kept, so nothing is ever lost.
+    Returns {"moved": n, "kept": n}."""
+    src_root, dst_root = slot_root(merge_id + "~creative"), slot_root(merge_id)
+    out = {"moved": 0, "kept": 0}
+    if not os.path.isdir(src_root):
+        return out
+    for i in sorted(os.listdir(src_root)):
+        src, dst = os.path.join(src_root, i), os.path.join(dst_root, i)
+        if not os.path.isdir(src):
+            continue
+        os.makedirs(dst, exist_ok=True)
+        for top in os.listdir(src):
+            s, d = os.path.join(src, top), os.path.join(dst, top)
+            if recipe_id == "schedule1" and os.path.isdir(s):
+                # Saves/<account>/SaveGame_N: each creative save takes a free number in the same account
+                os.makedirs(d, exist_ok=True)
+                for game in sorted(os.listdir(s)):
+                    gs = os.path.join(s, game)
+                    if not (os.path.isdir(gs) and game.lower().startswith("savegame")):
+                        if not os.path.exists(os.path.join(d, game)):
+                            shutil.move(gs, os.path.join(d, game))
+                        continue
+                    free = next((n for n in range(1, 6) if not os.path.exists(os.path.join(d, "SaveGame_%d" % n))), None)
+                    if free is None:
+                        out["kept"] += 1
+                        continue
+                    mark = os.path.join(gs, "Modded", "Frankenstein")
+                    os.makedirs(mark, exist_ok=True)
+                    with open(os.path.join(mark, "gamemode.txt"), "w", encoding="utf-8") as f:
+                        f.write("creative")
+                    shutil.move(gs, os.path.join(d, "SaveGame_%d" % free))
+                    out["moved"] += 1
+            elif not os.path.exists(d):
+                shutil.move(s, d)
+                out["moved"] += 1
+            else:
+                out["kept"] += 1
+    left = [x for x, _d, files in os.walk(src_root) if files]
+    if left:
+        kept = slot_root(merge_id + "~creative-kept")
+        if os.path.isdir(kept):
+            shutil.rmtree(kept)
+        shutil.move(src_root, kept)
+    else:
+        shutil.rmtree(src_root, ignore_errors=True)
+    return out

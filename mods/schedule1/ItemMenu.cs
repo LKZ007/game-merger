@@ -67,6 +67,16 @@ namespace Frankenstein
                 var shotgun = _all.FirstOrDefault(e => e.Id.ToLowerInvariant().Contains("shotgun"));
                 _all.Add(new Entry { Id = "frankenstein:launcher", Name = "Grenade Launcher", Category = "Weapons", Own = "launcher", Stack = 1, Icon = shotgun?.Icon });
                 _all.Add(new Entry { Id = "frankenstein:grenade", Name = "Frag Grenade", Category = "Weapons", Own = "grenade", Stack = 10 });
+                // the AK, Uzi, sniper and RPG: More Guns' own if it loaded, otherwise Frankenstein's
+                Func<string, string> Squash = x => (x ?? "").ToLowerInvariant().Replace(" ", "").Replace("_", "").Replace("-", "");
+                OwnGuns.MoreGunsLoaded = _all.Any(e => !e.Id.StartsWith("frankenstein:") && (Squash(e.Id).Contains("ak47") || Squash(e.Name).Contains("ak47")));
+                if (!OwnGuns.MoreGunsLoaded)
+                    foreach (var d in OwnGuns.Defs)
+                    {
+                        var on = _all.FirstOrDefault(e => Squash(e.Id).Contains(d.Base));
+                        _all.Add(new Entry { Id = "frankenstein:" + d.Key, Name = d.Name, Category = "Weapons", Own = "gun:" + d.Key, Stack = 1, Icon = on?.Icon });
+                    }
+                Melon<Plugin>.Logger.Msg("Guns source: " + OwnGuns.Source + ".");
                 try
                 {
                     foreach (var c in Vehicles.All())
@@ -138,9 +148,9 @@ namespace Frankenstein
             bool toggle = Input.GetKeyDown(KeyCode.F6) || ((now & Back) != 0 && (pressed & Y) != 0);
             if (toggle)
             {
-                if (!Plugin.MenuAllowed && !_open)
+                if (!Plugin.MenuAllowed && !MainMenu.Creative && !_open)
                 {
-                    Toast("The item menu is off for normal play. Turn it on in Frankenstein > Settings, or play in Creative.");
+                    Toast("The item menu is for Creative. Switch this save to Creative with Game Mode (F8 or the wheel), or turn it on for Survival in Frankenstein > Settings.");
                     return;
                 }
                 if (_open) Close();
@@ -198,6 +208,8 @@ namespace Frankenstein
 
         static float _oldScale = 1f;
 
+        public static void Toggle() { if (_open) Close(); else if (!Plugin.MenuAllowed && !MainMenu.Creative) Toast("The item menu is for Creative. Switch this save to Creative with Game Mode (F8 or the wheel)."); else Open(); }
+
         static void Open()
         {
             Refresh();
@@ -231,6 +243,7 @@ namespace Frankenstein
                 if (e.Car != null) { Vehicles.Spawn(e.Car); Close(); return; }  // closed, so you see it arrive
                 if (e.Own == "grenade") { Boom.GiveGrenades(qty); return; }
                 if (e.Own == "launcher") { Boom.GiveLauncher(); return; }
+                if (e.Own != null && e.Own.StartsWith("gun:")) { OwnGuns.Give(OwnGuns.Defs.First(d => "gun:" + d.Key == e.Own)); return; }
                 ConsoleHelper.AddItemToInventory(e.Id, qty);
                 Toast("Got " + qty + " x " + e.Name);
             }
@@ -300,7 +313,7 @@ namespace Frankenstein
             Paint.Fill(new Rect(0, 0, Screen.width, Screen.height), new Color(0.02f, 0.01f, 0.04f, 0.55f));
             Paint.Fill(new Rect(x - 6, y - 6, W + 12, H + 12), new Color(0.65f, 0.55f, 0.98f, 0.9f));
             Paint.Fill(new Rect(x, y, W, H), new Color(0.07f, 0.05f, 0.11f, 1f));
-            GUI.Label(new Rect(x + 16, y + 10, 600, 24), "FRANKENSTEIN " + Plugin.Version + "  ·  Every item in this merge (" + _all.Count + ")");
+            GUI.Label(new Rect(x + 16, y + 10, 600, 24), "FRANKENSTEIN " + Plugin.Version + "  ·  Every item in this merge (" + _all.Count + ")" + (_cats.Count > _cat && _cats[_cat] == "Weapons" ? "  ·  " + OwnGuns.Source : ""));
             if (GUI.Button(new Rect(x + W - 40, y + 8, 28, 26), "X")) { Close(); return; }
 
             GUI.Label(new Rect(x + 16, y + 42, 60, 24), "Search");

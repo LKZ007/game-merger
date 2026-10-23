@@ -15,7 +15,7 @@ namespace Frankenstein
     /// and to UserData/Frankenstein/guns-report.txt so it can be checked.</summary>
     internal static class Guns
     {
-        class Spec
+        internal class Spec
         {
             public string Match, Name;
             public double Damage = 1, Rate = 1, Reload = 1, Size = 1;
@@ -24,7 +24,7 @@ namespace Frankenstein
         }
 
         static readonly List<Spec> _specs = new List<Spec>();
-        static readonly HashSet<int> _done = new HashSet<int>();
+        internal static readonly HashSet<int> _done = new HashSet<int>();
         static readonly List<string> _report = new List<string>();
         static Type _weapon;
         static float _next;
@@ -48,8 +48,9 @@ namespace Frankenstein
 
         public static void Update()
         {
+            if (OwnGuns.Holding) return;  // Frankenstein's own gun is in your hand: it has its own numbers
             if (_specs.Count == 0 || Time.unscaledTime < _next) return;
-            _next = Time.unscaledTime + 0.4f;
+            _next = Time.unscaledTime + 2f;  // a full search of the game's objects: not too often
             if (_weapon == null)
             {
                 if (_looked) return;
@@ -86,7 +87,7 @@ namespace Frankenstein
             return null;
         }
 
-        static void Apply(object w, GameObject go, Spec s)
+        internal static void Apply(object w, GameObject go, Spec s)
         {
             var did = new List<string>();
             if (Math.Abs(s.Damage - 1) > 0.01) did.Add(Scale(w, s.Damage, "Damage"));

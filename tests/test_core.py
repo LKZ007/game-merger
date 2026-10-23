@@ -966,6 +966,31 @@ class StartupTests(unittest.TestCase):
         self.assertEqual(Api._stale_web(here), [], "index.html PAGE_BUILD and app.js APP_BUILD must equal VERSION " + VERSION)
 
 
+class CreativeFoldTests(unittest.TestCase):
+    def test_creative_saves_join_the_others_marked_creative(self):
+        from gamemerger import saves, paths
+        old = paths.data_dir
+        root = tempfile.mkdtemp()
+        paths.data_dir = lambda: root
+        try:
+            main = os.path.join(saves.slot_root("m1"), "0", "7656")
+            cre = os.path.join(saves.slot_root("m1~creative"), "0", "7656")
+            for d, n in ((main, 1), (cre, 1), (cre, 2)):
+                os.makedirs(os.path.join(d, "SaveGame_%d" % n))
+                with open(os.path.join(d, "SaveGame_%d" % n, "Game.json"), "w") as f:
+                    f.write("%s-%d" % ("main" if d == main else "creative", n))
+            out = saves.fold_creative("m1", "schedule1")
+            self.assertEqual(out, {"moved": 2, "kept": 0})
+            self.assertEqual(open(os.path.join(main, "SaveGame_1", "Game.json")).read(), "main-1")  # untouched
+            got = sorted(open(os.path.join(main, n, "Game.json")).read() for n in ("SaveGame_2", "SaveGame_3"))
+            self.assertEqual(got, ["creative-1", "creative-2"])
+            for n in ("SaveGame_2", "SaveGame_3"):
+                self.assertEqual(open(os.path.join(main, n, "Modded", "Frankenstein", "gamemode.txt")).read(), "creative")
+            self.assertFalse(os.path.exists(saves.slot_root("m1~creative")))
+        finally:
+            paths.data_dir = old
+
+
 class BuiltinModTests(unittest.TestCase):
     def test_old_mod_in_game_copy_is_noticed(self):
         from gamemerger.api import Api

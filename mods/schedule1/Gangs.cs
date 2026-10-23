@@ -57,7 +57,7 @@ namespace Frankenstein
         static string _war = "";
         static int _wave;
 
-        static string File_ => Path.Combine(MelonEnvironment.UserDataDirectory, "Frankenstein", MainMenu.Creative ? "gangs-creative.json" : "gangs.json");
+        static string File_ => Mode.DataFile("gangs");  // one per save
 
         public static bool On => _gangs.Count > 0;
 
@@ -110,6 +110,10 @@ namespace Frankenstein
         // ---------- save and load ----------
         static void Load()
         {
+            // each save has its own standing with the gangs: start clean, then read this save's
+            _member = ""; _rank = 0; _rep = 0; _ownName = ""; _specialty = "both"; _crew = 0; _bricks = 0; _crates = 0;
+            _initGang = ""; _initStep = 0; _lastDay = -1;
+            _turf.Clear(); _heat.Clear(); _hq.Clear();
             try
             {
                 if (!File.Exists(File_)) return;
@@ -291,7 +295,10 @@ namespace Frankenstein
             }
         }
 
-        static void TryRob()
+        public static void Toggle() { if (On && _inTown) _open = !_open; }
+        public static void Close() => _open = false;
+
+        public static void TryRob()
         {
             var me = Player.Local;
             if (me == null) return;
@@ -468,7 +475,7 @@ namespace Frankenstein
                     string runs = _turf.Contains(g.Region) ? "lost " + g.Region + " to you" : "run " + g.Region;
                     GUI.Label(new Rect(x + 12, cy, w - 150, 22), "<color=" + g.Hex + ">■</color> " + g.Name + " · " + runs + (Heat(g.Id) > 0 ? " · robbed " + Heat(g.Id) + "x" : ""));
                     if (mine) GUI.Label(new Rect(x + w - 130, cy, 118, 22), Rank(g, _rank));
-                    else if (_member.Length == 0 && _ownName.Length == 0 && _initGang.Length == 0 && GUI.Button(new Rect(x + w - 130, cy, 118, 24), "Join"))
+                    else if (_member.Length == 0 && _ownName.Length == 0 && _initGang.Length == 0 && Pad.Button(new Rect(x + w - 130, cy, 118, 24), "Join"))
                     {
                         _initGang = g.Id; _initStep = 0; Save();
                         Say("Initiation for the " + g.Name + ": rob a " + (G(g.Rival)?.Name ?? "rival") + " dealer on their turf.");
@@ -483,12 +490,12 @@ namespace Frankenstein
                                 : _initStep == 1 ? "2. Bring the $500 tribute." : "3. Survive the " + (G(ig.Rival)?.Name ?? "rival") + " hit squad on " + ig.Region + ".";
                     GUI.Label(new Rect(x + 12, cy, w - 24, 44), "Initiation, " + ig.Name + ": " + step);
                     cy += 46;
-                    if (_initStep == 1 && GUI.Button(new Rect(x + 12, cy, 200, 26), "Pay the $500 tribute"))
+                    if (_initStep == 1 && Pad.Button(new Rect(x + 12, cy, 200, 26), "Pay the $500 tribute"))
                     {
                         if (CashNow() < 500) Say("You need $500 cash.");
                         else { Cash(-500); _initStep = 2; Save(); Say("Tribute paid. Now hold " + ig.Region + " against the hit squad."); }
                     }
-                    if (_initStep == 2 && _region == ig.Region && GUI.Button(new Rect(x + 12, cy, 200, 26), "Start the fight"))
+                    if (_initStep == 2 && _region == ig.Region && Pad.Button(new Rect(x + 12, cy, 200, 26), "Start the fight"))
                     {
                         var rival = G(ig.Rival);
                         var me = Player.Local;
@@ -500,9 +507,9 @@ namespace Frankenstein
                         _member = ig.Id; _rank = 0; _rep = 0; _initGang = ""; _initStep = 0; Save();
                         Say("You're in. Welcome to the " + ig.Name + ", " + Rank(ig, 0) + ".");
                     }
-                    if (GUI.Button(new Rect(x + w - 130, cy, 118, 26), "Give up")) { _initGang = ""; _initStep = 0; Save(); }
+                    if (Pad.Button(new Rect(x + w - 130, cy, 118, 26), "Give up")) { _initGang = ""; _initStep = 0; Save(); }
                 }
-                else if (_member.Length > 0 && GUI.Button(new Rect(x + 12, y + h - 40, 200, 28), "Leave the " + G(_member)?.Name))
+                else if (_member.Length > 0 && Pad.Button(new Rect(x + 12, y + h - 40, 200, 28), "Leave the " + G(_member)?.Name))
                 {
                     _heat[_member] = Heat(_member) + 3; _member = ""; _rank = 0; _rep = 0; Save();
                     Say("You left. They won't forget it.");
@@ -516,10 +523,10 @@ namespace Frankenstein
                     GUI.Label(new Rect(x + 12, cy, w - 24, 22), "Start your own gang" + (_member.Length > 0 ? " (you'll leave yours)" : ""));
                     _nameField = GUI.TextField(new Rect(x + 12, cy + 26, w - 24, 26), _nameField ?? "", 28);
                     GUI.Label(new Rect(x + 12, cy + 58, w - 24, 22), "Runs on: " + Spec());
-                    if (GUI.Button(new Rect(x + 12, cy + 84, 140, 26), "Drugs")) _specialty = "drugs";
-                    if (GUI.Button(new Rect(x + 158, cy + 84, 140, 26), "Guns")) _specialty = "guns";
-                    if (GUI.Button(new Rect(x + 304, cy + 84, 140, 26), "Drugs and guns")) _specialty = "both";
-                    if (GUI.Button(new Rect(x + 12, cy + 122, w - 24, 30), "Start " + ((_nameField ?? "").Trim().Length > 0 ? _nameField.Trim() : "my gang") + " ($1,000)"))
+                    if (Pad.Button(new Rect(x + 12, cy + 84, 140, 26), "Drugs")) _specialty = "drugs";
+                    if (Pad.Button(new Rect(x + 158, cy + 84, 140, 26), "Guns")) _specialty = "guns";
+                    if (Pad.Button(new Rect(x + 304, cy + 84, 140, 26), "Drugs and guns")) _specialty = "both";
+                    if (Pad.Button(new Rect(x + 12, cy + 122, w - 24, 30), "Start " + ((_nameField ?? "").Trim().Length > 0 ? _nameField.Trim() : "my gang") + " ($1,000)"))
                     {
                         if (CashNow() < 1000) Say("You need $1,000 cash.");
                         else
@@ -536,20 +543,20 @@ namespace Frankenstein
                 GUI.Label(new Rect(x + 12, cy, w - 24, 22), _ownName + " · runs on " + Spec());
                 GUI.Label(new Rect(x + 12, cy + 24, w - 24, 22), "Crew " + _crew + " · districts: " + (_turf.Count > 0 ? string.Join(", ", _turf.ToArray()) : "none yet"));
                 GUI.Label(new Rect(x + 12, cy + 48, w - 24, 22), "Stock: " + _bricks + " bricks of product, " + _crates + " crates of guns");
-                if (GUI.Button(new Rect(x + 12, cy + 78, w - 24, 28), "Recruit someone ($400)"))
+                if (Pad.Button(new Rect(x + 12, cy + 78, w - 24, 28), "Recruit someone ($400)"))
                 {
                     if (_crew >= 40) Say("Your crew is as big as it gets.");
                     else if (CashNow() < 400) Say("You need $400 cash.");
                     else { Cash(-400); _crew++; Save(); Say("Recruited. Crew: " + _crew + "."); }
                 }
                 var owner = OwnerGang(_region);
-                if (_war.Length == 0 && owner != null && GUI.Button(new Rect(x + 12, cy + 112, w - 24, 28), "Take " + _region + " from the " + owner.Name))
+                if (_war.Length == 0 && owner != null && Pad.Button(new Rect(x + 12, cy + 112, w - 24, 28), "Take " + _region + " from the " + owner.Name))
                     StartWar();
                 GUI.Label(new Rect(x + 12, cy + 150, w - 24, 66), "Each game day your districts pay out and your crew makes stock: product if you run drugs, " +
                                                                  "guns if you run guns. Sell stock to other gangs in Market.");
-                if (GUI.Button(new Rect(x + 12, cy + 220, 140, 26), "Drugs")) { _specialty = "drugs"; Save(); }
-                if (GUI.Button(new Rect(x + 158, cy + 220, 140, 26), "Guns")) { _specialty = "guns"; Save(); }
-                if (GUI.Button(new Rect(x + 304, cy + 220, 140, 26), "Both")) { _specialty = "both"; Save(); }
+                if (Pad.Button(new Rect(x + 12, cy + 220, 140, 26), "Drugs")) { _specialty = "drugs"; Save(); }
+                if (Pad.Button(new Rect(x + 158, cy + 220, 140, 26), "Guns")) { _specialty = "guns"; Save(); }
+                if (Pad.Button(new Rect(x + 304, cy + 220, 140, 26), "Both")) { _specialty = "both"; Save(); }
                 return;
             }
             // market: buy and sell product and guns with whichever gang runs this district
@@ -560,21 +567,21 @@ namespace Frankenstein
             int brick = (int)(900 * g2.DrugPrice), crate = (int)(1400 * g2.GunPrice);
             GUI.Label(new Rect(x + 12, cy, w - 24, 22), "Trading with the " + g2.Name + (off < 1 ? " (member prices)" : ""));
             GUI.Label(new Rect(x + 12, cy + 24, w - 24, 22), "You hold " + _bricks + " bricks, " + _crates + " crates");
-            if (GUI.Button(new Rect(x + 12, cy + 52, 210, 28), "Buy a brick $" + (int)(brick * off))) Buy((int)(brick * off), () => _bricks++);
-            if (GUI.Button(new Rect(x + 230, cy + 52, 210, 28), "Sell a brick $" + (int)(brick * 1.15f))) Sell(ref _bricks, (int)(brick * 1.15f));
-            if (GUI.Button(new Rect(x + 12, cy + 86, 210, 28), "Buy a crate $" + (int)(crate * off))) Buy((int)(crate * off), () => _crates++);
-            if (GUI.Button(new Rect(x + 230, cy + 86, 210, 28), "Sell a crate $" + (int)(crate * 1.15f))) Sell(ref _crates, (int)(crate * 1.15f));
+            if (Pad.Button(new Rect(x + 12, cy + 52, 210, 28), "Buy a brick $" + (int)(brick * off))) Buy((int)(brick * off), () => _bricks++);
+            if (Pad.Button(new Rect(x + 230, cy + 52, 210, 28), "Sell a brick $" + (int)(brick * 1.15f))) Sell(ref _bricks, (int)(brick * 1.15f));
+            if (Pad.Button(new Rect(x + 12, cy + 86, 210, 28), "Buy a crate $" + (int)(crate * off))) Buy((int)(crate * off), () => _crates++);
+            if (Pad.Button(new Rect(x + 230, cy + 86, 210, 28), "Sell a crate $" + (int)(crate * 1.15f))) Sell(ref _crates, (int)(crate * 1.15f));
             GUI.Label(new Rect(x + 12, cy + 120, w - 24, 22), "Their guns and product, into your pockets:");
             float by = cy + 146;
             foreach (var gun in g2.Guns.Take(4))
             {
                 int price = (int)(gun.Contains("@") ? int.Parse(gun.Split('@')[1]) * off : 1000);
                 var name = gun.Split('@')[0];
-                if (GUI.Button(new Rect(x + 12, by, w - 24, 26), name + "  $" + price)) Buy(price, () => Give(name, 1));
+                if (Pad.Button(new Rect(x + 12, by, w - 24, 26), name + "  $" + price)) Buy(price, () => Give(name, 1));
                 by += 30;
             }
             int bag = (int)(60 * g2.DrugPrice * off);
-            if (GUI.Button(new Rect(x + 12, by, w - 24, 26), "5 " + g2.Product + "  $" + bag * 5)) Buy(bag * 5, () => Give(g2.Product, 5));
+            if (Pad.Button(new Rect(x + 12, by, w - 24, 26), "5 " + g2.Product + "  $" + bag * 5)) Buy(bag * 5, () => Give(g2.Product, 5));
             GUI.Label(new Rect(x + 12, y + h - 30, w - 24, 22), "Prices change by gang: buy cheap in one district, sell in another.");
         }
 

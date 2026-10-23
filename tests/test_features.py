@@ -110,12 +110,12 @@ class FeatureChecklist(unittest.TestCase):
             self.assertTrue(b.get("ingame"), g)
         with open(os.path.join(PKG, "mods", "schedule1", "Frankenstein.dll"), "rb") as f:
             dll = f.read()
-        self.assertIn("switch.json".encode("utf-16-le"), dll, "Schedule I main menu panel")
+        self.assertIn("Game Mode: ".encode("utf-16-le"), dll, "Schedule I main menu: Game Mode entry")
         self.assertTrue(os.path.isfile(os.path.join(ROOT, "mods", "schedule1", "MainMenu.cs")))
         gta = read(PKG, "mods", "gta5", "FrankensteinMenu.3.cs")
         for x in ("Keys.F10", "Keys.F11", "switch.json", "ChangeModel", "BuildZone", "SET_WEATHER_TYPE_NOW_PERSIST", "Press Shift+F10 again to confirm", "carry-done.txt", "Keys.F6"):
             self.assertIn(x, gta)
-        for x in ("Hold the block", "block.json", "Build the block here", "Switch to Creative (every item, its own saves)", "Yes, switch now", "carry-done.txt"):
+        for x in ("Hold the block", "block.json", "Build the block here", "Game Mode: ", "Yes, switch", "carry-done.txt"):
             self.assertIn(x.encode("utf-16-le"), dll, "Schedule I World: " + x)
         self.assertTrue(os.path.isfile(os.path.join(ROOT, "mods", "schedule1", "World.cs")))
 
@@ -281,6 +281,23 @@ class FeatureChecklist(unittest.TestCase):
         js = read(PKG, "web", "app.js")
         self.assertIn("roomToUnpack", js)
         self.assertNotIn("Creative (own saves)</button>", js, "Creative lives in the game's own menu, not the app's More menu")
+
+    def test_332_game_mode_controller_guns_fly_cars(self):
+        dll = open(os.path.join(PKG, "mods", "schedule1", "Frankenstein.dll"), "rb").read()
+        for word in ("gamemode.txt", "save-backups", "LoadedGameFolderPath",         # Creative is a mode on each save
+                     "Point the stick, let go of View",              # the controller wheel
+                     "AK-47 (Frankenstein)", "Uzi (Frankenstein)", "RPG (Frankenstein)", "Guns source: ",  # own guns
+                     "Flying. Jump goes up", "Speed: ",                               # fly and speed in Creative
+                     "E: get in the car", "EnterVehicle", "menu-debug.txt"):
+            self.assertIn(word.encode("utf-16-le"), dll, word)
+        for f in ("MainMenu.cs", "World.cs", "Gangs.cs", "Carry.cs"):
+            self.assertNotIn("GUI.Button(", read(ROOT, "mods", "schedule1", f), f + ": every button reachable with the controller (Pad.Button)")
+        self.assertNotIn("Application.Quit", read(ROOT, "mods", "schedule1", "MainMenu.cs"), "no restart to change mode")
+        self.assertIn("IsPlayerOwned = true", read(ROOT, "mods", "schedule1", "Vehicles.cs"))
+        api = read(PKG, "api.py")
+        self.assertIn("fold_creative", api)
+        self.assertNotIn('merge_id + "~creative" if creative', api, "one set of saves")
+        self.assertIn("_members", read(ROOT, "mods", "schedule1", "Rt.cs"))  # reflection cached: less lag
 
     def test_3313_new_logo_on_shortcuts(self):
         from PIL import Image
