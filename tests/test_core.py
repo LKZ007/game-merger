@@ -1042,7 +1042,7 @@ class DeviceTests(unittest.TestCase):
                 recs.append(profiles.export(data["profiles"][0]["id"]))
             for i, r in enumerate(roots):  # each reads the other's at once
                 paths.data_dir = lambda r=r: r
-                profiles.link(recs[1 - i], newer_only=True)
+                profiles.link(recs[1 - i], newer_only=True, seen={"paaaa", "pbbbb"})
             uids = []
             for r in roots:
                 paths.data_dir = lambda r=r: r

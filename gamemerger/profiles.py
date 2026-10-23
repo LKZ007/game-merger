@@ -264,16 +264,17 @@ def _merge_personal(pid, theirs):
     save_personal(pid, mine)
 
 
-def link(rec, newer_only=False):
+def link(rec, newer_only=False, seen=()):
     """Bring an account from another PC onto this one. The same account (same uid) is updated; the other
     PC's admin becomes this PC's admin if this one isn't linked yet, so you're one person everywhere.
-    From the cloud folder (newer_only), two PCs read each other at once: each would take the other's id and they'd
-    stay apart, swapped. So there only the lower id is taken, and both end up on it. Returns the local account id."""
+    From the cloud folder (newer_only), two PCs that can each see the other's account (seen: the ids in the folder)
+    would each take the other's id and stay apart, swapped. So then only the lower id is taken, and both end up on
+    it. Returns the local account id."""
     data = load()
     p = next((x for x in data["profiles"] if uid(x) == rec["uid"]), None)
     if p is None and rec.get("admin"):
         p = next((x for x in data["profiles"] if x.get("admin") and not x.get("link")), None)
-        if p is not None and newer_only and rec["uid"] > p["id"]:
+        if p is not None and newer_only and p["id"] in seen and rec["uid"] > p["id"]:
             return p["id"]  # the other PC takes ours instead
         if p is not None and p["id"] != rec["uid"]:
             p["link"] = rec["uid"]
@@ -332,6 +333,6 @@ def pull(cloud_roots):
         for rec in recs.values():
             if isinstance(rec, dict) and rec.get("uid") and rec.get("name"):
                 before = {x["id"]: x.get("synced") for x in load()["profiles"]}
-                pid = link(rec, newer_only=True)
+                pid = link(rec, newer_only=True, seen=set(recs))
                 n += before.get(pid, -1) != (find(pid) or {}).get("synced")
     return n
