@@ -43,12 +43,14 @@ API = {
     "Merge plan before Merge it": ["merge_plan", "merge_plan_of"],
     "Carry over my save (character and abilities)": ["carry_read", "carry_save"],
     "your devices on one account, joining over Wi-Fi (3.33)": ["devices_state", "device_join", "device_join_result", "device_join_answer", "_start_devices"],
+    "pairing a PC with a code, firewall fix (3.35)": ["device_pair_start", "device_pair_join", "device_pair_result", "device_firewall"],
 }
 
 # feature: something the page must still have (a function or element id in the web files)
 WEB = {
     "who's playing and account linking": ["whoIsPlaying", "linkGet"],
     "your devices card and join requests (3.33)": ["renderDevices", "watchJoinRequests", "Use ${esc(a.name)}'s account on this PC"],
+    "pairing code box (3.35)": ["showPairCode", "pairWithCode", "Let Frankenstein through the firewall"],
     "library halo, Make host and this-merge panel": ["mergePairHtml", "make-host", "picked"],
     "merge step picks mods by itself": ["What it brings over"],
     "What it adds with built-ins and stand-ins": ["addsHtml", "story stand-in"],
@@ -290,7 +292,7 @@ class FeatureChecklist(unittest.TestCase):
                      "Point the stick, let go of View",              # the controller wheel
                      "AK-47 (Frankenstein)", "Uzi (Frankenstein)", "RPG (Frankenstein)", "Guns source: ",  # own guns
                      "Flying. Jump goes up", "Speed: ",                               # fly and speed in Creative
-                     "E: get in the car", "EnterVehicle", "menu-debug.txt"):
+                     "Get in the ", "EnterVehicle", "menu-debug.txt"):
             self.assertIn(word.encode("utf-16-le"), dll, word)
         for f in ("MainMenu.cs", "World.cs", "Gangs.cs", "Carry.cs"):
             self.assertNotIn("GUI.Button(", read(ROOT, "mods", "schedule1", f), f + ": every button reachable with the controller (Pad.Button)")
@@ -300,6 +302,21 @@ class FeatureChecklist(unittest.TestCase):
         self.assertIn("fold_creative", api)
         self.assertNotIn('merge_id + "~creative" if creative', api, "one set of saves")
         self.assertIn("_members", read(ROOT, "mods", "schedule1", "Rt.cs"))  # reflection cached: less lag
+
+    def test_335_own_weapon_looks_cars_and_car_entry(self):
+        dll = open(os.path.join(PKG, "mods", "schedule1", "Frankenstein.dll"), "rb").read()
+        for word in ("Frankenstein model", "Frankenstein kit:", "Velocci 720", "Toro Furioso", "Notte GT", "Gelände G63",
+                     "vehicles-debug.txt", "Get in the ", "Car: in or out", "StartInteract"):
+            self.assertIn(word.encode("utf-16-le"), dll, word)
+        self.assertNotIn("More Guns isn't loaded".encode("utf-16-le"), dll)
+        looks = read(ROOT, "mods", "schedule1", "Looks.cs")
+        for key in ("ak47", "uzi", "sniper", "rpg", "launcher"):
+            self.assertIn('["%s"] = new[]' % key, looks)   # every added weapon has its own model
+        self.assertIn("r.enabled = false", looks)            # the base gun is hidden
+        self.assertIn("Looks.Icon(", read(ROOT, "mods", "schedule1", "ItemMenu.cs"))
+        self.assertIn("Looks.Dress(", read(ROOT, "mods", "schedule1", "Boom.cs"))
+        self.assertIn("Pad.X", read(ROOT, "mods", "schedule1", "Vehicles.cs"))
+        self.assertIn("Garage.Update()", read(ROOT, "mods", "schedule1", "Plugin.cs"))
 
     def test_334_new_main_menu_and_drop(self):
         dll = open(os.path.join(PKG, "mods", "schedule1", "Frankenstein.dll"), "rb").read()

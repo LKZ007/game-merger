@@ -2,6 +2,7 @@ import json
 import os
 import shutil
 import tempfile
+import time
 import unittest
 import types
 import zipfile
@@ -1001,6 +1002,54 @@ class DeviceTests(unittest.TestCase):
         laptop = self._lan([], {"games": [], "merges": []})
         laptop.handle(dict(pc.sent[-1][0], device="DESKTOP-1T0410G"), "10.0.0.4")
         self.assertTrue(laptop.answers["desktop-1t0410g"]["ok"])
+
+    def test_pairing_with_a_code(self):
+        from gamemerger import devices
+        laptop = self._lan([{"uid": "levy-uid", "name": "levy"}], {"games": [], "merges": []})
+        laptop._broadcast = lambda msg: laptop.sent.append((msg, "bcast"))
+        code = devices.new_pair_code()
+        laptop.offer = (devices.pair_tag(code), devices.seal(code, "FRK1-levy"), time.time() + 60)
+        laptop._broadcast({"t": "pair", "device": "LEVYS-LAPTOP", "tag": laptop.offer[0], "blob": laptop.offer[1]})
+        pc = self._lan([{"uid": "pc-uid", "name": "levy"}], {"games": [], "merges": []})
+        stranger = self._lan([], {"games": [], "merges": []})
+        stranger.seek(devices.new_pair_code())
+        stranger.handle(laptop.sent[-1][0], "10.0.0.5")
+        self.assertIsNone(stranger.paired)          # a different code gets nothing
+        pc.seek(code.lower().replace("-", " "))     # typed any old way
+        pc.handle(laptop.sent[-1][0], "10.0.0.5")
+        self.assertEqual(pc.paired, {"device": "LEVYS-LAPTOP", "code": "FRK1-levy"})
+        self.assertNotIn("FRK1-levy", json.dumps(laptop.sent))  # only ever sent locked
+        with self.assertRaises(devices.PairError):
+            devices.clean_code("1234")
+
+    def test_hello_goes_to_every_network(self):
+        from gamemerger import devices
+        self.assertEqual(devices.broadcast_addrs(["192.168.1.23", "172.20.64.1"]), ["255.255.255.255", "192.168.1.255", "172.20.64.255"])
+        self.assertIn("localport=47811", devices.firewall_command("C:\\x\\Frankenstein.exe"))
+
+    def test_cloud_sync_doesnt_swap_two_admins(self):
+        from gamemerger import profiles, paths
+        old = paths.data_dir
+        roots = [tempfile.mkdtemp(), tempfile.mkdtemp()]
+        try:
+            recs = []
+            for i, r in enumerate(roots):
+                paths.data_dir = lambda r=r: r
+                profiles.ensure_admin({}, "levy")
+                data = profiles.load()
+                data["profiles"][0]["id"] = ["paaaa", "pbbbb"][i]
+                profiles.save(data)
+                recs.append(profiles.export(data["profiles"][0]["id"]))
+            for i, r in enumerate(roots):  # each reads the other's at once
+                paths.data_dir = lambda r=r: r
+                profiles.link(recs[1 - i], newer_only=True)
+            uids = []
+            for r in roots:
+                paths.data_dir = lambda r=r: r
+                uids.append([profiles.uid(p) for p in profiles.load()["profiles"]])
+            self.assertEqual(uids, [["paaaa"], ["paaaa"]])
+        finally:
+            paths.data_dir = old
 
     def test_cloud_folder_round_trip(self):
         from gamemerger import devices

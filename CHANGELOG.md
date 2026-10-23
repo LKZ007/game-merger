@@ -3,6 +3,31 @@
 Every release, newest first. Downloads are on the [releases page](https://github.com/LKZ007/game-merger/releases).
 The app was called Game Merger before 3.8.0.
 
+## v3.35.0 (2026-10-23)
+- **Every added weapon has its own look now,** in your hands and in the F6 Weapons tab:
+  - AK-47: wooden stock and handguard, curved magazine, long barrel.
+  - Uzi: boxy body, magazine in the grip, folded stock.
+  - .308 Sniper: long barrel, scope, bolt handle, bipod.
+  - RPG: green tube with the warhead on the front. The warhead disappears when you fire and comes back when you reload.
+  - Grenade Launcher: six-shot drum with grenades in it, stock and front grip.
+  - Schedule I can't load new gun models, so each one is built from simple shapes in the game's own materials. The gun it's built on (M1911, revolver or pump shotgun) is hidden.
+- **Get in and out of cars with the controller.** Walk up to a car's door and press **X** (E on the keyboard). Press X again to get out. A prompt now shows by the car with its name. Frankenstein tries each of the game's ways in until one works. If none does, it says so and writes `UserData\Frankenstein\vehicles-debug.txt` for fixing it. "Car: in or out" is on the wheel too.
+- **New cars in F6 > Vehicles,** designed by Frankenstein (unbranded lookalikes):
+  - **Velocci 720:** papaya-orange supercar.
+  - **Toro Furioso:** yellow supercar with a big wing.
+  - **Notte GT:** purple GT with violet underglow.
+  - **Gelände G63** and **Gelände G Desert:** boxy luxury off-roaders.
+  - Each has its own paint, body kit (splitter, side skirts, wing and diffuser, or a spare wheel, roof light bar, grille and step bars), LED lights and more top speed.
+  - Underneath, each is one of the game's own cars (Cheetah, Hounddog or Bruiser), so it drives, parks and saves like any car. Its kit comes back when you load the save.
+- **Put your laptop and PC on one account with a code.** In Settings > Accounts > Your devices, press **Show a pairing code** on the PC that has your account. Type the code on the other PC and press **Pair**. There's no Yes to press on the other side.
+  - Both PCs need Frankenstein open, on the same Wi-Fi or router. Nothing leaves your network.
+- **Why the PCs couldn't see each other:**
+  - Windows' firewall blocks Frankenstein on Wi-Fi marked Public. If a PC hasn't heard any other Frankenstein, a **Let Frankenstein through the firewall** link shows. It needs one Yes on Windows' prompt.
+  - PCs with a VPN, Hyper-V or VirtualBox adapter sent their hello out of the wrong network. Hellos now go out on every network the PC is on.
+  - Two PCs syncing through the cloud folder could swap accounts and stay apart. Now they both end up on the same one.
+- The Weapons tab header no longer says "More Guns isn't loaded".
+- Not tested in game yet.
+
 ## v3.34.0 (2026-10-23)
 - **Schedule I has a new main menu,** drawn by Frankenstein like the picture you sent. It has big cards for Continue ("Load your world"), New Game ("Start a new world"), **Creative ("Unlimited resources")**, Settings and Quit, with the merge's picture, its name and your saves (with their game modes) on the right.
   - Creative starts a new world in Creative.

@@ -10,8 +10,8 @@ using UnityEngine;
 namespace Frankenstein
 {
     /// <summary>Frankenstein's own explosives, since neither Schedule I nor More Guns has a grenade launcher:
-    /// frag grenades (T throws one; from the F6 menu) and a grenade launcher. The launcher is the game's
-    /// pump shotgun given from the F6 menu: while that one gun is in your hand, every shot also fires a grenade
+    /// frag grenades (T throws one; from the F6 menu) and a grenade launcher. The launcher works through the game's
+    /// pump shotgun, with its own drum-launcher model (Looks): while that one gun is in your hand, every shot also fires a grenade
     /// that arcs, hits and explodes. Explosions hurt everyone near them except you (the game's own NPC health).
     /// Physics and lights are reached by name so the same mod works on both builds of the game.</summary>
     internal static class Boom
@@ -96,7 +96,7 @@ namespace Frankenstein
             if (_shotgun == null) { ItemMenu.Notify("This game has no shotgun to build the grenade launcher on."); return; }
             _before = Slots().Select((s, i) => Id(s) == _shotgun ? i : -1).Where(i => i >= 0).ToList();
             S1API.Console.ConsoleHelper.AddItemToInventory(_shotgun, 1);
-            ItemMenu.Notify("Got the Grenade Launcher (a pump shotgun that fires grenades). Hold it and shoot.");
+            ItemMenu.Notify("Got the Grenade Launcher (six-shot drum). Equip it and shoot: every shot is a grenade.");
         }
 
         public static void Update()
@@ -191,11 +191,12 @@ namespace Frankenstein
             if (_gun != null && (_gunSeen == null || (_gunSeen is UnityEngine.Object g0 && g0 == null) || Time.unscaledTime >= _nextGunLook))
             {
                 _nextGunLook = Time.unscaledTime + 1.5f;
-                _gunSeen = Rt.All(_gun).FirstOrDefault();
+                _gunSeen = Looks.HeldGun(_gun);
             }
             var gun = _gunSeen;
             var inst = Rt.Get(gun, "weaponItem", "itemInstance", "ItemInstance");
             if (gun == null || inst == null) return;
+            try { Looks.Dress(Rt.GameObjectOf(gun), "launcher", "pumpshotgun"); } catch (Exception e) { Warn("launcher look", e); }
             int ammo = Convert.ToInt32(Rt.Get(inst, "Value") ?? 0);
             if (!ReferenceEquals(gun, _heldGun)) { _heldGun = gun; _heldAmmo = ammo; return; }
             if (ammo < _heldAmmo) Throw(true);  // a shot went off: a grenade goes with it

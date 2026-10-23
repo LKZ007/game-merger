@@ -267,11 +267,14 @@ def _merge_personal(pid, theirs):
 def link(rec, newer_only=False):
     """Bring an account from another PC onto this one. The same account (same uid) is updated; the other
     PC's admin becomes this PC's admin if this one isn't linked yet, so you're one person everywhere.
-    Returns the local account id."""
+    From the cloud folder (newer_only), two PCs read each other at once: each would take the other's id and they'd
+    stay apart, swapped. So there only the lower id is taken, and both end up on it. Returns the local account id."""
     data = load()
     p = next((x for x in data["profiles"] if uid(x) == rec["uid"]), None)
     if p is None and rec.get("admin"):
         p = next((x for x in data["profiles"] if x.get("admin") and not x.get("link")), None)
+        if p is not None and newer_only and rec["uid"] > p["id"]:
+            return p["id"]  # the other PC takes ours instead
         if p is not None and p["id"] != rec["uid"]:
             p["link"] = rec["uid"]
     if p is not None and newer_only and p.get("synced", 0) >= rec.get("time", 0):

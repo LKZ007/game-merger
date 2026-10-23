@@ -8,9 +8,9 @@ using UnityEngine;
 namespace Frankenstein
 {
     /// <summary>Frankenstein's own AK-47, Uzi, sniper and RPG, so they're there even when the More Guns mod isn't
-    /// (it isn't made for every build of the game). Schedule I can't be given new gun models, so each is built on one
-    /// of its own guns (the M1911, revolver or pump shotgun) and gets the real gun's numbers: full auto, magazine,
-    /// fire rate, damage; the RPG fires a rocket that explodes. The hotbar slot the gun goes into remembers which
+    /// (it isn't made for every build of the game). Each works through one of the game's own guns (the M1911,
+    /// revolver or pump shotgun) and gets the real gun's numbers: full auto, magazine, fire rate, damage; the RPG
+    /// fires a rocket that explodes. In your hands each has its own model (Looks), not the base gun's. The hotbar slot the gun goes into remembers which
     /// gun it is (UserData/Frankenstein/ownguns-&lt;save&gt;.json). Only offered when More Guns' own isn't loaded.</summary>
     internal static class OwnGuns
     {
@@ -23,10 +23,10 @@ namespace Frankenstein
 
         public static readonly Def[] Defs =
         {
-            new Def { Key = "ak47", Name = "AK-47", Base = "m1911", Spec = new Guns.Spec { Name = "AK-47 (Frankenstein)", Damage = 1.5, Rate = 3.5, Mag = 30, Auto = true, AutoSet = true, Size = 1.1 } },
+            new Def { Key = "ak47", Name = "AK-47", Base = "m1911", Spec = new Guns.Spec { Name = "AK-47 (Frankenstein)", Damage = 1.5, Rate = 3.5, Mag = 30, Auto = true, AutoSet = true } },
             new Def { Key = "uzi", Name = "Uzi", Base = "m1911", Spec = new Guns.Spec { Name = "Uzi (Frankenstein)", Damage = 0.8, Rate = 5, Mag = 32, Auto = true, AutoSet = true, Reload = 0.8 } },
-            new Def { Key = "sniper", Name = ".308 Sniper", Base = "revolver", Spec = new Guns.Spec { Name = ".308 Sniper (Frankenstein)", Damage = 4, Rate = 0.45, Mag = 5, Reload = 1.4, Size = 1.15 } },
-            new Def { Key = "rpg", Name = "RPG", Base = "pumpshotgun", Rocket = true, Spec = new Guns.Spec { Name = "RPG (Frankenstein)", Damage = 1, Rate = 0.35, Mag = 1, Reload = 1.6, Size = 1.15 } },
+            new Def { Key = "sniper", Name = ".308 Sniper", Base = "revolver", Spec = new Guns.Spec { Name = ".308 Sniper (Frankenstein)", Damage = 4, Rate = 0.45, Mag = 5, Reload = 1.4 } },
+            new Def { Key = "rpg", Name = "RPG", Base = "pumpshotgun", Rocket = true, Spec = new Guns.Spec { Name = "RPG (Frankenstein)", Damage = 1, Rate = 0.35, Mag = 1, Reload = 1.6 } },
         };
 
         /// <summary>True when More Guns' own guns loaded; then these aren't offered.</summary>
@@ -44,7 +44,7 @@ namespace Frankenstein
         static string File_ => Mode.DataFile("ownguns");
 
         public static string Source => MoreGunsLoaded ? "More Guns loaded: its AK, SMG, sniper and RPG are in the Weapons tab"
-                                                      : "More Guns isn't loaded: the AK-47, Uzi, sniper and RPG are Frankenstein's own";
+                                                      : "AK-47, Uzi, sniper, RPG and grenade launcher: Frankenstein's own, each with its own model";
 
         public static void Give(Def d)
         {
@@ -53,7 +53,7 @@ namespace Frankenstein
             _giving = d;
             _before = Boom.Slots().Select((s, i) => Boom.Id(s) == baseId ? i : -1).Where(i => i >= 0).ToList();
             S1API.Console.ConsoleHelper.AddItemToInventory(baseId, 1);
-            ItemMenu.Notify(d.Name + " added. It looks like the gun it's built on, with the " + d.Name + "'s numbers.");
+            ItemMenu.Notify(d.Name + " added to your hotbar. Equip it: it's the " + d.Name + " in your hands.");
         }
 
         public static string NameOfSlot(int i) => _slots.TryGetValue(i, out var k) ? Defs.First(d => d.Key == k).Name : null;
@@ -111,7 +111,7 @@ namespace Frankenstein
             if (_held == null || (_held is UnityEngine.Object h && h == null) || Time.unscaledTime >= _nextGunLook)
             {
                 _nextGunLook = Time.unscaledTime + 1.5f;
-                var gun = Rt.All(_gun).FirstOrDefault();
+                var gun = Looks.HeldGun(_gun);
                 if (gun != null && !ReferenceEquals(gun, _held))
                 {
                     _held = gun;
@@ -125,8 +125,12 @@ namespace Frankenstein
                     return;
                 }
             }
-            if (!held.Rocket || _held == null) return;
+            if (_held == null) return;
+            var go = Rt.GameObjectOf(_held);
+            try { Looks.Dress(go, held.Key, held.Base); } catch (Exception e) { Melon<Plugin>.Logger.Warning("Looks: " + held.Name + ": " + e.Message); }
+            if (!held.Rocket) return;
             int ammo = Ammo(_held);
+            Looks.Warhead(go, ammo > 0);
             if (ammo < _heldAmmo) Boom.Throw(true);  // the RPG fired: a rocket goes with the shot
             _heldAmmo = ammo;
         }

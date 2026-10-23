@@ -19,6 +19,7 @@ namespace Frankenstein
             public string Code, Name, Kind;
             public float Price;
             public Color Color;
+            public Garage.Style Style;  // one of Frankenstein's own designs, built on this game car
         }
 
         static readonly string[][] Known =
@@ -48,6 +49,9 @@ namespace Frankenstein
             catch (Exception e) { Melon<Plugin>.Logger.Warning("Vehicles: couldn't read the game's list (" + e.Message + "), using the known six"); }
             foreach (var k in Known)
                 if (!cars.Any(c => c.Code == k[0])) cars.Add(Make(k[0], k[1], 0));
+            // Frankenstein's own designs, on the game cars they're built on
+            foreach (var st in Garage.Styles)
+                if (cars.Any(c => c.Code == st.Base)) cars.Add(Garage.Car(st));
             return cars;
         }
 
@@ -89,7 +93,8 @@ namespace Frankenstein
                 v.Spawn(at, rot);
                 // yours, so you can get in and drive it (the game only lets you drive cars you own)
                 try { v.IsPlayerOwned = true; } catch (Exception e) { Melon<Plugin>.Logger.Warning("Vehicles: couldn't make it yours: " + e.Message); }
-                ItemMenu.Notify("Your " + car.Name + " is in front of you. Walk up to it and get in (E, or the controller's interact button).");
+                if (car.Style != null) Garage.Restyle(v, car.Style);
+                ItemMenu.Notify("Your " + car.Name + " is in front of you. Walk up to its door: X (or E) gets you in.");
                 return true;
             }
             catch (Exception e)
@@ -99,68 +104,212 @@ namespace Frankenstein
             }
         }
 
-        // ---------- getting in: a prompt by every car, and the controller's way in ----------
-        static object _near;
-        static float _nextNear;
-        static string _how = "";
+        // ---------- getting in and out: a prompt by every car, and the controller's way in ----------
+        static Component _near;
+        static string _nearName = "";
+        static float _nextNear, _checkAt;
+        static int _try = -1;
+        static bool _wantIn, _debugged;
+        static readonly List<string> _tried = new List<string>();
 
-        /// <summary>The nearest car within 4 metres (you can get into it with E, the game's own interact key).</summary>
+        /// <summary>Every car in the town: S1API's list (it knows the game's vehicle manager), or a search.</summary>
+        static List<Component> Cars()
+        {
+            var list = new List<Component>();
+            try
+            {
+                foreach (var w in S1API.Vehicles.VehicleRegistry.GetAll())
+                    if (Rt.Get(w, "S1LandVehicle") is Component c && c != null) list.Add(c);
+            }
+            catch (Exception) { }
+            if (list.Count == 0) list.AddRange(Rt.All(Rt.FindByName("LandVehicle")).OfType<Component>().Where(c => c != null));
+            return list;
+        }
+
+        /// <summary>How far you are from the car's side (not its middle: a car is long).</summary>
+        static float Gap(Component car, Vector3 me)
+        {
+            var local = car.transform.InverseTransformPoint(me);
+            var dx = Mathf.Max(0, Mathf.Abs(local.x) - 1f);
+            var dz = Mathf.Max(0, Mathf.Abs(local.z) - 2.3f);
+            return Mathf.Sqrt(dx * dx + dz * dz);
+        }
+
         public static void Update()
         {
             var me = Player.Local;
             if (me == null) { _near = null; return; }
+            bool inCar;
+            try { inCar = me.IsInVehicle; } catch (Exception) { return; }
             if (Time.unscaledTime >= _nextNear)
             {
-                _nextNear = Time.unscaledTime + 0.75f;
+                _nextNear = Time.unscaledTime + 0.4f;
                 _near = null;
-                if (!me.IsInVehicle)
+                float best = inCar ? 3f : 2.2f;
+                var cars = Cars();
+                foreach (var c in cars)
                 {
-                    var t = Rt.FindByName("LandVehicle");
-                    float best = 4f;
-                    foreach (var v in Rt.All(t))
-                    {
-                        var c = v as Component;
-                        if (c == null) continue;
-                        float d = Vector3.Distance(c.transform.position, me.Position);
-                        if (d < best) { best = d; _near = v; }
-                    }
+                    float d = Gap(c, me.Position);
+                    if (d < best) { best = d; _near = c; }
                 }
+                _nearName = _near != null ? NameOf(_near) : "";
+                if (_near != null && !_debugged) Debug(_near, cars.Count);
             }
-            // controller: X by a car gets you in, the same as E
-            if (_near != null && (Pad.Pressed & Pad.X) != 0 && !ItemMenu.IsOpen && !Wheel.Open) GetIn();
+            // a try that didn't put you in the car: the next way
+            if (_wantIn && Time.unscaledTime >= _checkAt)
+            {
+                if (inCar) { _wantIn = false; Melon<Plugin>.Logger.Msg("Vehicles: in the car with " + _tried.LastOrDefault()); }
+                else if (!NextTry()) { _wantIn = false; ItemMenu.Notify("Couldn't get in with the controller here: press E (the game's own button). vehicles-debug.txt has the details."); }
+            }
+            if ((Pad.Pressed & Pad.X) == 0 || ItemMenu.IsOpen || Wheel.Open) return;
+            if (inCar) GetOut();
+            else if (_near != null) GetIn();
         }
 
-        /// <summary>Gets into the nearest car the way the game does when you press E on it.</summary>
+        static string NameOf(Component car)
+        {
+            var code = Rt.Get(car, "VehicleCode", "vehicleCode") as string ?? "";
+            var style = Garage.StyleOf(car);
+            if (style != null) return style.Name;
+            var name = Rt.Get(car, "VehicleName", "vehicleName") as string;
+            return string.IsNullOrEmpty(name) ? (code.Length > 0 ? char.ToUpper(code[0]) + code.Substring(1) : "car") : name;
+        }
+
+        /// <summary>Gets into the nearest car the way the game does when you press E on it: the car's interact
+        /// point first (what E presses), then the car's own enter calls. Each is checked a moment later; if you're
+        /// not in, the next is tried.</summary>
+        public static void GetInOrOut()
+        {
+            bool inCar = false;
+            try { inCar = Player.Local != null && Player.Local.IsInVehicle; } catch (Exception) { }
+            if (inCar) GetOut(); else GetIn();
+        }
+
         public static void GetIn()
         {
-            if (_near == null) { ItemMenu.Notify("No car close enough. Walk up to one."); return; }
-            foreach (var name in new[] { "EnterVehicle", "Interacted", "PlayerEnter", "Enter" })
-                if (Call(_near, name)) { Say("got in with LandVehicle." + name); return; }
-            // the car's own interact point (what E presses)
-            var go = Rt.GameObjectOf(_near);
-            foreach (var io in go != null ? Rt.Comps(go, Rt.FindByName("InteractableObject"), true) : new List<object>())
-                foreach (var name in new[] { "StartInteract", "Interacted", "Interact" })
-                    if (Call(io, name)) { Say("got in with InteractableObject." + name); return; }
-            ItemMenu.Notify("Press E by the car to get in (this build doesn't let the controller do it for you).");
+            if (_near == null) { ItemMenu.Notify("No car close enough. Walk up to its door."); return; }
+            _tried.Clear();
+            _try = -1;
+            _wantIn = true;
+            if (!NextTry()) { _wantIn = false; ItemMenu.Notify("Press E by the car to get in."); }
         }
 
-        static void Say(string how) { if (_how != how) { _how = how; Melon<Plugin>.Logger.Msg("Vehicles: " + how); } }
-
-        static bool Call(object o, string name)
+        static bool NextTry()
         {
-            var m = o?.GetType().GetMethods(BindingFlags.Public | BindingFlags.Instance).FirstOrDefault(x => x.Name == name && x.GetParameters().Length == 0);
-            if (m == null) return false;
-            try { m.Invoke(o, null); return true; } catch (Exception) { return false; }
+            if (_near == null) return false;
+            var go = _near.gameObject;
+            var ways = new List<Func<bool>>();
+            var ioType = Rt.FindByName("InteractableObject");
+            foreach (var io in Rt.Comps(go, ioType, true))
+            {
+                var o = io;
+                ways.Add(() => Call(o, "StartInteract", "InteractableObject.StartInteract"));
+                ways.Add(() => Fire(Rt.Get(o, "onInteractStart"), "InteractableObject.onInteractStart"));
+            }
+            foreach (var n in new[] { "Interacted", "EnterVehicle", "PlayerEnter", "Enter", "Interact" })
+            {
+                var name = n;
+                ways.Add(() => Call(_near, name, "LandVehicle." + name));
+            }
+            var gamePlayer = Rt.Get(Player.Local, "S1Player");
+            ways.Add(() => Call1(gamePlayer, "EnterVehicle", _near, "Player.EnterVehicle"));
+            while (++_try < ways.Count)
+                if (ways[_try]()) { _checkAt = Time.unscaledTime + 0.6f; return true; }
+            return false;
         }
 
+        /// <summary>Out of the car: the car's own exit, as the game's button does it.</summary>
+        public static void GetOut()
+        {
+            var car = _near;
+            var gamePlayer = Rt.Get(Player.Local, "S1Player");
+            if (car != null)
+                foreach (var n in new[] { "ExitVehicle", "Exit", "PlayerExit" })
+                    if (Call(car, n, "LandVehicle." + n)) return;
+            if (Call(gamePlayer, "ExitVehicle", "Player.ExitVehicle")) return;
+            ItemMenu.Notify("Press E to get out (the game's own button).");
+        }
+
+        static bool Call(object o, string name, string label)
+        {
+            var m = o?.GetType().GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance).FirstOrDefault(x => x.Name == name && x.GetParameters().All(p => p.IsOptional));
+            if (m == null) return false;
+            try
+            {
+                m.Invoke(o, m.GetParameters().Select(p => p.DefaultValue).ToArray());
+                _tried.Add(label);
+                return true;
+            }
+            catch (Exception e) { _tried.Add(label + " failed: " + (e.InnerException ?? e).Message); return false; }
+        }
+
+        static bool Call1(object o, string name, object arg, string label)
+        {
+            var m = o?.GetType().GetMethods(BindingFlags.Public | BindingFlags.Instance)
+                .FirstOrDefault(x => x.Name == name && x.GetParameters().Length >= 1 && x.GetParameters()[0].ParameterType.IsInstanceOfType(arg) &&
+                                     x.GetParameters().Skip(1).All(p => p.IsOptional));
+            if (m == null) return false;
+            try
+            {
+                m.Invoke(o, new[] { arg }.Concat(m.GetParameters().Skip(1).Select(p => p.DefaultValue)).ToArray());
+                _tried.Add(label);
+                return true;
+            }
+            catch (Exception e) { _tried.Add(label + " failed: " + (e.InnerException ?? e).Message); return false; }
+        }
+
+        /// <summary>A UnityEvent's Invoke(), for the interact point's own "pressed" event.</summary>
+        static bool Fire(object ev, string label) => ev != null && Call(ev, "Invoke", label);
+
+        /// <summary>What the game's cars can be called with on this build, once, for fixing it from levy's log.</summary>
+        static void Debug(Component car, int count)
+        {
+            _debugged = true;
+            try
+            {
+                var lines = new List<string> { "Frankenstein " + Plugin.Version + ": " + count + " car(s) found; nearest " + car.name };
+                Func<object, string, string> Methods = (o, what) => what + ": " + (o == null ? "none" : string.Join(", ",
+                    o.GetType().GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)
+                        .Where(m => new[] { "Enter", "Exit", "Interact", "Seat", "Drive" }.Any(w => m.Name.Contains(w)))
+                        .Select(m => m.Name + "(" + m.GetParameters().Length + ")").Distinct().ToArray()));
+                lines.Add(Methods(car, "LandVehicle"));
+                foreach (var io in Rt.Comps(car.gameObject, Rt.FindByName("InteractableObject"), true).Take(3)) lines.Add(Methods(io, "InteractableObject"));
+                lines.Add(Methods(Rt.Get(Player.Local, "S1Player"), "Player"));
+                var dir = System.IO.Path.Combine(MelonLoader.Utils.MelonEnvironment.UserDataDirectory, "Frankenstein");
+                System.IO.Directory.CreateDirectory(dir);
+                System.IO.File.WriteAllLines(System.IO.Path.Combine(dir, "vehicles-debug.txt"), lines.ToArray());
+            }
+            catch (Exception e) { Melon<Plugin>.Logger.Warning("Vehicles: debug file: " + e.Message); }
+        }
+
+        static GUIStyle _promptStyle;
+
+        /// <summary>The prompt by a car (and while driving): which button gets you in or out.</summary>
         public static void Draw()
         {
             var me = Player.Local;
-            if (me == null) return;
+            if (me == null || ItemMenu.IsOpen || Wheel.Open) return;
             bool inCar;
             try { inCar = me.IsInVehicle; } catch (Exception) { return; }
-            string text = inCar ? (Pad.InUse ? "Get out: the game's interact button" : "Get out: E") : _near != null ? (Pad.InUse ? "(X) Get in the car" : "E: get in the car") : "";
-            if (text.Length > 0) GUI.Box(new Rect(Screen.width / 2f - 130, Screen.height * 0.62f, 260, 28), text);
+            if (!inCar && _near == null) return;
+            string text = inCar ? "Get out" : "Get in the " + _nearName;
+            if (_promptStyle == null)
+            {
+                _promptStyle = new GUIStyle(GUI.skin.label) { fontSize = 18 };
+                _promptStyle.normal.textColor = Color.white;
+            }
+            float w = 360, h = 44, x = Screen.width / 2f - w / 2, y = Screen.height * 0.7f;
+            if (inCar) y = Screen.height - 70;
+            Paint.Fill(new Rect(x, y, w, h), new Color(0.07f, 0.04f, 0.12f, 0.82f));
+            Paint.Fill(new Rect(x, y, 4, h), new Color(0.62f, 0.36f, 1f));
+            // the X button (blue, like on the controller), then E for the keyboard
+            Paint.Fill(new Rect(x + 14, y + 9, 26, 26), new Color(0.18f, 0.42f, 0.95f));
+            GUI.Label(new Rect(x + 21, y + 9, 26, 26), "X", _promptStyle);
+            Paint.Fill(new Rect(x + 46, y + 9, 26, 26), new Color(0.85f, 0.85f, 0.9f));
+            var dark = new GUIStyle(_promptStyle);
+            dark.normal.textColor = new Color(0.1f, 0.1f, 0.12f);
+            GUI.Label(new Rect(x + 53, y + 9, 26, 26), "E", dark);
+            GUI.Label(new Rect(x + 84, y + 10, w - 90, 28), text, _promptStyle);
         }
 
         static MethodInfo _line, _box, _ray;
@@ -221,6 +370,8 @@ namespace Frankenstein
                 case "pickup": cabX = 0.14f; cabW = 0.34f; break;
                 case "suv": bodyTop = h * 0.44f; bodyH = h * 0.3f; cabX = 0.12f; cabW = 0.7f; cabTop = h * 0.24f; break;
                 case "sports": bodyTop = h * 0.56f; bodyH = h * 0.18f; cabX = 0.3f; cabW = 0.4f; cabTop = h * 0.42f; break;
+                case "super": bodyTop = h * 0.6f; bodyH = h * 0.16f; cabX = 0.34f; cabW = 0.34f; cabTop = h * 0.47f; break;
+                case "gwagon": bodyTop = h * 0.42f; bodyH = h * 0.32f; cabX = 0.1f; cabW = 0.74f; cabTop = h * 0.16f; break;
             }
             float left = x + w * 0.06f, width = w * 0.88f;
             Paint.Fill(new Rect(left + width * cabX, y + cabTop, width * cabW, bodyTop - cabTop + 1), car.Color);  // cabin
@@ -237,6 +388,27 @@ namespace Frankenstein
                 Paint.Fill(new Rect(left + width * wx - wheel / 5, y + bodyTop + bodyH - wheel * 0.45f + wheel * 0.3f, wheel * 0.4f, wheel * 0.4f), new Color(0.6f, 0.6f, 0.65f));
             }
             Paint.Fill(new Rect(left + width - 5, y + bodyTop + 3, 5, bodyH * 0.3f), new Color(1f, 0.95f, 0.7f));  // headlight
+            var trim = car.Style != null ? car.Style.Trim : dark;
+            if (car.Kind == "super")
+            {
+                // wedge nose, rear wing on posts, side intake, tail light
+                Paint.Fill(new Rect(left + width * 0.72f, y + bodyTop - h * 0.04f, width * 0.2f, h * 0.04f), car.Color);
+                Paint.Fill(new Rect(left + width * 0.04f, y + bodyTop - h * 0.14f, 3, h * 0.14f), trim);
+                Paint.Fill(new Rect(left - w * 0.02f, y + bodyTop - h * 0.17f, width * 0.2f, h * 0.04f), trim);
+                Paint.Fill(new Rect(left + width * 0.3f, y + bodyTop + bodyH * 0.2f, width * 0.12f, bodyH * 0.35f), new Color(0, 0, 0, 0.55f));
+                Paint.Fill(new Rect(left, y + bodyTop + 2, 4, bodyH * 0.3f), new Color(1f, 0.1f, 0.06f));
+                Paint.Fill(new Rect(left + width * 0.05f, y + bodyTop + bodyH - 3, width * 0.9f, 3), trim);  // skirt
+            }
+            else if (car.Kind == "gwagon")
+            {
+                // spare wheel on the back, roof light bar, round headlight, step bar
+                Paint.Fill(new Rect(left - w * 0.05f, y + bodyTop - h * 0.06f, w * 0.06f, h * 0.24f), dark);
+                Paint.Fill(new Rect(left + width * 0.2f, y + cabTop - h * 0.06f, width * 0.5f, h * 0.05f), dark);
+                Paint.Fill(new Rect(left + width * 0.22f, y + cabTop - h * 0.04f, width * 0.46f, h * 0.02f), new Color(0.95f, 0.97f, 1f));
+                Paint.Fill(new Rect(left + width - 8, y + bodyTop + bodyH * 0.15f, 8, 8), new Color(0.95f, 0.97f, 1f));
+                Paint.Fill(new Rect(left + width * 0.25f, y + bodyTop + bodyH - 2, width * 0.5f, 4), trim);
+                for (int i = 0; i < 3; i++) Paint.Fill(new Rect(left + width - 3, y + bodyTop + bodyH * (0.45f + i * 0.12f), 3, 2), trim);
+            }
         }
     }
 }

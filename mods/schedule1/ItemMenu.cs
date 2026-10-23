@@ -80,11 +80,11 @@ namespace Frankenstein
                 try
                 {
                     foreach (var c in Vehicles.All())
-                        _all.Add(new Entry { Id = "vehicle:" + c.Code, Name = c.Name, Category = "Vehicles", Car = c, Stack = 1 });
+                        _all.Add(new Entry { Id = "vehicle:" + (c.Style != null ? c.Style.Key : c.Code), Name = c.Name, Category = "Vehicles", Car = c, Stack = 1 });
                 }
                 catch (Exception ex) { Melon<Plugin>.Logger.Warning("Item menu: vehicles: " + ex.Message); }
                 _all = _all.OrderBy(e => e.Category).ThenBy(e => e.Name).ToList();
-                foreach (var e in _all) e.Search = (e.Name + " " + e.Id + " " + e.Category + (e.Car != null ? " car " + e.Car.Kind : "")).ToLowerInvariant();
+                foreach (var e in _all) e.Search = (e.Name + " " + e.Id + " " + e.Category + (e.Car != null ? " car " + e.Car.Kind + (e.Car.Style != null ? " frankenstein supercar suv " + e.Car.Style.Base : "") : "")).ToLowerInvariant();
                 _cats = new[] { "All" }.Concat(_all.Select(e => e.Category).Distinct().OrderBy(c => c)).ToList();
             }
             catch (Exception e)
@@ -374,9 +374,13 @@ namespace Frankenstein
                     if (e.Car != null) Vehicles.Picture(e.Car, new Rect(r.x + 8, r.y + 10, Tile - 16, 60));
                     else
                     {
-                        DrawIcon(e, new Rect(r.x + (Tile - 64) / 2, r.y + 8, 64, 64));
-                        if (e.Icon == null) Glyph(e, new Rect(r.x + (Tile - 56) / 2, r.y + 12, 56, 56));
-                        if (e.Own == "launcher") Paint.Fill(new Rect(r.x + Tile - 30, r.y + 10, 18, 18), new Color(0.35f, 0.5f, 0.2f));  // a grenade on the shotgun
+                        var look = e.Own == "launcher" ? "launcher" : e.Own != null && e.Own.StartsWith("gun:") ? e.Own.Substring(4) : null;
+                        if (look != null) Looks.Icon(look, new Rect(r.x + 8, r.y + 14, Tile - 16, 56));  // its own picture, not the base gun's
+                        else
+                        {
+                            DrawIcon(e, new Rect(r.x + (Tile - 64) / 2, r.y + 8, 64, 64));
+                            if (e.Icon == null) Glyph(e, new Rect(r.x + (Tile - 56) / 2, r.y + 12, 56, 56));
+                        }
                     }
                     GUI.Label(new Rect(r.x + 6, r.y + 76, Tile - 12, 40), label);
                 }

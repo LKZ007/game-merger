@@ -388,6 +388,7 @@ class Api:
         return {"device": devices.device_name(), "account": (self._me() or {}).get("name", ""), "mine": mine, "nearby": nearby,
                 "requests": [dict(r, ip="") for r in (lan.requests.values() if lan else [])],
                 "network": bool(lan and lan.sock), "network_error": lan.error if lan else "",
+                "heard": bool(lan and lan.ever_heard), "pairing": bool(lan and lan.offer),
                 "cloud": bool(self._cloud_roots())}
 
     def device_join(self, device, uid):
@@ -413,6 +414,53 @@ class Api:
         state = self.profile_link(a["code"])
         threading.Thread(target=self._publish_device, daemon=True).start()
         return {"ok": True, "profiles": state}
+
+    def device_pair_start(self):
+        """Shows a pairing code here and sends this account, locked with it, to the local network."""
+        lan = getattr(self, "_lan", None)
+        if not lan or not lan.sock:
+            raise MergeError("The local network isn't on yet. Try again in a few seconds.")
+        code = devices.new_pair_code()
+        try:
+            lan.start_offer(code, profiles.link_code(self._settings.pid))
+        except devices.PairError as e:
+            raise MergeError(str(e))
+        return {"code": code, "minutes": devices.PAIR_LIFETIME // 60, "account": (self._me() or {}).get("name", "")}
+
+    def device_pair_stop(self):
+        lan = getattr(self, "_lan", None)
+        if lan:
+            lan.stop_offer()
+        return {"ok": True}
+
+    def device_pair_join(self, code):
+        """Starts listening for the account under a code typed here (shown on the other PC)."""
+        lan = getattr(self, "_lan", None)
+        if not lan or not lan.sock:
+            raise MergeError("The local network isn't on yet. Try again in a few seconds.")
+        try:
+            lan.seek(code)
+        except devices.PairError as e:
+            raise MergeError(str(e))
+        return {"waiting": True}
+
+    def device_pair_result(self):
+        """Once the account under the typed code arrives, this PC joins it (like pasting a link code)."""
+        lan = getattr(self, "_lan", None)
+        got = lan.paired if lan else None
+        if not got:
+            return {"waiting": True, "why": lan.pair_error if lan else "", "heard": bool(lan and lan.ever_heard),
+                    "firewall": devices.firewall_allowed() if lan and not lan.ever_heard else True}
+        lan.paired = None
+        state = self.profile_link(got["code"])
+        threading.Thread(target=self._publish_device, daemon=True).start()
+        return {"ok": True, "device": got["device"], "profiles": state}
+
+    def device_firewall(self):
+        """One "Yes" on Windows' admin prompt lets other PCs' hellos and pairing in."""
+        if not devices.allow_through_firewall():
+            raise MergeError("Windows didn't let Frankenstein ask. Open Windows Security > Firewall > Allow an app, and tick Frankenstein for Private and Public.")
+        return {"asked": True}
 
     def device_join_answer(self, rid, allow):
         """Yes or no to a PC asking to join one of this PC's accounts."""

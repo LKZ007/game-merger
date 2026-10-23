@@ -1,5 +1,5 @@
 "use strict";
-window.APP_BUILD = "3.34.0";  // must match index.html: a mixed-up install is caught at start
+window.APP_BUILD = "3.35.0";  // must match index.html: a mixed-up install is caught at start
 
 // ---------- talking to the Python side ----------
 const TOKEN = document.querySelector('meta[name="gm-token"]')?.content;
@@ -621,10 +621,51 @@ async function renderDevices() {
       <div class="row" style="align-items:flex-start;gap:24px"><div><h4>Merges</h4><ul>${merges(x.merges)}</ul></div>
       <div><h4>Games installed</h4><ul class="small">${x.games.slice(0, 60).map((g) => `<li>${esc(g.name)} <span class="muted">${esc(g.source)}</span></li>`).join("")}${x.games.length > 60 ? `<li class="muted">and ${x.games.length - 60} more</li>` : ""}</ul></div></div></details>`).join("")
       : `<p class="muted">No other PC on ${esc(d.account || "your account")} yet. Open Frankenstein on your other PC, on the same Wi-Fi, and it shows up below to join.</p>`}
+    <div class="device-card" style="margin-top:12px"><h4>Put another PC on this account</h4>
+      <p class="muted small">Easiest way: press <strong>Show a pairing code</strong> on the PC that has your account, then type the code on the other PC and press <strong>Pair</strong>. Both PCs need Frankenstein open and the same Wi-Fi or router.</p>
+      <div class="row" style="flex-wrap:wrap;gap:8px"><button class="btn primary" id="pairShow">Show a pairing code</button>
+        <input class="input" id="pairIn" placeholder="Code from the other PC, like K7QM-3XWD" style="min-width:260px"><button class="btn" id="pairGo">Pair</button></div>
+      ${d.heard ? "" : `<p class="muted small" style="margin-top:8px">This PC hasn't heard any other Frankenstein yet. Windows' firewall often blocks it on Wi-Fi marked Public. <a href="#" id="fwFix">Let Frankenstein through the firewall</a> (one Yes on Windows' prompt), on both PCs.</p>`}</div>
     ${d.nearby.length ? `<h4 style="margin-top:12px">Frankenstein on this Wi-Fi</h4>` + d.nearby.map((n) => `<div class="row" style="flex-wrap:wrap;gap:8px"><strong>${esc(n.device)}</strong>
         ${n.joinable.map((a) => `<button class="btn ghost" data-join="${esc(n.device)}" data-uid="${esc(a.uid)}">Use ${esc(a.name)}'s account on this PC</button>`).join("")}</div>`).join("") : ""}`;
   $("#devRefresh").onclick = renderDevices;
   el.querySelectorAll("[data-join]").forEach((b) => (b.onclick = () => joinDevice(b.dataset.join, b.dataset.uid, b.textContent)));
+  $("#pairShow").onclick = showPairCode;
+  $("#pairGo").onclick = () => pairWithCode($("#pairIn").value);
+  if ($("#fwFix")) $("#fwFix").onclick = async (e) => {
+    e.preventDefault();
+    try { await call("device_firewall"); toast("Press Yes on Windows' prompt. Do the same on your other PC.", 8000); } catch (err) { toast(errText(err), 9000); }
+  };
+}
+
+async function showPairCode() {
+  let r;
+  try { r = await call("device_pair_start"); } catch (e) { return toast(errText(e)); }
+  await modal("Pairing code", `<p class="muted">On your other PC, open Frankenstein, go to Settings > Accounts and type this code under <strong>Put another PC on this account</strong>, then press Pair. It puts ${esc(r.account || "this account")} on that PC.</p>
+    <p style="font-size:40px;letter-spacing:6px;font-family:monospace;text-align:center;margin:18px 0">${esc(r.code)}</p>
+    <p class="muted small">Keep this open. The code works for ${r.minutes} minutes, on this Wi-Fi only.</p>`, [{ label: "Done", value: true, primary: true }]);
+  call("device_pair_stop").catch(() => {});
+}
+
+async function pairWithCode(code) {
+  try { await call("device_pair_join", code); } catch (e) { return toast(errText(e)); }
+  toast("Looking for the other PC…", 4000);
+  for (let i = 0; i < 30; i++) {
+    await new Promise((r) => setTimeout(r, 2000));
+    const r = await call("device_pair_result").catch(() => null);
+    if (!r) continue;
+    if (r.ok) {
+      toast(`Paired with ${r.device}: this PC is on the same account now.`, 7000);
+      state.profiles = r.profiles;
+      renderAccountsCard(); renderMe();
+      return;
+    }
+    if (r.why) return toast(r.why, 7000);
+  }
+  const r = await call("device_pair_result").catch(() => ({}));
+  toast(r.heard ? "The other PC isn't showing that code. Check it, or press Show a pairing code again there."
+    : "Couldn't hear the other PC. Press \"Let Frankenstein through the firewall\" below on both PCs, check they're on the same Wi-Fi, and try again.", 10000);
+  renderDevices();
 }
 
 async function joinDevice(device, uid, label) {
