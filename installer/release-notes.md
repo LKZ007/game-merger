@@ -1,21 +1,6 @@
-## Frankenstein 3.31.0
+## Frankenstein 3.31.1
 
-- **Schedule I: Creative is now an entry in the game's own main menu,** between New Game and Settings, in the same font and style as the rest of the list. In Creative it reads "Back to normal game". The 3.27 version never appeared on your PC: copying the New Game row worked, but hooking up its click failed on this build of the game, and one failure made it give up. Now:
-  - The copy has every button and script taken off, so it can never start a new game.
-  - Frankenstein watches for the click itself.
-  - It keeps trying for 30 seconds instead of stopping at the first error.
-  - Every reason it can't add the entry is written to the MelonLoader log.
-- **The Frankenstein panel no longer covers the Schedule I title.** If the menu entry can't be added, a small panel shows in the top right corner instead.
-- **Schedule I: the gangs have their own people now, 24 of them, who are always in the world.** They're real characters of the game (not the cartel's goons, so the cartel doesn't need to be active). Each gang has a boss, a lieutenant, an enforcer and a dealer or gun runner, all named, in the gang's colour and carrying its gun. For example, the Crips have Darnell "Big Loc" Hayes, the Mafia have Vincent "Don Vinnie" Moretti and the Yakuza have Kenji "Oyabun" Moriyama.
-  - **What they do:**
-    - Bosses hold their HQ.
-    - Lieutenants and enforcers patrol their district.
-    - Dealers and gun runners walk up to the town's people and do business, and the gang's money grows.
-    - Rival crews fight when they meet.
-    - Every few minutes one gang raids its rival's turf.
-    - A crew you've robbed comes for you on its turf.
-    - Anyone knocked down is back on the street a few minutes later.
-  - **A story for every gang:** five parts, told by text from its lieutenant and boss. They introduce themselves when you walk onto their turf, send you to rob their rival's dealer, then send you after the rival's enforcer. Each part pays cash and rep.
-  - **F10 shows who's who:** every gang, its people, what each one is doing right now, the gang's money and how far its story has got.
-  - Patrol routes start at each district's own buildings and grow from where you walk there.
-- Not tested in the game yet.
+- **Fixed: new Frankenstein features weren't reaching Schedule I.** If you switched between Creative and your normal game, Frankenstein rebuilt the merge from the copy of its mod it kept the first time, so the game kept running an old mod. That's why F6 had no Weapons or Vehicles tabs and no item icons. Now every Play compares the mod in the game with this app's mod, file by file, and replaces it if it differs, and the kept copy is refreshed too.
+- **You can see which mod is running.** F6's title now reads "FRANKENSTEIN 3.31.1". After you play, the merge's card says "Frankenstein mod 3.31.1 ran last time you played", or warns you if an older one ran.
+- **Schedule I, experimental: more map.** Six new districts east of the town, one per gang (Eastside Projects, Red Hill Estates, Peckham Estate, Little Tokyo, Little Italy, Bow Road), at the town's own scale. Each has ground you can walk and drive on, a crossroads as wide as the town's roads, 32 buildings copied from the town, and flags in the gang's colours. A road links them. They're built about 25 seconds after the town loads. Get there with F8, then Travel.
+  - Limits: the buildings are shells with no doors or insides, the game's map doesn't show them, and the town's people and the gangs' crews don't walk there. Not tested in game yet.

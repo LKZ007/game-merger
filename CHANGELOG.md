@@ -3,6 +3,12 @@
 Every release, newest first. Downloads are on the [releases page](https://github.com/LKZ007/game-merger/releases).
 The app was called Game Merger before 3.8.0.
 
+## v3.31.1 (2026-10-23)
+- **Fixed: new Frankenstein features weren't reaching Schedule I.** If you switched between Creative and your normal game, Frankenstein rebuilt the merge from the copy of its mod it kept the first time, so the game kept running an old mod. That's why F6 had no Weapons or Vehicles tabs and no item icons. Now every Play compares the mod in the game with this app's mod, file by file, and replaces it if it differs, and the kept copy is refreshed too.
+- **You can see which mod is running.** F6's title now reads "FRANKENSTEIN 3.31.1". After you play, the merge's card says "Frankenstein mod 3.31.1 ran last time you played", or warns you if an older one ran.
+- **Schedule I, experimental: more map.** Six new districts east of the town, one per gang (Eastside Projects, Red Hill Estates, Peckham Estate, Little Tokyo, Little Italy, Bow Road), at the town's own scale. Each has ground you can walk and drive on, a crossroads as wide as the town's roads, 32 buildings copied from the town, and flags in the gang's colours. A road links them. They're built about 25 seconds after the town loads. Get there with F8, then Travel.
+  - Limits: the buildings are shells with no doors or insides, the game's map doesn't show them, and the town's people and the gangs' crews don't walk there. Not tested in game yet.
+
 ## v3.31.0 (2026-10-22)
 - **Schedule I: Creative is now an entry in the game's own main menu,** between New Game and Settings, in the same font and style as the rest of the list. In Creative it reads "Back to normal game". The 3.27 version never appeared on your PC: copying the New Game row worked, but hooking up its click failed on this build of the game, and one failure made it give up. Now:
   - The copy has every button and script taken off, so it can never start a new game.

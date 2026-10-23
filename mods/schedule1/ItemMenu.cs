@@ -300,7 +300,7 @@ namespace Frankenstein
             Paint.Fill(new Rect(0, 0, Screen.width, Screen.height), new Color(0.02f, 0.01f, 0.04f, 0.55f));
             Paint.Fill(new Rect(x - 6, y - 6, W + 12, H + 12), new Color(0.65f, 0.55f, 0.98f, 0.9f));
             Paint.Fill(new Rect(x, y, W, H), new Color(0.07f, 0.05f, 0.11f, 1f));
-            GUI.Label(new Rect(x + 16, y + 10, 600, 24), "FRANKENSTEIN  ·  Every item in this merge (" + _all.Count + ")");
+            GUI.Label(new Rect(x + 16, y + 10, 600, 24), "FRANKENSTEIN " + Plugin.Version + "  ·  Every item in this merge (" + _all.Count + ")");
             if (GUI.Button(new Rect(x + W - 40, y + 8, 28, 26), "X")) { Close(); return; }
 
             GUI.Label(new Rect(x + 16, y + 42, 60, 24), "Search");

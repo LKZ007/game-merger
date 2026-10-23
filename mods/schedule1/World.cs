@@ -51,6 +51,7 @@ namespace Frankenstein
             Carry.Scene(_inTown);
             Gangs.Scene(_inTown);
             Crew.Scene(_inTown);
+            Expansion.Scene(_inTown);
             Creative.Forget();
             if (!_inTown || Style.Length == 0) return;
             _cardUntil = Time.unscaledTime + 6f;  // the merged title card
@@ -163,6 +164,7 @@ namespace Frankenstein
             }
             else if (GUI.Button(new Rect(px + 12, cy + 26, pw - 24, 30), MainMenu.Creative ? "Back to my normal game" : "Switch to Creative (every item, its own saves)")) _confirm = to;
             Carry.Draw(px + pw + 12, py - top + 64, 420);
+            DrawTravel(px, py + (Style.Length > 0 ? 250 : 0) + 8, pw);
             if (Style.Length == 0) return;
             GUI.Label(new Rect(px + 12, py + 8, pw - 24, 22), Title + " in " + Host);
             GUI.Label(new Rect(px + 12, py + 32, pw - 24, 40), Zone);
@@ -188,6 +190,18 @@ namespace Frankenstein
                 else { _holdStart = Time.unscaledTime; _offSince = -1; _note = ""; }
             }
             GUI.Label(new Rect(px + 12, py + 186, pw - 24, 56), _built ? "Untested in game: tell Frankenstein's maker how it looks." : "F8 closes this.");
+        }
+
+        /// <summary>EXPERIMENTAL: the new districts past the edge of town (Expansion), one button each.</summary>
+        static void DrawTravel(float x, float y, float w)
+        {
+            if (!Expansion.On) return;
+            int n = Expansion.Count;
+            GUI.Box(new Rect(x, y, w, 34 + Math.Max(n, 1) * 30), "");
+            GUI.Label(new Rect(x + 12, y + 6, w - 24, 22), "TRAVEL  ·  new districts (experimental)");
+            if (n == 0) { GUI.Label(new Rect(x + 12, y + 30, w - 24, 26), Expansion.Note.Length > 0 ? Expansion.Note : "Being built, a few seconds after the town loads..."); return; }
+            for (int i = 0; i < n; i++)
+                if (GUI.Button(new Rect(x + 12, y + 30 + i * 30, w - 24, 26), Expansion.NameAt(i))) { Expansion.Travel(i); _open = false; }
         }
 
         static void Warn(Exception e) => Melon<Plugin>.Logger.Warning("World: " + e.Message);

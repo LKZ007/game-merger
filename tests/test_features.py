@@ -263,5 +263,24 @@ class FeatureChecklist(unittest.TestCase):
                 self.assertIn("class Crew_%s_%s" % (gang, role), people)
         self.assertIn("SetAndAttackTarget", read(ROOT, "mods", "schedule1", "Crew.cs"))  # real fights, not the cartel's
 
+    def test_3311_mod_always_current_and_shows_its_version(self):
+        from gamemerger.version import VERSION
+        plugin = read(ROOT, "mods", "schedule1", "Plugin.cs")
+        self.assertIn('public const string Version = "%s";' % VERSION, plugin, "bump Plugin.Version with every release")
+        dll = open(os.path.join(PKG, "mods", "schedule1", "Frankenstein.dll"), "rb").read()
+        self.assertIn(VERSION.encode("utf-16-le"), dll, "rebuild the Schedule I dll for this release")
+        api = read(PKG, "api.py")
+        self.assertIn("_builtin_differs", api)   # files compared, so a rebuild from the old kept copy is fixed on Play
+        self.assertIn("_builtin_zip(src, b[\"dest\"], kept)", api)  # and the kept copy is refreshed
+        self.assertIn("mod_check.version", read(PKG, "web", "app.js"))
+
+    def test_3311_new_districts(self):
+        dll = open(os.path.join(PKG, "mods", "schedule1", "Frankenstein.dll"), "rb").read()
+        for word in ("Frankenstein ground ", "TRAVEL", "Entering "):
+            self.assertIn(word.encode("utf-16-le"), dll, word)
+        from gamemerger.api import GANGS
+        for g in GANGS["hoodwarfare"]:
+            self.assertTrue(g.get("district"), "every gang gets a new district")
+
 if __name__ == "__main__":
     unittest.main()

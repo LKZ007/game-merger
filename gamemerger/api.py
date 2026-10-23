@@ -154,22 +154,22 @@ MOREGUNS = {"hoodwarfare": {"ak47": {"Display Name": '"Choppa"', "Damage": 63.0,
 # send you to rob for your initiation. Prices: how much they pay and charge, so trading across districts pays.
 GANGS = {
     "hoodwarfare": [
-        {"id": "crips", "name": "Crips", "region": "Northtown", "color": "#2563EB", "weapon": "Avatar/Equippables/M1911",
+        {"id": "crips", "district": "Eastside Projects", "name": "Crips", "region": "Northtown", "color": "#2563EB", "weapon": "Avatar/Equippables/M1911",
          "rival": "bloods", "product": "OG Kush", "drug_price": 0.9, "gun_price": 1.0,
          "ranks": ["Lil Homie", "Homie", "Soldier", "OG", "Big Homie", "Shot Caller"], "guns": ["M1911@900", "SMG@2200"]},
-        {"id": "bloods", "name": "Bloods", "region": "Westville", "color": "#DC2626", "weapon": "Avatar/Equippables/M1911",
+        {"id": "bloods", "district": "Red Hill Estates", "name": "Bloods", "region": "Westville", "color": "#DC2626", "weapon": "Avatar/Equippables/M1911",
          "rival": "crips", "product": "Sour Diesel", "drug_price": 1.0, "gun_price": 0.95,
          "ranks": ["Lil Homie", "Damu", "Soldier", "OG", "Big Homie", "Shot Caller"], "guns": ["M1911@850", "Revolver@1200"]},
-        {"id": "london", "name": "South London Mandem", "region": "Downtown", "color": "#9CA3AF", "weapon": "Avatar/Equippables/Knife",
+        {"id": "london", "district": "Peckham Estate", "name": "South London Mandem", "region": "Downtown", "color": "#9CA3AF", "weapon": "Avatar/Equippables/Knife",
          "rival": "eastlondon", "product": "Green Crack", "drug_price": 1.15, "gun_price": 1.25,
          "ranks": ["Younger", "Runner", "Shotter", "Elder", "Top Boy", "Main Man"], "guns": ["Machete@300", "Pump Shotgun@1900"]},
-        {"id": "yakuza", "name": "Yakuza", "region": "Docks", "color": "#F5F5F5", "weapon": "Avatar/Equippables/Knife",
+        {"id": "yakuza", "district": "Little Tokyo", "name": "Yakuza", "region": "Docks", "color": "#F5F5F5", "weapon": "Avatar/Equippables/Knife",
          "rival": "mafia", "product": "Meth", "drug_price": 1.3, "gun_price": 1.1,
          "ranks": ["Kobun", "Wakashu", "Kyodai", "Wakagashira", "Saiko-komon", "Oyabun"], "guns": ["Machete@280", "Sniper@4600"]},
-        {"id": "mafia", "name": "Mafia", "region": "Uptown", "color": "#111827", "weapon": "Avatar/Equippables/Revolver",
+        {"id": "mafia", "district": "Little Italy", "name": "Mafia", "region": "Uptown", "color": "#111827", "weapon": "Avatar/Equippables/Revolver",
          "rival": "yakuza", "product": "Cocaine", "drug_price": 1.45, "gun_price": 1.35,
          "ranks": ["Associate", "Soldato", "Capo", "Consigliere", "Underboss", "Don"], "guns": ["Revolver@1300", "AK47@3800"]},
-        {"id": "eastlondon", "name": "East London Firm", "region": "Suburbia", "color": "#16A34A", "weapon": "Avatar/Equippables/BrokenBottle",
+        {"id": "eastlondon", "district": "Bow Road", "name": "East London Firm", "region": "Suburbia", "color": "#16A34A", "weapon": "Avatar/Equippables/BrokenBottle",
          "rival": "london", "product": "Granddaddy Purple", "drug_price": 1.2, "gun_price": 1.15,
          "ranks": ["Tiny", "Youngen", "Shotter", "Elder", "Top Boy", "Guv'nor"], "guns": ["Pump Shotgun@1800", "SMG@2300"]},
     ],
@@ -739,7 +739,17 @@ class Api:
                                                        "MelonLoader ran but didn't list it.")
         elif bad:
             why = "Frankenstein's mod loaded with a problem: " + bad[0].strip()[-200:]
-        return {"time": time.time(), "loaded": loaded and not bad, "why": why}
+        # which build of the mod ran (older mods said 1.0.0): an old one means the update didn't reach the game
+        ver = ""
+        for x in lines:
+            v = re.search(r"Frankenstein mod (\d+\.\d+\.\d+) loaded", x) or re.search(r"Frankenstein v(\d+\.\d+\.\d+)", x)
+            if v:
+                ver = v.group(1)
+        old = bool(loaded and ver and ver != VERSION)
+        if old and not why:
+            why = ("The game ran an older Frankenstein mod (%s), not this app's %s. Press Play again: Frankenstein "
+                   "now replaces it every time." % (ver if ver != "1.0.0" else "from before 3.31.1", VERSION))
+        return {"time": time.time(), "loaded": loaded and not bad and not old, "why": why, "version": ver}
 
     def _switch_from_game(self, merge_id):
         """Creative from inside the game: Frankenstein's own mod leaves switch.json next to its settings and the
@@ -2047,15 +2057,23 @@ class Api:
         src = os.path.join(os.path.dirname(os.path.abspath(__file__)), "mods", r.id)
         stamp = self._builtin_stamp(src)
         if any(i["label"] == b["label"] for i in m.data.get("installs", [])):
-            missing = os.path.isdir(src) and m.target_path and any(
-                not os.path.isfile(os.path.join(m.target_path, *(b["dest"] + "/" + f).split("/")))
-                for f in os.listdir(src) if os.path.isfile(os.path.join(src, f)))
-            if os.path.isdir(src) and (m.data.get("builtin_stamp") != stamp or missing):
+            # compare the files themselves, not just the stamp: a rebuild (Creative switch, unpack, repair)
+            # puts back the copy kept from the first install, which can be older than this Frankenstein's
+            differs = os.path.isdir(src) and bool(m.target_path) and self._builtin_differs(src, m.target_path, b["dest"])
+            if os.path.isdir(src) and (m.data.get("builtin_stamp") != stamp or differs):
                 # a newer Frankenstein: bring its own mod in this merge up to date
                 for root, _d, files in os.walk(src):
                     for f in files:
                         rel = os.path.relpath(os.path.join(root, f), src).replace(os.sep, "/")
                         m.put_file(os.path.join(root, f), b["dest"] + "/" + rel)
+                # and the copy the merge keeps for rebuilds, so the next rebuild puts back this build's mod too
+                for i in m.data.get("installs", []):
+                    kept = m.kept_archive(i) if i["label"] == b["label"] else None
+                    if kept:
+                        try:
+                            self._builtin_zip(src, b["dest"], kept)
+                        except OSError:
+                            pass
                 m.data["builtin_stamp"] = stamp
                 m.save()
                 log("Updated %s." % b["label"])
@@ -2070,13 +2088,8 @@ class Api:
                     log("✖ %s failed: %s" % (fw.name, e))
         if not os.path.isdir(src):
             return log("(Frankenstein's own %s mod isn't in this build.)" % r.name)
-        import zipfile
         z = os.path.join(paths.sub(os.path.join("downloads", "frankenstein")), "%s.zip" % r.id)
-        with zipfile.ZipFile(z, "w") as out:
-            for root, _d, files in os.walk(src):
-                for f in files:
-                    rel = os.path.relpath(os.path.join(root, f), src).replace(os.sep, "/")
-                    out.write(os.path.join(root, f), b["dest"] + "/" + rel)
+        self._builtin_zip(src, b["dest"], z)
         try:
             m.install(z, b["label"], r.layout, log=log)
             m.data["builtin_stamp"] = stamp
@@ -2086,6 +2099,29 @@ class Api:
         except Exception as e:
             m.data["builtin_error"] = str(e)[:300]
             log("✖ %s failed: %s" % (b["label"], e))
+
+    @staticmethod
+    def _builtin_zip(src, dest, z):
+        import zipfile
+        tmp = z + ".tmp"
+        with zipfile.ZipFile(tmp, "w") as out:
+            for root, _d, files in os.walk(src):
+                for f in files:
+                    rel = os.path.relpath(os.path.join(root, f), src).replace(os.sep, "/")
+                    out.write(os.path.join(root, f), dest + "/" + rel)
+        os.replace(tmp, z)
+
+    @staticmethod
+    def _builtin_differs(src, target, dest):
+        """True when any of Frankenstein's own mod files in the game copy is missing or not this build's."""
+        import filecmp
+        for root, _d, files in os.walk(src):
+            for f in files:
+                rel = os.path.relpath(os.path.join(root, f), src).replace(os.sep, "/")
+                t = os.path.join(target, *(dest + "/" + rel).split("/"))
+                if not os.path.isfile(t) or not filecmp.cmp(os.path.join(root, f), t, shallow=False):
+                    return True
+        return False
 
     @staticmethod
     def _builtin_stamp(src):

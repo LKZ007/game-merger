@@ -1,5 +1,5 @@
 "use strict";
-window.APP_BUILD = "3.31.0";  // must match index.html: a mixed-up install is caught at start
+window.APP_BUILD = "3.31.1";  // must match index.html: a mixed-up install is caught at start
 
 // ---------- talking to the Python side ----------
 const TOKEN = document.querySelector('meta[name="gm-token"]')?.content;
@@ -879,7 +879,7 @@ async function loadMerges() {
             </div></div>
         </div>
         ${m.ingame ? `<div class="ingame small" title="Frankenstein's own mod adds these to the game itself">🎮 <strong>In the game:</strong> ${esc(m.ingame)}</div>` : `<div class="ingame small muted">This game has no menu Frankenstein can add to, so Creative stays here.</div>`}
-        ${m.mod_check && !m.mod_check.loaded ? `<div class="ingame small warn" role="status">⚠ <strong>Last time you played:</strong> ${esc(m.mod_check.why)}</div>` : ""}
+        ${m.mod_check && !m.mod_check.loaded ? `<div class="ingame small warn" role="status">⚠ <strong>Last time you played:</strong> ${esc(m.mod_check.why)}</div>` : m.mod_check?.version ? `<div class="ingame small muted" title="Read from MelonLoader's log. F6's title in the game shows the same number.">✓ Frankenstein mod ${esc(m.mod_check.version)} ran last time you played.</div>` : ""}
         ${m.builtin_error ? `<div class="ingame small warn" role="status">⚠ Frankenstein's own mod couldn't be added: ${esc(m.builtin_error)} It's tried again when you press Play.</div>` : ""}
       </div>
     </div>`).join("");

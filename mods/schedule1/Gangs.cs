@@ -22,7 +22,7 @@ namespace Frankenstein
     {
         class Gang
         {
-            public string Id, Name, Region, Weapon, Rival, Product, Hex;
+            public string Id, Name, Region, Weapon, Rival, Product, Hex, District;
             public Color Color;
             public List<string> Ranks = new List<string>();
             public List<string> Guns = new List<string>();
@@ -67,6 +67,8 @@ namespace Frankenstein
         public static bool HqOf(string id, out Vector3 at) => _hq.TryGetValue(id, out at);
         public static string RegionOf(string id) => G(id)?.Region ?? "";
         public static string NameOf(string id) => G(id)?.Name ?? id;
+        public static List<string> Ids => _gangs.Select(g => g.Id).ToList();
+        public static string NewDistrictOf(string id) => G(id)?.District ?? "";
         public static string RivalOf(string id) => G(id)?.Rival ?? "";
         public static string WeaponOf(string id) => G(id)?.Weapon ?? "";
         public static Color ColorOf(string id) => G(id)?.Color ?? Color.gray;
@@ -85,7 +87,7 @@ namespace Frankenstein
                 var g = new Gang
                 {
                     Id = J.S(o, "id"), Name = J.S(o, "name"), Region = J.S(o, "region"), Weapon = J.S(o, "weapon"),
-                    Rival = J.S(o, "rival"), Product = J.S(o, "product", "OG Kush"), Hex = J.S(o, "color", "#888888"),
+                    Rival = J.S(o, "rival"), District = J.S(o, "district"), Product = J.S(o, "product", "OG Kush"), Hex = J.S(o, "color", "#888888"),
                     DrugPrice = J.N(o, "drug_price", 1), GunPrice = J.N(o, "gun_price", 1),
                 };
                 foreach (var r in J.L(o, "ranks")) g.Ranks.Add(r.ToString());

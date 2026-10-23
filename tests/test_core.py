@@ -723,6 +723,16 @@ class ScheduleOneFixTests(unittest.TestCase):
         with open(log, "w") as f:
             f.write("[12:00:01] Loading Mods...\n[12:00:02] [Frankenstein] Frankenstein loaded for X.\n")
         self.assertTrue(api.Api._mod_check(m)["loaded"])
+        with open(log, "w") as f:  # an old mod ran: the card says so
+            f.write("[12:00:01] Frankenstein v1.0.0\n[12:00:02] [Frankenstein] Frankenstein loaded for X.\n")
+        c = api.Api._mod_check(m)
+        self.assertFalse(c["loaded"])
+        self.assertIn("older Frankenstein mod", c["why"])
+        with open(log, "w") as f:
+            f.write("[12:00:01] Frankenstein v%s\n[12:00:02] [Frankenstein] Frankenstein mod %s loaded for X.\n" % (api.VERSION, api.VERSION))
+        c = api.Api._mod_check(m)
+        self.assertTrue(c["loaded"])
+        self.assertEqual(c["version"], api.VERSION)
         with open(log, "w") as f:
             f.write("[12:00:01] Failed to load Melon Assembly from Frankenstein.dll: missing dependency S1API\n")
         c = api.Api._mod_check(m)
@@ -953,6 +963,28 @@ class StartupTests(unittest.TestCase):
         from gamemerger.version import VERSION
         here = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "gamemerger")
         self.assertEqual(Api._stale_web(here), [], "index.html PAGE_BUILD and app.js APP_BUILD must equal VERSION " + VERSION)
+
+
+class BuiltinModTests(unittest.TestCase):
+    def test_old_mod_in_game_copy_is_noticed(self):
+        from gamemerger.api import Api
+        root = tempfile.mkdtemp()
+        src, game = os.path.join(root, "src"), os.path.join(root, "game")
+        os.makedirs(src)
+        os.makedirs(os.path.join(game, "Mods"))
+        with open(os.path.join(src, "Frankenstein.dll"), "wb") as f:
+            f.write(b"new build")
+        self.assertTrue(Api._builtin_differs(src, game, "Mods"))  # missing
+        with open(os.path.join(game, "Mods", "Frankenstein.dll"), "wb") as f:
+            f.write(b"old build")  # same size, put back by a rebuild from the kept copy
+        self.assertTrue(Api._builtin_differs(src, game, "Mods"))
+        Api._builtin_zip(src, "Mods", os.path.join(root, "kept.zip"))
+        import zipfile
+        with zipfile.ZipFile(os.path.join(root, "kept.zip")) as z:
+            self.assertEqual(z.read("Mods/Frankenstein.dll"), b"new build")
+        with open(os.path.join(game, "Mods", "Frankenstein.dll"), "wb") as f:
+            f.write(b"new build")
+        self.assertFalse(Api._builtin_differs(src, game, "Mods"))
 
 
 class PackTests(unittest.TestCase):
