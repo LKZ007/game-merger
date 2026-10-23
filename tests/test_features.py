@@ -282,6 +282,19 @@ class FeatureChecklist(unittest.TestCase):
         self.assertIn("roomToUnpack", js)
         self.assertNotIn("Creative (own saves)</button>", js, "Creative lives in the game's own menu, not the app's More menu")
 
+    def test_3313_new_logo_on_shortcuts(self):
+        from PIL import Image
+        ico = Image.open(os.path.join(ROOT, "installer", "Frankenstein.ico"))
+        self.assertIn((256, 256), ico.info["sizes"])
+        ico.size = (256, 256)
+        ico.load()
+        logo = Image.open(os.path.join(PKG, "web", "logo", "icon.png")).convert("RGBA").resize((256, 256))
+        diff = sum(abs(a - b) for p, q in zip(ico.convert("RGBA").getdata(), logo.getdata()) for a, b in zip(p, q))
+        self.assertLess(diff / (256 * 256 * 4), 8, "the .ico is the hooded-figure logo")
+        nsi = read(ROOT, "installer", "Frankenstein.nsi")
+        self.assertIn("Frankenstein-${VER}.ico", nsi)  # a new path per version, so Windows' icon cache can't keep the old one
+        self.assertIn("SHChangeNotify", nsi)
+
     def test_3311_new_districts(self):
         dll = open(os.path.join(PKG, "mods", "schedule1", "Frankenstein.dll"), "rb").read()
         for word in ("Frankenstein ground ", "TRAVEL", "Entering "):

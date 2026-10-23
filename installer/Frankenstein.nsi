@@ -86,7 +86,10 @@ Section "Frankenstein"
   SetOutPath "$INSTDIR"
   RMDir /r "$INSTDIR\_internal"
   File /r "..\dist\Frankenstein\*"
-  File "Frankenstein.ico"
+  ; the icon file is named per version: Windows caches icons by file path, so a new name makes shortcuts
+  ; show a changed logo straight away instead of the old one from the cache
+  Delete "$INSTDIR\Frankenstein*.ico"
+  File "/oname=Frankenstein-${VER}.ico" "Frankenstein.ico"
   WriteUninstaller "$INSTDIR\Uninstall.exe"
 
   ; moving over from Game Merger: swap the old exe and shortcuts for the new ones
@@ -99,22 +102,29 @@ Section "Frankenstein"
     StrCpy $0 1
   ; a pin keeps working when its shortcut is rewritten in place
   IfFileExists "${PINS}\${OLDAPP}.lnk" 0 +2
-    CreateShortcut "${PINS}\${OLDAPP}.lnk" "$INSTDIR\${EXE}" "" "$INSTDIR\Frankenstein.ico" 0 SW_SHOWNORMAL "" "Merge your games with mods"
+    CreateShortcut "${PINS}\${OLDAPP}.lnk" "$INSTDIR\${EXE}" "" "$INSTDIR\Frankenstein-${VER}.ico" 0 SW_SHOWNORMAL "" "Merge your games with mods"
   IfFileExists "${PINS}\${APP}.lnk" 0 +2
-    CreateShortcut "${PINS}\${APP}.lnk" "$INSTDIR\${EXE}" "" "$INSTDIR\Frankenstein.ico" 0 SW_SHOWNORMAL "" "Merge your games with mods"
+    CreateShortcut "${PINS}\${APP}.lnk" "$INSTDIR\${EXE}" "" "$INSTDIR\Frankenstein-${VER}.ico" 0 SW_SHOWNORMAL "" "Merge your games with mods"
 
+  IfFileExists "$DESKTOP\${APP}.lnk" 0 +2
+    StrCpy $0 1  ; an update rewrites your desktop shortcut too, so it gets the new icon
   StrCmp $Update 0 make_desktop
   StrCmp $0 1 make_desktop shortcuts_done
   make_desktop:
-    CreateShortcut "$DESKTOP\${APP}.lnk" "$INSTDIR\${EXE}" "" "$INSTDIR\Frankenstein.ico" 0 SW_SHOWNORMAL "" "Merge your games with mods"
+    CreateShortcut "$DESKTOP\${APP}.lnk" "$INSTDIR\${EXE}" "" "$INSTDIR\Frankenstein-${VER}.ico" 0 SW_SHOWNORMAL "" "Merge your games with mods"
   shortcuts_done:
-  CreateShortcut "$SMPROGRAMS\${APP}.lnk" "$INSTDIR\${EXE}" "" "$INSTDIR\Frankenstein.ico" 0 SW_SHOWNORMAL "" "Merge your games with mods"
+  CreateShortcut "$SMPROGRAMS\${APP}.lnk" "$INSTDIR\${EXE}" "" "$INSTDIR\Frankenstein-${VER}.ico" 0 SW_SHOWNORMAL "" "Merge your games with mods"
+
+  ; tell Explorer the icons changed, and refresh its icon cache
+  System::Call 'shell32::SHChangeNotify(i 0x08000000, i 0, p 0, p 0)'
+  IfFileExists "$SYSDIR\ie4uinit.exe" 0 +2
+    nsExec::Exec '"$SYSDIR\ie4uinit.exe" -show'
 
   WriteRegStr HKCU "Software\GameMerger" "InstallDir" "$INSTDIR"
   WriteRegStr HKCU "${UNKEY}" "DisplayName" "${APP}"
   WriteRegStr HKCU "${UNKEY}" "DisplayVersion" "${VER}"
   WriteRegStr HKCU "${UNKEY}" "Publisher" "Frankenstein"
-  WriteRegStr HKCU "${UNKEY}" "DisplayIcon" "$INSTDIR\Frankenstein.ico"
+  WriteRegStr HKCU "${UNKEY}" "DisplayIcon" "$INSTDIR\Frankenstein-${VER}.ico"
   WriteRegStr HKCU "${UNKEY}" "InstallLocation" "$INSTDIR"
   WriteRegStr HKCU "${UNKEY}" "UninstallString" '"$INSTDIR\Uninstall.exe"'
   WriteRegStr HKCU "${UNKEY}" "QuietUninstallString" '"$INSTDIR\Uninstall.exe" /S'

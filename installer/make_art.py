@@ -39,10 +39,8 @@ ic = Image.open(OUT + "/icon-hi.png").convert("RGBA").resize((256, 256), Image.L
 sm = Image.open(OUT + "/small-hi.png").convert("RGBA")
 big = [ic.resize((n, n), Image.LANCZOS) for n in (40, 48, 64, 128)]
 small = [sm.resize((n, n), Image.LANCZOS) for n in (16, 20, 24, 32)]
-ic.save(OUT + "/Frankenstein.ico", format="ICO", append_images=small + big, sizes=[(n, n) for n in (16, 20, 24, 32, 40, 48, 64, 128, 256)])
+# Frankenstein.ico and the installer pictures come from the hooded-figure logo now: see make_icon.py
 ic.save(OUT + "/icon256.png")
-Image.open(OUT + "/welcome-hi.png").convert("RGB").resize((164, 314), Image.LANCZOS).save(OUT + "/welcome.bmp")
-Image.open(OUT + "/header-hi.png").convert("RGB").resize((150, 57), Image.LANCZOS).save(OUT + "/header.bmp")
 # preview sheet
 sheet = Image.new("RGB", (900, 360), (20, 14, 32))
 sheet.paste(Image.open(OUT + "/welcome-hi.png").convert("RGB").resize((164, 314)), (20, 23))
