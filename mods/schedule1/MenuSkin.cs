@@ -15,7 +15,8 @@ namespace Frankenstein
     /// gets a green glow, your latest save's cash and rank at the top right, and the version at the bottom right.
     /// Profiles shows a card per save slot. The art is painted by the app (menu-backdrop.jpg, title.png). Each row
     /// presses the game's own button, so everything does what the game does; the game's list is shrunk out of sight.
-    /// Mouse, keyboard (arrows, Enter, Esc) and controller (d-pad or stick, A, B).</summary>
+    /// Mouse, keyboard (arrows, Enter, Esc) and controller (d-pad or stick, A, B). In a Hood Warfare merge the app
+    /// also gives the cut-up reference itself (RefArt), and the menu and Profiles are laid out exactly on its spots.</summary>
     internal static class MenuSkin
     {
         class Card
@@ -259,6 +260,11 @@ namespace Frankenstein
                         }
                         break;
                         case "gear": { float a = Mathf.Atan2(fy, fx); float teeth = Mathf.Cos(a * 8) > 0.3f ? 29 : 23; on = r < teeth && r > 10; } break;
+                        case "silhouette":
+                            on = Mathf.Sqrt(fx * fx + (fy - 13) * (fy - 13)) < 13 ||
+                                 (fy < -3 && fy > -30 && fx * fx / (29f * 29f) + (fy + 30) * (fy + 30) / (25f * 25f) < 1);
+                            break;
+                        case "ringplus": on = (r > 26 && r < 30) || (Mathf.Abs(fx) < 2.5f && Mathf.Abs(fy) < 15) || (Mathf.Abs(fy) < 2.5f && Mathf.Abs(fx) < 15); break;
                         case "exit": on = (x > 10 && x < 40 && (y < 16 || y > 48 || x < 16) && y > 10 && y < 54) || (Mathf.Abs(fy) < 3 && x > 24 && x < 56) || (x > 44 && x < 56 && Mathf.Abs(fy) < (56 - x)); break;
                     }
                     t.SetPixel(x, y, on ? w : clear);
@@ -359,6 +365,7 @@ namespace Frankenstein
             Art();
             float W = Screen.width, H = Screen.height, k = Mathf.Clamp(H / 1080f, 0.6f, 2f);
             Styles(k);
+            if (RefArt.On) { DrawRef(W, H); return; }
             // one scene over everything: the game's title, credits and 3D menu are covered
             Paint.Fill(new Rect(0, 0, W, H), new Color(0.03f, 0.03f, 0.06f));
             if (_back != null)
@@ -484,6 +491,151 @@ namespace Frankenstein
             GUI.Label(back, Pad.InUse ? "B  Back" : "Esc  Back", _btn);
             if (GUI.Button(back, "", GUIStyle.none)) _profiles = false;
             if (_note.Length > 0) GUI.Label(new Rect(x0 + 230 * k, y + ch + 38 * k, W * 0.6f, 30 * k), _note, _small);
+        }
+
+        // ---------- laid out exactly like levy's reference (Hood Warfare merges) ----------
+
+        static readonly Color Ink = new Color(0.93f, 0.94f, 0.95f), Dim = new Color(0.62f, 0.65f, 0.7f), Line = new Color(1, 1, 1, 0.13f);
+
+        /// <summary>The chosen row: green on the left fading into the city, like the reference's Continue.</summary>
+        static void RefGlow(Rect r)
+        {
+            const int steps = 32;
+            for (int i = 0; i < steps; i++)
+            {
+                float f = i / (float)steps;
+                Paint.Fill(new Rect(r.x + r.width * f, r.y, r.width / steps + 1, r.height), new Color(0.26f, 0.6f, 0.23f, 0.95f * (1f - f * 0.85f)));
+            }
+            Paint.Fill(new Rect(r.x, r.y, 3, r.height), new Color(0.42f, 0.86f, 0.36f));
+        }
+
+        static void Tinted(Rect r, Texture2D t, Color c)
+        {
+            var old = GUI.color;
+            GUI.color = c;
+            Paint.Picture(r, t);
+            GUI.color = old;
+        }
+
+        /// <summary>The list as the reference has it: dark rows with a thin edge, an icon and the name.</summary>
+        static void RefList(RefPanel P, float x0, float x1, float top, float bottom, float font, Vector2 m, bool moved, int lit)
+        {
+            int n = _cards.Count;
+            float step = (bottom - top) / n, S = P.S;
+            for (int i = 0; i < n; i++)
+            {
+                var c = _cards[i];
+                var r = P.R(x0, top + i * step, x1, top + (i + 1) * step - 4);
+                if (moved && r.Contains(m) && lit < 0) _sel = i;
+                bool on = lit >= 0 ? c.Key == "profiles" : i == _sel;
+                if (on) RefGlow(r);
+                else if (lit < 0) { Paint.Fill(r, new Color(0.03f, 0.04f, 0.06f, 0.6f)); Frame(r, new Color(1, 1, 1, 0.07f), 1); }
+                float ic = font * 1.3f;
+                var icon = Icon(c.Icon);
+                if (icon != null) Paint.Picture(new Rect(r.x + 15 * S, r.y + (r.height - ic * S) / 2, ic * S, ic * S), icon);
+                string title = c.Title;
+                if (c.Key == "creative" && Mode.Pending == "creative") title += "  ·  next game";
+                GUI.Label(new Rect(r.x + 54 * S, r.y, r.width - 60 * S, r.height), title, RefArt.Style(font * S, Ink, 3, false));
+                if (GUI.Button(r, "", GUIStyle.none))
+                {
+                    _sel = i;
+                    if (c.Key != "profiles") _profiles = false;
+                    Choose(c);
+                }
+            }
+        }
+
+        static void DrawRef(float W, float H)
+        {
+            var m = Event.current.mousePosition;
+            bool moved = (m - _lastMouse).sqrMagnitude > 1f;
+            if (Event.current.type == EventType.Repaint) _lastMouse = m;
+            Paint.Fill(new Rect(0, 0, W, H), new Color(0.02f, 0.02f, 0.03f));
+            if (_profiles && RefArt.Profiles != null) { DrawRefProfiles(W, H, m, moved); return; }
+            if (_profiles) _profiles = false;  // no Profiles picture: the list stays
+            var P = RefPanel.Menu(RefArt.Cover(RefArt.Menu, W, H));
+            float S = P.S;
+            Paint.Picture(P.Art, RefArt.Menu);
+            RefList(P, 35, 330, 162, 470, 17, m, moved, -1);
+            if (_note.Length > 0) GUI.Label(P.R(40, 472, 500, 492), _note, RefArt.Style(11 * S, Dim, 3, false));
+            // cash and level, top right, and the settings cog
+            var pill = P.R(505, 14, 700, 48);
+            Paint.Fill(pill, new Color(0.04f, 0.05f, 0.07f, 0.82f));
+            Frame(pill, Line, 1);
+            var last = Profiles.Latest();
+            string cash = last == null ? "-" : Profiles.Money(last.Cash);
+            string lv = last == null || double.IsNaN(last.Rank) ? (last != null && last.Mode == "creative" ? "CREATIVE" : "LV -") : "LV " + (int)last.Rank;
+            var money = RefArt.Icon("money");
+            if (money != null) Paint.Picture(P.R(515, 21, 541, 42), money);
+            GUI.Label(P.R(547, 14, 615, 48), cash, RefArt.Style(13 * S, Ink, 3, true));
+            var crown = RefArt.Icon("crown");
+            if (crown != null) Paint.Picture(P.R(620, 21, 646, 42), crown);
+            GUI.Label(P.R(652, 14, 700, 48), lv, RefArt.Style(13 * S, Ink, 3, true));
+            var gear = P.R(712, 14, 746, 48);
+            Paint.Fill(gear, new Color(0.04f, 0.05f, 0.07f, 0.82f));
+            Frame(gear, Line, 1);
+            Paint.Picture(P.R(718, 20, 740, 42), Icon("gear"));
+            if (GUI.Button(gear, "", GUIStyle.none)) { var st = _cards.FirstOrDefault(c => c.Key == "settings"); if (st != null) Choose(st); }
+            GUI.Label(P.R(560, 480, 758, 500), "v" + Plugin.Version, RefArt.Style(10 * S, Dim, 5, false));
+        }
+
+        static void DrawRefProfiles(float W, float H, Vector2 m, bool moved)
+        {
+            var P = RefPanel.Profiles(RefArt.Cover(RefArt.Profiles, W, H));
+            float S = P.S;
+            Paint.Picture(P.Art, RefArt.Profiles);
+            RefList(P, 37, 300, 106, 372, 16, m, moved, 1);
+            var slots = Profiles.All();
+            int first = Mathf.Clamp(_card - 3, 0, Math.Max(0, slots.Count - 4));
+            for (int j = 0; j < 4 && first + j < slots.Count; j++)
+            {
+                int i = first + j;
+                var s = slots[i];
+                float x = 437 + j * 265;
+                var r = P.R(x, 93, x + 252, 440);
+                if (moved && r.Contains(m)) _card = i;
+                bool on = i == _card;
+                Paint.Fill(r, new Color(0.03f, 0.04f, 0.06f, 0.72f));
+                if (s.Empty)
+                {
+                    Tinted(P.R(x + 78, 150, x + 174, 258), Icon("silhouette"), new Color(0.19f, 0.22f, 0.27f));
+                    GUI.Label(P.R(x, 284, x + 252, 312), "Empty Profile", RefArt.Style(15 * S, new Color(0.66f, 0.69f, 0.74f), 4, false));
+                    GUI.Label(P.R(x, 324, x + 252, 342), "Create a new profile", RefArt.Style(11 * S, Dim, 4, false));
+                    GUI.Label(P.R(x, 342, x + 252, 360), "to start your journey.", RefArt.Style(11 * S, Dim, 4, false));
+                    Tinted(P.R(x + 111, 379, x + 141, 409), Icon("ringplus"), new Color(0.6f, 0.63f, 0.68f));
+                }
+                else
+                {
+                    if (RefArt.Avatar != null) Paint.Picture(P.R(x + 2, 95, x + 250, 206), RefArt.Avatar);
+                    GUI.Label(P.R(x, 212, x + 252, 238), s.Name.ToUpperInvariant(), RefArt.Style(16 * S, Ink, 4, true));
+                    string sub = (double.IsNaN(s.Rank) ? "" : "Level " + (int)s.Rank) + (s.Mode == "creative" ? (double.IsNaN(s.Rank) ? "Creative" : "  ·  Creative") : "");
+                    GUI.Label(P.R(x, 236, x + 252, 254), sub, RefArt.Style(11 * S, Dim, 4, false));
+                    Paint.Fill(P.R(x + 15, 261, x + 237, 262), Line);
+                    var rows = new[]
+                    {
+                        new[] { "rep", "Hood Reputation", double.IsNaN(s.Xp) ? "-" : Math.Round(s.Xp).ToString("#,0") },
+                        new[] { "cash", "Cash", Profiles.Money(s.Cash) },
+                        new[] { "empire", "Drug Empire", double.IsNaN(s.Empire) ? "-" : "Level " + (int)s.Empire },
+                        new[] { "house", "Properties", Profiles.Count(s.Properties) },
+                    };
+                    float cy = 279;
+                    foreach (var row in rows)
+                    {
+                        var ic = RefArt.Icon(row[0]);
+                        if (ic != null) Paint.Picture(P.R(x + 19, cy - 10, x + 41, cy + 10), ic);
+                        GUI.Label(P.R(x + 48, cy - 11, x + 160, cy + 11), row[1], RefArt.Style(11 * S, new Color(0.82f, 0.84f, 0.87f), 3, false));
+                        GUI.Label(P.R(x + 140, cy - 11, x + 233, cy + 11), row[2], RefArt.Style(13 * S, Ink, 5, true));
+                        cy += 28.5f;
+                    }
+                    var play = P.R(x + 18, 392, x + 235, 425);
+                    Paint.Fill(play, on ? new Color(0.3f, 0.66f, 0.24f) : new Color(0.24f, 0.55f, 0.2f));
+                    GUI.Label(play, "Play", RefArt.Style(14 * S, Ink, 4, false));
+                }
+                Frame(r, on ? new Color(0.42f, 0.86f, 0.36f) : new Color(1, 1, 1, 0.14f), on ? Mathf.Max(2, 1.5f * S) : 1);
+                if (GUI.Button(r, "", GUIStyle.none)) { _card = i; PlaySlot(s); }
+            }
+            string foot = _note.Length > 0 ? _note : (Pad.InUse ? "B  back" : "Esc  back") + (slots.Count > 4 ? "   ·   " + (_card + 1) + " of " + slots.Count : "");
+            GUI.Label(P.R(437, 452, 1483, 472), foot, RefArt.Style(11 * S, Dim, 5, false));
         }
     }
 }

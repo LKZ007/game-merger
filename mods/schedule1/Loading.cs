@@ -135,6 +135,20 @@ namespace Frankenstein
 
         static GUIStyle _center, _centerSmall;
 
+        /// <summary>levy's reference loading screen (Hood Warfare merges): the picture has the lockup, the crews,
+        /// LOADING... and the tagline; the green bar fills where the reference has it.</summary>
+        static void DrawRef(float W, float H, float t)
+        {
+            var P = RefPanel.Loading(RefArt.Cover(RefArt.Loading, W, H));
+            Fill(new Rect(0, 0, W, H), new Color(0.02f, 0.02f, 0.03f));
+            Paint.Picture(P.Art, RefArt.Loading);
+            var track = P.R(177, 425, 588, 435);
+            Fill(new Rect(track.x - 1, track.y - 1, track.width + 2, track.height + 2), new Color(1, 1, 1, 0.45f));
+            Fill(track, new Color(0.05f, 0.06f, 0.07f, 0.95f));
+            float p = 1f - 1f / (1f + t * 0.12f);  // eases toward full while the game loads
+            Fill(new Rect(track.x, track.y, track.width * p, track.height), new Color(0.27f, 0.72f, 0.29f));
+        }
+
         static string Hex(Color c) => "#" + ((int)(c.r * 255)).ToString("X2") + ((int)(c.g * 255)).ToString("X2") + ((int)(c.b * 255)).ToString("X2");
 
         public static void Draw()
@@ -147,6 +161,7 @@ namespace Frankenstein
             if (!now) return;
             Art();
             float W = Screen.width, H = Screen.height, t = Time.unscaledTime - _since;
+            if (RefArt.On && RefArt.Loading != null) { DrawRef(W, H, t); return; }
             if (MenuSkin.Backdrop() != null) { DrawScene(W, H, t); return; }
             Fill(new Rect(0, 0, W, H), new Color(0.03f, 0.02f, 0.05f));
             if (_art != null)

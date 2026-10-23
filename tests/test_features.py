@@ -304,6 +304,35 @@ class FeatureChecklist(unittest.TestCase):
         self.assertNotIn('merge_id + "~creative" if creative', api, "one set of saves")
         self.assertIn("_members", read(ROOT, "mods", "schedule1", "Rt.cs"))  # reflection cached: less lag
 
+    def test_338_reference_screens_own_guns_aim(self):
+        dll = open(os.path.join(PKG, "mods", "schedule1", "Frankenstein.dll"), "rb").read()
+        for word in ("ref-menu.jpg", "ref-profiles.jpg", "ref-loading.jpg", "ref-avatar.jpg", "Hood Reputation", "Drug Empire",
+                     "Empty Profile", "frankenstein_", "AddToRegistry", "ownitems-debug.txt"):
+            self.assertIn(word.encode("utf-16-le"), dll, word)
+        art = os.path.join(PKG, "mods", "_art", "hoodwarfare")
+        for f in ("ref-menu.jpg", "ref-profiles.jpg", "ref-loading.jpg", "ref-avatar.jpg", "ref-icon-rep.png", "ref-icon-cash.png",
+                  "ref-icon-empire.png", "ref-icon-house.png", "ref-icon-money.png", "ref-icon-crown.png"):
+            self.assertTrue(os.path.isfile(os.path.join(art, f)), f)
+        self.assertFalse(os.path.isdir(os.path.join(PKG, "mods", "schedule1", "art")))  # pictures don't go into the game's Mods folder
+        import tempfile
+        from gamemerger.api import Api
+        with tempfile.TemporaryDirectory() as d:
+            self.assertEqual(Api._ref_art(d, "hoodwarfare"), 10)   # a Hood Warfare merge gets the reference screens
+            self.assertEqual(Api._ref_art(d, "hoodwarfare"), 0)    # once
+            self.assertEqual(Api._ref_art(d, "other"), 0)          # other merges keep the painted menu
+        own = read(ROOT, "mods", "schedule1", "OwnItems.cs")
+        for key in ("ak47", "uzi", "sniper", "rpg", "launcher"):
+            self.assertIn('Key = "%s"' % key, own)                 # every own weapon is an item of its own
+        self.assertIn("OwnItems.IdOf(d.Key)", read(ROOT, "mods", "schedule1", "OwnGuns.cs"))      # F6 gives that item
+        self.assertIn('OwnItems.IdOf("launcher")', read(ROOT, "mods", "schedule1", "Boom.cs"))
+        self.assertIn("SkinnedMeshRenderer", read(ROOT, "mods", "schedule1", "Looks.cs"))          # the held model is swapped
+        guns = read(ROOT, "mods", "schedule1", "OwnGuns.cs")
+        self.assertIn("Spread = 0.15", guns)                    # the sniper is tight
+        self.assertIn("Rate = 5.5", guns)                       # the Uzi fires fastest
+        aim = read(ROOT, "mods", "schedule1", "Aim.cs")
+        for kind in ('"sniper"', '"ak47"', '"uzi"', '"shotgun"', '"launcher"', "fieldOfView", "Arc("):
+            self.assertIn(kind, aim)
+
     def test_3371_drop_weapons_and_empty_creative(self):
         dll = open(os.path.join(PKG, "mods", "schedule1", "Frankenstein.dll"), "rb").read()
         for word in ("drop-debug.txt", "ClearStoredInstance", "started empty"):

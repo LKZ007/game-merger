@@ -2490,6 +2490,7 @@ class Api:
     def _menu_art(m, theme, ext):
         """The in-game menu's and loading screen's own art: a night city backdrop and the title lockup."""
         folder = os.path.join(m.target_path, "UserData", "Frankenstein")
+        Api._ref_art(folder, theme)
         mark = os.path.join(folder, "menu-art.txt")
         key = "%s|%s|%s" % (Api.MENU_ART, m.data.get("game_name") or "Schedule I", ext)
         try:
@@ -2510,6 +2511,25 @@ class Api:
             except Exception:
                 pass  # no Pillow: the menu draws its title in text over a dark background
         threading.Thread(target=paint, daemon=True).start()
+
+    @staticmethod
+    def _ref_art(folder, theme):
+        """levy's own reference screens for this theme (mods/_art/<theme>, cut by installer/make_hood_art.py): with them
+        the mod lays the main menu, Profiles and the loading screen out exactly like the reference."""
+        src = os.path.join(os.path.dirname(os.path.abspath(__file__)), "mods", "_art", theme or "-")
+        if not os.path.isdir(src):
+            return 0
+        n = 0
+        for f in os.listdir(src):
+            a, b = os.path.join(src, f), os.path.join(folder, f)
+            try:
+                if not os.path.isfile(b) or os.path.getsize(b) != os.path.getsize(a):
+                    os.makedirs(folder, exist_ok=True)
+                    shutil.copy2(a, b)
+                    n += 1
+            except OSError:
+                pass
+        return n
 
     @staticmethod
     def _moreguns_cfg(m, theme):

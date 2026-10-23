@@ -18,7 +18,7 @@ namespace Frankenstein
         internal class Spec
         {
             public string Match, Name;
-            public double Damage = 1, Rate = 1, Reload = 1, Size = 1;
+            public double Damage = 1, Rate = 1, Reload = 1, Size = 1, Range = 1, Spread = 1;
             public int Mag;
             public bool Auto, AutoSet;
         }
@@ -96,6 +96,13 @@ namespace Frankenstein
             if (Math.Abs(s.Rate - 1) > 0.01)
                 did.Add(Scale(w, 1 / s.Rate, "FireCooldown", "TimeBetweenShots", "ShotCooldown", "FireInterval", "Cooldown") ??
                         Scale(w, s.Rate, "FireRate", "RateOfFire", "RoundsPerMinute"));
+            if (Math.Abs(s.Spread - 1) > 0.01)
+            {
+                // how far shots stray from the crosshair (Aim draws the crosshair to match)
+                did.Add(Scale(w, s.Spread, "MinSpread", "Spread", "BaseSpread", "SpreadAngle", "HipSpread"));
+                did.Add(Scale(w, s.Spread, "MaxSpread", "MaxSpreadAngle", "AimSpread"));
+            }
+            if (Math.Abs(s.Range - 1) > 0.01) did.Add(Scale(w, s.Range, "Range", "MaxRange", "EffectiveRange"));
             if (Math.Abs(s.Reload - 1) > 0.01) did.Add(Scale(w, s.Reload, "ReloadTime", "ReloadDuration", "ReloadLength"));
             if (s.AutoSet)
             {

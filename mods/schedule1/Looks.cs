@@ -153,8 +153,15 @@ namespace Frankenstein
             var t = gun.transform;
             for (int i = 0; i < t.childCount; i++)
                 if (t.GetChild(i).name == Marker) return;
-            var renderers = Rt.Comps(gun, typeof(MeshRenderer), true).OfType<MeshRenderer>().Where(r => r != null && r.enabled).ToList();
-            if (renderers.Count == 0) return;
+            // the base gun's model: plain meshes, and the skinned ones a held (animated) gun is made of
+            var renderers = Rt.Comps(gun, typeof(MeshRenderer), true).OfType<Renderer>()
+                              .Concat(Rt.Comps(gun, typeof(SkinnedMeshRenderer), true).OfType<Renderer>())
+                              .Where(r => r != null && r.enabled && r.name != "part" && r.name != "warhead").ToList();
+            if (renderers.Count == 0)
+            {
+                if (_logged.Add(-gun.GetInstanceID())) Melon<Plugin>.Logger.Warning("Looks: the held " + baseKey + " has no model to swap for the " + key + ".");
+                return;
+            }
             var cam = Camera.main;
             // where the base gun is, which way it points, and how big it is
             var b = renderers[0].bounds;
@@ -273,6 +280,55 @@ namespace Frankenstein
                     if (i == 0) Paint.Fill(new Rect(r.x, r.y, r.width, Math.Max(1f, r.height * 0.2f)), Color.Lerp(Lift(p.Color), Color.white, 0.25f + p.Shine * 0.2f));
                 }
             }
+        }
+
+        static readonly Dictionary<string, Sprite> _sprites = new Dictionary<string, Sprite>();
+
+        /// <summary>The same side view as a picture, for the gun's own item icon (hotbar and inventory).</summary>
+        public static Sprite Sprite(string key)
+        {
+            Sprite sp;
+            if (_sprites.TryGetValue(key, out sp) && sp != null) return sp;
+            Part[] parts;
+            if (!Guns.TryGetValue(key, out parts)) return null;
+            const int TW = 256, TH = 256;
+            var tex = new Texture2D(TW, TH);
+            var clear = new Color(0, 0, 0, 0);
+            var px = new Color[TW * TH];
+            for (int i = 0; i < px.Length; i++) px[i] = clear;
+            float minZ = parts.Min(p => p.Pos.z - Len(p) / 2), maxZ = parts.Max(p => p.Pos.z + Len(p) / 2);
+            float minY = parts.Min(p => p.Pos.y - Tall(p) / 2), maxY = parts.Max(p => p.Pos.y + Tall(p) / 2);
+            float s = Mathf.Min(TW / (maxZ - minZ), TH / (maxY - minY)) * 0.92f;
+            float ox = (TW - (maxZ - minZ) * s) / 2, oy = (TH - (maxY - minY) * s) / 2;
+            foreach (var p in parts.OrderBy(p => p.Pos.x))
+            {
+                if (Math.Abs(p.Pos.x) > 0.02f && p.Pos.x < 0) continue;
+                float l = Len(p), h = Tall(p);
+                int steps = Math.Abs(p.Tilt) > 8 ? 3 : 1;
+                for (int i = 0; i < steps; i++)
+                {
+                    float f = steps == 1 ? 0 : (i - 1) / 2f;
+                    float shift = f * h * Mathf.Tan(p.Tilt * Mathf.Deg2Rad), sy = h / steps;
+                    // texture rows go up: y is measured from the bottom
+                    int x0 = (int)(ox + (p.Pos.z - l / 2 + shift - minZ) * s), x1 = (int)Math.Ceiling(ox + (p.Pos.z + l / 2 + shift - minZ) * s);
+                    int yTop = (int)Math.Ceiling(oy + (p.Pos.y + h / 2 - i * sy - minY) * s), yBot = (int)(oy + (p.Pos.y + h / 2 - (i + 1) * sy - minY) * s);
+                    var c = Lift(p.Color);
+                    var hi = Color.Lerp(c, Color.white, 0.25f + p.Shine * 0.2f);
+                    int band = Math.Max(1, (yTop - yBot) / 5);
+                    for (int y = Math.Max(0, yBot); y < Math.Min(TH, Math.Max(yTop, yBot + 2)); y++)
+                        for (int x = Math.Max(0, x0); x < Math.Min(TW, Math.Max(x1, x0 + 2)); x++)
+                            px[y * TW + x] = i == 0 && y >= yTop - band ? hi : c;
+                }
+            }
+            for (int y = 0; y < TH; y++)
+                for (int x = 0; x < TW; x++)
+                    tex.SetPixel(x, y, px[y * TW + x]);
+            tex.Apply();
+            try { sp = UnityEngine.Sprite.Create(tex, new Rect(0, 0, TW, TH), new Vector2(0.5f, 0.5f)); }
+            catch (Exception e) { Melon<Plugin>.Logger.Warning("Looks: no icon for " + key + " (" + e.Message + ")"); return null; }
+            if (sp != null) { sp.name = "Frankenstein " + key; tex.hideFlags = HideFlags.DontUnloadUnusedAsset; sp.hideFlags = HideFlags.DontUnloadUnusedAsset; }
+            _sprites[key] = sp;
+            return sp;
         }
 
         static Color Lift(Color c) => Color.Lerp(c, Color.white, 0.12f);

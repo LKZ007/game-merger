@@ -50,7 +50,7 @@ namespace Frankenstein
             return t;
         }
 
-        static MethodInfo Generic(Type on, string name, int args)
+        internal static MethodInfo Generic(Type on, string name, int args)
         {
             return on.GetMethods(BindingFlags.Public | BindingFlags.Static | BindingFlags.Instance)
                      .FirstOrDefault(m => m.Name == name && m.IsGenericMethodDefinition && m.GetParameters().Length == args);

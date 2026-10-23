@@ -20,7 +20,7 @@ namespace Frankenstein
         {
             public GameObject Go;
             public Vector3 V;
-            public float Fuse;
+            public float Fuse, Power = 1f;  // Power: how big the blast is (the RPG's rocket 1.7, a grenade 1)
             public bool Stuck, Impact;
         }
 
@@ -93,6 +93,13 @@ namespace Frankenstein
         {
             Load();
             _shotgun = _shotgun ?? Story.ItemId("pumpshotgun") ?? Story.ItemId("shotgun");
+            var own = OwnItems.IdOf("launcher");
+            if (own != null)
+            {
+                S1API.Console.ConsoleHelper.AddItemToInventory(own, 1);
+                ItemMenu.Notify("Got the Grenade Launcher (six-shot drum). Equip it and shoot: every shot is a grenade.");
+                return;
+            }
             if (_shotgun == null) { ItemMenu.Notify("This game has no shotgun to build the grenade launcher on."); return; }
             _before = Slots().Select((s, i) => Id(s) == _shotgun ? i : -1).Where(i => i >= 0).ToList();
             S1API.Console.ConsoleHelper.AddItemToInventory(_shotgun, 1);
@@ -132,7 +139,7 @@ namespace Frankenstein
                     var at = s.Go.transform.position;
                     UnityEngine.Object.Destroy(s.Go);
                     _live.RemoveAt(i);
-                    Explode(at);
+                    Explode(at, s.Power);
                 }
             }
             for (int i = _flashes.Count - 1; i >= 0; i--)
@@ -149,6 +156,8 @@ namespace Frankenstein
                 if (f.Light != null) f.Light.intensity = 30f * (1f - t);
             }
         }
+
+        static readonly Guns.Spec LauncherSpec = new Guns.Spec { Name = "Grenade Launcher (Frankenstein)", Rate = 0.6, Spread = 0.5, Mag = 6, Reload = 1.6, Auto = false, AutoSet = true };
 
         static readonly Vector3 Gravity = new Vector3(0, -9.81f, 0);
 
@@ -172,8 +181,12 @@ namespace Frankenstein
 
         internal static string Id(object slot) => Rt.Get(Rt.Get(slot, "ItemInstance"), "ID") as string;
 
+        /// <summary>The grenade launcher is in your hand.</summary>
+        public static bool LauncherHeld;
+
         static void Track()
         {
+            LauncherHeld = false;
             var slots = Slots();
             if (_before != null && slots.Count > 0)
             {
@@ -181,11 +194,19 @@ namespace Frankenstein
                 for (int i = 0; i < slots.Count; i++)
                     if (Id(slots[i]) == _shotgun && !_before.Contains(i)) { _launcherSlot = i; _before = null; Store(); break; }
             }
-            if (_launcherSlot < 0 || _launcherSlot >= slots.Count) return;
-            var slot = slots[_launcherSlot];
-            var id = Id(slot);
-            if (id == null || (_shotgun != null && id != _shotgun)) { if (id != null && _before == null) { _launcherSlot = -1; Store(); } return; }
-            if (!(Rt.Get(slot, "IsEquipped", "isEquipped") is bool on) || !on) { _heldGun = null; return; }
+            // the launcher in your hand: its own item, or (given before 3.38) the shotgun in the slot it went into
+            object slot = null;
+            foreach (var s in slots)
+                if (OwnItems.KeyOf(Id(s)) == "launcher" && Rt.Get(s, "IsEquipped", "isEquipped") is bool eq && eq) slot = s;
+            if (slot == null)
+            {
+                if (_launcherSlot < 0 || _launcherSlot >= slots.Count) { _heldGun = null; return; }
+                slot = slots[_launcherSlot];
+                var id = Id(slot);
+                if (id == null || (_shotgun != null && id != _shotgun)) { if (id != null && _before == null) { _launcherSlot = -1; Store(); } return; }
+                if (!(Rt.Get(slot, "IsEquipped", "isEquipped") is bool on) || !on) { _heldGun = null; return; }
+            }
+            LauncherHeld = true;
             if (_gun == null) _gun = Rt.FindByName("Equippable_RangedWeapon");
             // finding the gun searches every object in the game: only now and then, or when the old one is gone
             if (_gun != null && (_gunSeen == null || (_gunSeen is UnityEngine.Object g0 && g0 == null) || Time.unscaledTime >= _nextGunLook))
@@ -198,14 +219,22 @@ namespace Frankenstein
             if (gun == null || inst == null) return;
             try { Looks.Dress(Rt.GameObjectOf(gun), "launcher", "pumpshotgun"); } catch (Exception e) { Warn("launcher look", e); }
             int ammo = Convert.ToInt32(Rt.Get(inst, "Value") ?? 0);
-            if (!ReferenceEquals(gun, _heldGun)) { _heldGun = gun; _heldAmmo = ammo; return; }
+            if (!ReferenceEquals(gun, _heldGun))
+            {
+                _heldGun = gun;
+                _heldAmmo = ammo;
+                // a slow six-shot drum, against the pump shotgun it's built on
+                if (gun is UnityEngine.Object u && Guns._done.Add(u.GetInstanceID()))
+                    try { Guns.Apply(gun, Rt.GameObjectOf(gun), LauncherSpec); } catch (Exception e) { Warn("launcher numbers", e); }
+                return;
+            }
             if (ammo < _heldAmmo) Throw(true);  // a shot went off: a grenade goes with it
             _heldAmmo = ammo;
         }
 
         // ---------- grenades in flight ----------
 
-        internal static void Throw(bool launcher)
+        internal static void Throw(bool launcher, float power = 1f)
         {
             var cam = Camera.main;
             if (cam == null) return;
@@ -218,7 +247,7 @@ namespace Frankenstein
             Tint(go, ref _shellMat, launcher ? new Color(0.35f, 0.33f, 0.2f) : new Color(0.18f, 0.24f, 0.12f));
             _live.Add(new Shell
             {
-                Go = go, Impact = launcher, Fuse = launcher ? 6f : 2.6f,
+                Go = go, Impact = launcher, Fuse = launcher ? 6f : 2.6f, Power = power,
                 V = cam.transform.forward * (launcher ? 34f : 15f) + Vector3.up * (launcher ? 2.5f : 4f),
             });
         }
@@ -253,8 +282,9 @@ namespace Frankenstein
 
         // ---------- the explosion ----------
 
-        static void Explode(Vector3 at)
+        static void Explode(Vector3 at, float power)
         {
+            float radius = Radius * Mathf.Sqrt(power);
             var go = GameObject.CreatePrimitive(PrimitiveType.Sphere);
             go.name = "Frankenstein explosion";
             var col = Rt.Comp(go, Rt.Find("UnityEngine.Collider")) as UnityEngine.Object;
@@ -267,18 +297,18 @@ namespace Frankenstein
                 light = go.AddComponent<Light>();
                 light.type = LightType.Point;
                 light.color = new Color(1f, 0.6f, 0.25f);
-                light.range = Radius * 3f;
-                light.intensity = 30f;
+                light.range = radius * 3f;
+                light.intensity = 30f * power;
             }
             catch (Exception) { }
-            _flashes.Add(new Flash { Go = go, Light = light, Born = Time.time, Size = Radius * 0.9f });
+            _flashes.Add(new Flash { Go = go, Light = light, Born = Time.time, Size = radius * 0.9f });
             int hurt = 0;
-            try { hurt = HurtNear(at); } catch (Exception e) { Warn("damage", e); }
+            try { hurt = HurtNear(at, radius, Damage * power); } catch (Exception e) { Warn("damage", e); }
             if (hurt > 0) Melon<Plugin>.Logger.Msg("Explosion hit " + hurt);
         }
 
         /// <summary>Everyone in the blast takes damage, the closest the most. You don't hurt yourself.</summary>
-        static int HurtNear(Vector3 at)
+        static int HurtNear(Vector3 at, float radius, float damage)
         {
             if (_npc == null) _npc = Rt.Find("ScheduleOne.NPCs.NPC");
             if (_npc == null) return 0;
@@ -288,8 +318,8 @@ namespace Frankenstein
                 var c = o as Component;
                 if (c == null) continue;
                 float d = Vector3.Distance(c.transform.position, at);
-                if (d > Radius) continue;
-                float dmg = Damage * (1f - d / Radius * 0.75f);
+                if (d > radius) continue;
+                float dmg = damage * (1f - d / radius * 0.75f);
                 var health = Rt.Get(o, "Health", "health");
                 if (Call(health, "TakeDamage", dmg, true) || Call(o, "TakeDamage", dmg, true)) n++;
             }

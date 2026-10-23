@@ -15,7 +15,7 @@ namespace Frankenstein
     {
         /// <summary>The Frankenstein release this mod came with (equal to gamemerger/version.py; a test checks).
         /// Shown on F6's title and in MelonLoader's log, where the app reads it back for the merge's card.</summary>
-        public const string Version = "3.37.1";
+        public const string Version = "3.38.0";
         float _next;
         public static bool MenuAllowed = true;
         public static System.Collections.Generic.List<string> Kit = new System.Collections.Generic.List<string>();
@@ -93,7 +93,9 @@ namespace Frankenstein
             MainMenu.Update();
             try { Creative.Update(); } catch (Exception e) { Melon<Plugin>.Logger.Warning("Creative: " + e.Message); }
             try { Gangs.Update(); } catch (Exception e) { Melon<Plugin>.Logger.Warning("Gangs: " + e.Message); }
+            try { OwnItems.Update(); } catch (Exception e) { Melon<Plugin>.Logger.Warning("Own items: " + e.Message); }
             try { OwnGuns.Update(); } catch (Exception e) { Melon<Plugin>.Logger.Warning("Own guns: " + e.Message); }
+            try { Aim.Update(); } catch (Exception e) { Melon<Plugin>.Logger.Warning("Aim: " + e.Message); }
             try { Guns.Update(); } catch (Exception e) { Melon<Plugin>.Logger.Warning("Guns: " + e.Message); }
             try { Crew.Update(); } catch (Exception e) { Melon<Plugin>.Logger.Warning("Crew: " + e.Message); }
             try { Boom.Update(); } catch (Exception e) { Melon<Plugin>.Logger.Warning("Explosives: " + e.Message); }
@@ -113,6 +115,7 @@ namespace Frankenstein
         public override void OnLateUpdate()
         {
             try { Fly.LateUpdate(); } catch (Exception e) { Melon<Plugin>.Logger.Warning("Fly: " + e.Message); }
+            try { Aim.LateUpdate(); } catch (Exception e) { Melon<Plugin>.Logger.Warning("Scope: " + e.Message); }
             try { Melee.LateUpdate(); } catch (Exception e) { Melon<Plugin>.Logger.Warning("Swing: " + e.Message); }
         }
 
@@ -125,6 +128,7 @@ namespace Frankenstein
 
         static void DrawAll()
         {
+            try { Aim.Draw(); } catch (Exception) { }
             try { Wheel.Draw(); } catch (Exception) { }
             try { Fly.Draw(); } catch (Exception) { }
             try { Drop.Draw(); } catch (Exception) { }

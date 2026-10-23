@@ -3,6 +3,28 @@
 Every release, newest first. Downloads are on the [releases page](https://github.com/LKZ007/game-merger/releases).
 The app was called Game Merger before 3.8.0.
 
+## v3.38.0 (2026-10-23)
+- **Schedule I's screens now match your Hood Warfare reference.** Your reference picture is used for the art: the SCHEDULE 1 × HOOD WARFARE lockup, the night city with the hooded figure and "Same city, different hustles", the loading scene and the avatar. Frankenstein draws the live parts in the same places as in the reference.
+  - **Main menu:** the list sits where the reference has it (Creative is still in it), with the cash and level pill and the settings button at the top right and the version at the bottom right.
+  - **Profiles:** the list stays on the left with Profiles lit up, next to four cards. A save's card shows the avatar, its name, level, Hood Reputation, Cash, Drug Empire, Properties and a green Play button. An empty slot shows "Empty Profile" with a +.
+  - **Loading:** the reference's loading screen with the green bar filling under LOADING...
+  - This is only in Hood Warfare merges. Other merges keep the painted menu.
+- **The AK-47, Uzi, .308 Sniper, RPG and Grenade Launcher are real items of their own.** Each has its own name, icon and model in the hotbar, inventory and your hands, so taking the sniper no longer gives a revolver and the RPG is no longer a pump shotgun. Each one still fires using the game's own gun underneath. What happened is written to `UserData\Frankenstein\ownitems-debug.txt`.
+- **Each gun has its own fire rate and power.**
+  - **AK:** fast and fully automatic.
+  - **Uzi:** fully automatic, faster and weaker than the AK.
+  - **Sniper:** slow, with very high damage and long reach.
+  - **RPG:** one slow shot with a bigger blast than a grenade.
+  - **Grenade Launcher:** a slow six-shot drum.
+- **Each gun has its own crosshair.**
+  - **Sniper:** a tight dot, and a scope zoom while you aim (right mouse or left trigger).
+  - **AK and Uzi:** the AK's crosshair is medium and the Uzi's is wider.
+  - **Shotgun:** a circle showing where the pellets spread.
+  - **Pistols:** short lines.
+  - **RPG and Grenade Launcher:** a dotted arc showing where the shot will land.
+  - Each gun's spread is set to match its crosshair.
+- Not tested in game yet. Guns you got before this update stay as the base gun.
+
 ## v3.37.1 (2026-10-23)
 - **Dropping works for weapons too.** Press G or d-pad down to drop what's in your hand. With the inventory open, LB/RB pick a slot first. Frankenstein tries the game's own drop and checks the item really left your hand. The game doesn't let some things (like guns) be dropped, so for those the slot is just emptied: get them back from F6 any time. What happened is written to `UserData\Frankenstein\drop-debug.txt`.
 - **A new Creative world starts empty.** No starter pistol, mags or shells: your hotbar is cleared once when the world starts, and the merge's starter kit is only given in Survival.

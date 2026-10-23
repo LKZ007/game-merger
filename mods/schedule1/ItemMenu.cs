@@ -56,7 +56,7 @@ namespace Frankenstein
             try
             {
                 _all = ItemManager.GetAllItemDefinitions()
-                    .Where(d => d != null && !string.IsNullOrEmpty(d.ID))
+                    .Where(d => d != null && !string.IsNullOrEmpty(d.ID) && OwnItems.KeyOf(d.ID) == null)  // Frankenstein's own guns come below
                     .Select(d => new Entry
                     {
                         Id = d.ID, Name = string.IsNullOrEmpty(d.Name) ? d.ID : d.Name, Category = IsWeapon(d.ID, d.Name) ? "Weapons" : CatName(d.Category),

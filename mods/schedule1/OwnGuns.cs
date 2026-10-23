@@ -10,8 +10,9 @@ namespace Frankenstein
     /// <summary>Frankenstein's own AK-47, Uzi, sniper and RPG, so they're there even when the More Guns mod isn't
     /// (it isn't made for every build of the game). Each works through one of the game's own guns (the M1911,
     /// revolver or pump shotgun) and gets the real gun's numbers: full auto, magazine, fire rate, damage; the RPG
-    /// fires a rocket that explodes. In your hands each has its own model (Looks), not the base gun's. The hotbar slot the gun goes into remembers which
-    /// gun it is (UserData/Frankenstein/ownguns-&lt;save&gt;.json). Only offered when More Guns' own isn't loaded.</summary>
+    /// fires a rocket that explodes. Each is an item of its own (OwnItems: its own name and icon in the hotbar), and in
+    /// your hands it has its own model (Looks), not the base gun's. Guns given before 3.38 were the base gun itself;
+    /// the hotbar slot they went into still remembers which gun it is (UserData/Frankenstein/ownguns-&lt;save&gt;.json). Only offered when More Guns' own isn't loaded.</summary>
     internal static class OwnGuns
     {
         internal class Def
@@ -21,17 +22,22 @@ namespace Frankenstein
             public bool Rocket;
         }
 
+        // Numbers are against the gun each is built on (the M1911 pistol, the revolver, the pump shotgun): the AK and
+        // Uzi are fully automatic (the Uzi faster and weaker), the sniper slow with very high damage and reach, the
+        // RPG one slow shot with a big blast. The grenade launcher's are in Boom.
         public static readonly Def[] Defs =
         {
-            new Def { Key = "ak47", Name = "AK-47", Base = "m1911", Spec = new Guns.Spec { Name = "AK-47 (Frankenstein)", Damage = 1.5, Rate = 3.5, Mag = 30, Auto = true, AutoSet = true } },
-            new Def { Key = "uzi", Name = "Uzi", Base = "m1911", Spec = new Guns.Spec { Name = "Uzi (Frankenstein)", Damage = 0.8, Rate = 5, Mag = 32, Auto = true, AutoSet = true, Reload = 0.8 } },
-            new Def { Key = "sniper", Name = ".308 Sniper", Base = "revolver", Spec = new Guns.Spec { Name = ".308 Sniper (Frankenstein)", Damage = 4, Rate = 0.45, Mag = 5, Reload = 1.4 } },
-            new Def { Key = "rpg", Name = "RPG", Base = "pumpshotgun", Rocket = true, Spec = new Guns.Spec { Name = "RPG (Frankenstein)", Damage = 1, Rate = 0.35, Mag = 1, Reload = 1.6 } },
+            new Def { Key = "ak47", Name = "AK-47", Base = "m1911", Spec = new Guns.Spec { Name = "AK-47 (Frankenstein)", Damage = 1.6, Rate = 3.5, Mag = 30, Reload = 1.1, Range = 1.6, Spread = 0.8, Auto = true, AutoSet = true } },
+            new Def { Key = "uzi", Name = "Uzi", Base = "m1911", Spec = new Guns.Spec { Name = "Uzi (Frankenstein)", Damage = 0.75, Rate = 5.5, Mag = 32, Reload = 0.8, Range = 0.9, Spread = 1.5, Auto = true, AutoSet = true } },
+            new Def { Key = "sniper", Name = ".308 Sniper", Base = "revolver", Spec = new Guns.Spec { Name = ".308 Sniper (Frankenstein)", Damage = 4.5, Rate = 0.4, Mag = 5, Reload = 1.4, Range = 3, Spread = 0.15, Auto = false, AutoSet = true } },
+            new Def { Key = "rpg", Name = "RPG", Base = "pumpshotgun", Rocket = true, Spec = new Guns.Spec { Name = "RPG (Frankenstein)", Damage = 1, Rate = 0.3, Mag = 1, Reload = 1.8, Range = 2, Spread = 0.3, Auto = false, AutoSet = true } },
         };
 
         /// <summary>True when More Guns' own guns loaded; then these aren't offered.</summary>
         public static bool MoreGunsLoaded;
         public static bool Holding;
+        /// <summary>Which of these is in your hand (ak47, uzi, sniper, rpg), or null.</summary>
+        public static string HeldKey;
         static readonly Dictionary<int, string> _slots = new Dictionary<int, string>();
         static Def _giving;
         static List<int> _before;
@@ -48,6 +54,14 @@ namespace Frankenstein
 
         public static void Give(Def d)
         {
+            var own = OwnItems.IdOf(d.Key);
+            if (own != null)
+            {
+                // its own item: the hotbar shows the gun's own name and icon
+                S1API.Console.ConsoleHelper.AddItemToInventory(own, 1);
+                ItemMenu.Notify(d.Name + " added to your hotbar.");
+                return;
+            }
             var baseId = Story.ItemId(d.Base);
             if (baseId == null) { ItemMenu.Notify("This game has no " + d.Base + " to build the " + d.Name + " on."); return; }
             _giving = d;
@@ -86,7 +100,7 @@ namespace Frankenstein
             _next = Time.unscaledTime + 0.15f;
             Load();
             var slots = Boom.Slots();
-            if (slots.Count == 0) { Holding = false; return; }
+            if (slots.Count == 0) { Holding = false; HeldKey = null; return; }
             if (_giving != null && _before != null)
             {
                 var baseId = Story.ItemId(_giving.Base);
@@ -102,9 +116,14 @@ namespace Frankenstein
             }
             Def held = null;
             for (int i = 0; i < slots.Count && held == null; i++)
-                if (_slots.ContainsKey(i) && Rt.Get(slots[i], "IsEquipped", "isEquipped") is bool on && on)
-                    held = Defs.First(x => x.Key == _slots[i]);
+            {
+                if (!(Rt.Get(slots[i], "IsEquipped", "isEquipped") is bool on) || !on) continue;
+                var key = OwnItems.KeyOf(Boom.Id(slots[i]));  // its own item
+                if (key == null && _slots.ContainsKey(i)) key = _slots[i];  // a base gun given before 3.38
+                held = Defs.FirstOrDefault(x => x.Key == key);
+            }
             Holding = held != null;
+            HeldKey = held?.Key;
             if (!Holding) { _held = null; return; }
             if (_gun == null) _gun = Rt.FindByName("Equippable_RangedWeapon");
             if (_gun == null) return;
@@ -131,7 +150,7 @@ namespace Frankenstein
             if (!held.Rocket) return;
             int ammo = Ammo(_held);
             Looks.Warhead(go, ammo > 0);
-            if (ammo < _heldAmmo) Boom.Throw(true);  // the RPG fired: a rocket goes with the shot
+            if (ammo < _heldAmmo) Boom.Throw(true, 1.7f);  // the RPG fired: a rocket goes with the shot, a bigger blast than a grenade
             _heldAmmo = ammo;
         }
 

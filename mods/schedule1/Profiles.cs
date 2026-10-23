@@ -17,7 +17,7 @@ namespace Frankenstein
         {
             public int Number;
             public string Path = "", Name = "", Mode = "survival";
-            public double Cash = double.NaN, Rank = double.NaN, Properties = double.NaN;
+            public double Cash = double.NaN, Rank = double.NaN, Properties = double.NaN, Xp = double.NaN, Empire = double.NaN;
             public DateTime Played;
             public bool Empty => Path.Length == 0;
         }
@@ -64,7 +64,8 @@ namespace Frankenstein
             var rank = Json(dir, "Rank.json");
             var r = Num(Find(rank, "Rank", "CurrentRank"));
             var tier = Num(Find(rank, "Tier", "CurrentTier"));
-            if (!double.IsNaN(r)) s.Rank = r * 5 + (double.IsNaN(tier) ? 0 : tier) + 1;
+            if (!double.IsNaN(r)) { s.Rank = r * 5 + (double.IsNaN(tier) ? 0 : tier) + 1; s.Empire = r + 1; }  // Drug Empire: the rank's own level
+            s.Xp = Num(Find(rank, "TotalXP", "XP", "Xp", "CurrentXP"));  // Hood Reputation
             try
             {
                 var props = System.IO.Path.Combine(dir, "Properties");
