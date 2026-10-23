@@ -2399,13 +2399,17 @@ class Api:
     @staticmethod
     def _builtin_differs(src, target, dest):
         """True when any of Frankenstein's own mod files in the game copy is missing or not this build's."""
-        import filecmp
+        # compared byte for byte: filecmp caches by size and mtime, which a same-size file rewritten within
+        # one mtime tick (Windows) fools
         for root, _d, files in os.walk(src):
             for f in files:
                 rel = os.path.relpath(os.path.join(root, f), src).replace(os.sep, "/")
                 t = os.path.join(target, *(dest + "/" + rel).split("/"))
-                if not os.path.isfile(t) or not filecmp.cmp(os.path.join(root, f), t, shallow=False):
+                if not os.path.isfile(t) or os.path.getsize(t) != os.path.getsize(os.path.join(root, f)):
                     return True
+                with open(os.path.join(root, f), "rb") as a, open(t, "rb") as b:
+                    if a.read() != b.read():
+                        return True
         return False
 
     @staticmethod
