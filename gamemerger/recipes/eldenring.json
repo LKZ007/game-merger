@@ -1,0 +1,134 @@
+{
+  "id": "eldenring",
+  "name": "ELDEN RING (offline only)",
+  "exe": [
+    "Game/eldenring.exe",
+    "eldenring.exe"
+  ],
+  "steam_appids": [
+    "1245620"
+  ],
+  "nexus_domain": "eldenring",
+  "logs": [
+    "frankenstein/frankenstein-debug.txt",
+    "modengine2/*.log",
+    "logs/*.log",
+    "jdsd_er_practice_tool.log"
+  ],
+  "saves": [
+    "%APPDATA%/EldenRing"
+  ],
+  "processes": [
+    "eldenring.exe"
+  ],
+  "warning": "The merged copy always starts offline through Mod Engine 2, without Easy Anti-Cheat, so it can never go online. Never copy its save back into your normal game by hand: modded saves online can get you banned.",
+  "layout": {
+    "root_markers": [
+      "mod",
+      "dlls",
+      "modengine2",
+      "chr",
+      "parts",
+      "msg",
+      "map",
+      "menu",
+      "sfx",
+      "action",
+      "event",
+      "script",
+      "param",
+      "asset",
+      "sd",
+      "font",
+      "other",
+      "expression",
+      "movie"
+    ],
+    "root_prefix": "mod",
+    "loose_rules": [
+      {
+        "ext": [
+          ".bin",
+          ".dcx",
+          ".bnd",
+          ".tpf"
+        ],
+        "dest": "mod",
+        "keep_folder": true
+      },
+      {
+        "ext": [
+          ".dll"
+        ],
+        "dest": "dlls"
+      }
+    ]
+  },
+  "frameworks": [
+    {
+      "id": "modengine2",
+      "name": "Mod Engine 2 (loads mods offline, without Easy Anti-Cheat)",
+      "github": "soulsmods/ModEngine2",
+      "asset": "(?i)ModEngine.*\\.zip$",
+      "flat_root": true
+    },
+    {
+      "id": "practicetool",
+      "name": "Elden Ring Practice Tool (Creative tools: item spawner, fly, no damage)",
+      "github": "veeenu/eldenring-practice-tool",
+      "asset": "(?i)practice_tool.*\\.zip$",
+      "flat_root": true
+    }
+  ],
+  "themes": [
+    {
+      "id": "hogwarts",
+      "name": "Hogwarts Legacy: wand, spells, houses and a broom",
+      "from_game": "Hogwarts Legacy",
+      "source_match": [
+        "hogwarts",
+        "harry potter"
+      ],
+      "description": "The Lands Between as a wizarding school's battleground: a wand that casts Hogwarts spells as sorceries, a house pick at character creation with its robes, stats and house spell, Torrent flying like a broom in Creative, and the wizarding world's creatures played by Elden Ring's own. Built from Elden Ring's own items; nothing is copied out of Hogwarts Legacy.",
+      "frameworks": [
+        "modengine2",
+        "practicetool"
+      ],
+      "slots": [
+        {
+          "name": "Wand and Hogwarts spells",
+          "search": "",
+          "hero": true,
+          "builtin": "Frankenstein's own Elden Ring mod: every house starts with a wand (the Astrologer's Staff) and the spellbook as sorceries: Stupefy = Glintstone Pebble, Lumos = Starlight, Protego = Thops's Barrier, Expelliarmus = Carian Retaliation, Depulso = Rock Blaster, Incendio = Magma Shot, Accio = Gravity Well, Glacius = Freezing Mist, Bombarda = Cannon of Haima. In game they keep Elden Ring's names (its text is locked in the game's archives)."
+        },
+        {
+          "name": "House pick with robes and a house spell",
+          "search": "",
+          "builtin": "Frankenstein's own Elden Ring mod: four starting classes become the houses. Hero = Gryffindor (Spellblade's red hat and attire, Incendio), Prisoner = Slytherin (Alberich's pointed hat and robe, Expelliarmus), Astrologer = Ravenclaw (Astrologer hood and Raya Lucarian robe, Glacius), Confessor = Hufflepuff (Sage hood and robe, Protego), each with its own stats. The robes are Elden Ring's closest ones, not recoloured."
+        },
+        {
+          "name": "Broom (Torrent)",
+          "search": "broom",
+          "builtin": "Creative tools: Torrent flies like a broom (F3, or Broom on the controller wheel). Out of Creative Torrent rides as normal and keeps his own look; a broom model needs a mod (picks below)."
+        },
+        {
+          "name": "Creatures of the wizarding world",
+          "search": "harry potter",
+          "builtin": "Stand-in: Elden Ring's own creatures play the parts (trolls are trolls, Death Rite Birds and Night's Cavalry are the dementor-like hunters, skeletons are the Inferi). Their names and colours stay Elden Ring's."
+        },
+        {
+          "name": "Creative tools and item spawner",
+          "search": "",
+          "builtin": "Frankenstein's Creative tools (the Elden Ring Practice Tool, set up by Frankenstein): item spawner with every item, no damage, unlimited FP, fly, speed, +100,000 runes and warp. Keys 1-9 and F1-F4, 0 opens the menu, both sticks open the controller wheel."
+        }
+      ]
+    }
+  ],
+  "multiplayer": "Merged Elden Ring copies are offline only: Mod Engine 2 starts them without Easy Anti-Cheat, so FromSoftware's online play is off. Co-op with mods needs the community's Seamless Co-op mod on every player's PC (from Nexus, by hand).",
+  "launch_args": [],
+  "sandbox": {
+    "native": "Frankenstein's Creative tools (Elden Ring Practice Tool): press 0 for the menu, or press both sticks on a controller for the wheel. Item spawner (Ctrl+U), no damage (1), unlimited FP (3), fly (F2), Torrent flies like a broom (F3), speed (8), +100,000 runes (9).",
+    "note": "Offline only, always. Creative works on your existing characters too: the merge starts with a copy of your Elden Ring saves.",
+    "slots": []
+  }
+}
