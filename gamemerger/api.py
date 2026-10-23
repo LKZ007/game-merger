@@ -101,9 +101,10 @@ BUILTIN = {
                   "what": "House kits (wand, robes, stats and Hogwarts spells as sorceries) built into the merge copy's own "
                           "regulation on every Play, offline through Mod Engine 2, plus Creative tools with an item spawner.",
                   "ingame": "Make a new character and pick your house's class (Hero = Gryffindor, Prisoner = Slytherin, "
-                            "Astrologer = Ravenclaw, Confessor = Hufflepuff), or keep playing your own characters. Creative "
-                            "tools: 0 opens the menu, both sticks open the controller wheel; Ctrl+U item spawner, 1 no damage, "
-                            "3 unlimited spells, F2 fly, F3 Torrent flies like a broom, 8 speed, 9 runes."},
+                            "Astrologer = Ravenclaw, Confessor = Hufflepuff), or keep playing your own characters. Creative is "
+                            "in the game on every Play: press both sticks for the Creative wheel (or 0 for its menu) on any "
+                            "character. Ctrl+U item spawner, 1 no damage, 3 unlimited spells, F2 fly, F3 Torrent flies like a "
+                            "broom, 8 speed, 9 runes."},
     "cyberpunk2077": {"label": "Frankenstein sandbox menu", "dest": "bin/x64/plugins/cyber_engine_tweaks/mods",
                       "settings": "bin/x64/plugins/cyber_engine_tweaks/mods/frankenstein_items/settings.json",
                       "bridge": "bin/x64/plugins/cyber_engine_tweaks/mods/frankenstein_items/commands.json",
@@ -3166,8 +3167,7 @@ class Api:
         cmd = eldenring.launch_cmd(m.target_path) if r and r.id == "eldenring" else None
         if cmd:  # Mod Engine 2 starts the copy's eldenring.exe offline with Frankenstein's mod loaded
             subprocess.Popen(cmd, cwd=os.path.dirname(cmd[0]))
-            if creative:
-                eldenring.start_tools_when_ready(m.target_path, saves.running)
+            eldenring.start_tools_when_ready(m.target_path, saves.running)  # Creative is in the game, every Play
         else:
             subprocess.Popen([exe] + args, cwd=os.path.dirname(exe))
         self._discord_playing(m, r.processes or [os.path.basename(exe)])

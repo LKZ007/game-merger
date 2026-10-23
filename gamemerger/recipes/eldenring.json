@@ -127,7 +127,7 @@
   "multiplayer": "Merged Elden Ring copies are offline only: Mod Engine 2 starts them without Easy Anti-Cheat, so FromSoftware's online play is off. Co-op with mods needs the community's Seamless Co-op mod on every player's PC (from Nexus, by hand).",
   "launch_args": [],
   "sandbox": {
-    "native": "Frankenstein's Creative tools (Elden Ring Practice Tool): press 0 for the menu, or press both sticks on a controller for the wheel. Item spawner (Ctrl+U), no damage (1), unlimited FP (3), fly (F2), Torrent flies like a broom (F3), speed (8), +100,000 runes (9).",
+    "native": "Creative is in the game on every Play (Elden Ring Practice Tool, set up by Frankenstein): press both sticks on a controller for the Creative wheel, or 0 for its menu. Item spawner (Ctrl+U), no damage (1), unlimited FP (3), fly (F2), Torrent flies like a broom (F3), speed (8), +100,000 runes (9).",
     "note": "Offline only, always. Creative works on your existing characters too: the merge starts with a copy of your Elden Ring saves.",
     "slots": []
   }

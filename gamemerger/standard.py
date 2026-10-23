@@ -51,7 +51,7 @@ HOSTS = {
         "menu": ("can't", "Elden Ring's title screen is packed in its encrypted archives; the merge's options stay in Frankenstein's launcher."),
         "loading": ("partial", "Frankenstein shows its own loading screen while the game starts; Elden Ring's own loading screens need a texture mod."),
         "profiles": ("native", "Elden Ring's own Load Game screen lists every character with its level and place."),
-        "creative": ("partial", "Creative tools load into any save (Creative on Play, or the controller wheel); there's no Creative entry in Elden Ring's own menu."),
+        "creative": ("partial", "Creative is in the game on every Play: the Creative wheel (both sticks) on any character. Elden Ring's own menus are locked in its archives, so there's no Creative entry there, and the mode isn't remembered per character."),
         "character": ("built", "Creative uses your existing characters (the merge starts with a copy of your saves); new characters pick a house at creation."),
         "spawner": ("built", "Item spawner with every item (Ctrl+U, or the controller wheel)."),
         "weapons": ("partial", "The wand and spells are Elden Ring's own staff and sorceries in house kits, keeping their Elden Ring names and models."),
