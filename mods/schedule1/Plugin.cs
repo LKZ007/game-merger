@@ -15,11 +15,11 @@ namespace Frankenstein
     {
         /// <summary>The Frankenstein release this mod came with (equal to gamemerger/version.py; a test checks).
         /// Shown on F6's title and in MelonLoader's log, where the app reads it back for the merge's card.</summary>
-        public const string Version = "3.43.1";
+        public const string Version = "3.44.0";
         float _next;
         public static bool MenuAllowed = true;
         /// <summary>A Frankenstein or game menu is on screen: labels over the world stay hidden so they never draw over it.</summary>
-        public static bool MenuUp => ItemMenu.IsOpen || CityMap.Open || Wheel.Open || Character.Open || MenuSkin.Active || Loading.Showing || PauseSave.Showing;
+        public static bool MenuUp => ItemMenu.IsOpen || CityMap.Open || Showroom.Open || Wheel.Open || Character.Open || MenuSkin.Active || Loading.Showing || PauseSave.Showing;
         public static System.Collections.Generic.List<string> Kit = new System.Collections.Generic.List<string>();
         public static string KitName = "";
         public static System.Collections.Generic.List<string> Shop = new System.Collections.Generic.List<string>();
@@ -113,6 +113,8 @@ namespace Frankenstein
             try { Carry.Update(); } catch (Exception e) { Melon<Plugin>.Logger.Warning("Carry: " + e.Message); }
             try { World.Update(); } catch (Exception e) { Melon<Plugin>.Logger.Warning("World: " + e.Message); }
             try { Expansion.Update(); } catch (Exception e) { Melon<Plugin>.Logger.Warning("Expansion: " + e.Message); }
+            try { Showroom.Update(); } catch (Exception e) { Melon<Plugin>.Logger.Warning("Vehicle spawner: " + e.Message); }
+            try { Drive.Update(); } catch (Exception e) { Melon<Plugin>.Logger.Warning("Drive: " + e.Message); }
             try { CityMap.Update(); } catch (Exception e) { Melon<Plugin>.Logger.Warning("City map: " + e.Message); }
             if (Time.unscaledTime < _next) return;
             _next = Time.unscaledTime + 1f;
@@ -156,6 +158,8 @@ namespace Frankenstein
             try { Crew.Draw(); } catch (Exception) { }
             try { Expansion.Draw(); } catch (Exception) { }
             try { CityMap.Draw(); } catch (Exception) { }
+            try { Drive.Draw(); } catch (Exception) { }
+            try { Showroom.Draw(); } catch (Exception) { }
             try { Gangs.Draw(); } catch (Exception e) { Melon<Plugin>.Logger.Warning("Gangs: " + e.Message); }
             try { Loading.Draw(); } catch (Exception e) { Melon<Plugin>.Logger.Warning("Loading screen: " + e.Message); Loading.Tips.Clear(); Loading.Extension = ""; }
         }

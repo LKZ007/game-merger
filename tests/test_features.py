@@ -294,7 +294,7 @@ class FeatureChecklist(unittest.TestCase):
                      "Point the stick, let go of View",              # the controller wheel
                      "AK-47 (Frankenstein)", "Uzi (Frankenstein)", "RPG (Frankenstein)", "Guns source: ",  # own guns
                      "Flying. Jump goes up", "Speed: ",                               # fly and speed in Creative
-                     "Get in the ", "EnterVehicle", "menu-debug.txt"):
+                     "to Enter Vehicle", "EnterVehicle", "menu-debug.txt"):
             self.assertIn(word.encode("utf-16-le"), dll, word)
         for f in ("MainMenu.cs", "World.cs", "Gangs.cs", "Carry.cs"):
             self.assertNotIn("GUI.Button(", read(ROOT, "mods", "schedule1", f), f + ": every button reachable with the controller (Pad.Button)")
@@ -473,8 +473,8 @@ class FeatureChecklist(unittest.TestCase):
 
     def test_335_own_weapon_looks_cars_and_car_entry(self):
         dll = open(os.path.join(PKG, "mods", "schedule1", "Frankenstein.dll"), "rb").read()
-        for word in ("Frankenstein model", "Frankenstein kit:", "Velocci 720", "Toro Furioso", "Notte GT", "Gelände G63",
-                     "vehicles-debug.txt", "Get in the ", "Car: in or out", "StartInteract"):
+        for word in ("Frankenstein model", "Frankenstein kit:", "Velocci P-One", "Toro Furioso", "Notte GT", "Gelände G63",
+                     "vehicles-debug.txt", "to Enter Vehicle", "Car: in or out", "StartInteract"):
             self.assertIn(word.encode("utf-16-le"), dll, word)
         self.assertNotIn("More Guns isn't loaded".encode("utf-16-le"), dll)
         looks = read(ROOT, "mods", "schedule1", "Looks.cs")
@@ -584,6 +584,28 @@ class FeatureChecklist(unittest.TestCase):
         self.assertIn("GoToIsland", read(ROOT, "mods", "schedule1", "ItemMenu.cs"))
         self.assertIn("GoToIsland", read(ROOT, "mods", "schedule1", "Wheel.cs"))
         self.assertIn("Plugin.MenuUp", read(ROOT, "mods", "schedule1", "Gangs.cs"))  # labels never over menus
+
+    def test_344_cars_like_the_sheet(self):
+        garage = read(ROOT, "mods", "schedule1", "Garage.cs")
+        for name, mph, z in (("Velocci P-One", "240", "2.4f"), ("Vitesse Centaur", "261", "2.3f"), ("Highland Sport", "150", "5f"),
+                             ("Spirit Royale", "155", "4.8f"), ("Stoccarda 9 Turbo", "205", "2.7f")):
+            self.assertRegex(garage, r'"%s".*%s, %s' % (name, mph, z))
+        self.assertEqual(garage.count('S("'), 14)  # levy's twelve and the two earlier extras
+        for brand in ("McLaren", "Lamborghini", "Ferrari", "Pagani", "Bugatti", "Porsche", "Rolls", "Audi", "Corvette", "Range Rover", "Mercedes"):
+            self.assertNotIn('"%s' % brand, garage)  # unbranded names only
+        body = read(ROOT, "mods", "schedule1", "Body.cs")
+        self.assertIn('["suv"]', body)
+        self.assertIn('["sports"]', body)
+        drive = read(ROOT, "mods", "schedule1", "Drive.cs")
+        for x in ("ZeroSixty", "Push(", "RenderTexture", "MPH", "drive-debug.txt"):
+            self.assertIn(x, drive)
+        show = read(ROOT, "mods", "schedule1", "Showroom.cs")
+        for x in ("Supercars", "Sports Cars", "SUVs", "Trucks", "Motorcycles", "Custom", "KeyCode.F3", "Vehicles.Picture"):
+            self.assertIn(x, show)
+        self.assertIn("to Enter Vehicle", read(ROOT, "mods", "schedule1", "Vehicles.cs"))
+        dll = open(os.path.join(PKG, "mods", "schedule1", "Frankenstein.dll"), "rb").read()
+        for word in ("Vehicle Spawner", "Velocci P-One", "MPH"):
+            self.assertIn(word.encode("utf-16-le"), dll, word)
 
 if __name__ == "__main__":
     unittest.main()

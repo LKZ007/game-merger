@@ -3,6 +3,19 @@
 Every release, newest first. Downloads are on the [releases page](https://github.com/LKZ007/game-merger/releases).
 The app was called Game Merger before 3.8.0.
 
+## v3.44.0 (2026-10-23)
+- **Cars like your sheet.** There are twelve lookalikes now, with made-up names and no real brands. Each one has the sheet's top speed and 0-60:
+  - Supercars: Velocci P-One (240 mph, 2.4 s), Toro Furioso (217, 2.9), Rosso Novanta (211, 2.5), Ventara Aria (230, 3.0), Toro Uragano (202, 3.2) and Vitesse Centaur (261, 2.3).
+  - Sports Cars: Stoccarda 9 Turbo (205, 2.7), Ingolf R-Ten (205, 3.1) and Kentucky Eight (194, 2.9).
+  - SUVs: Gelände G63 (137, 4.5), Spirit Royale (155, 4.8) and Highland Sport (150, 5.0).
+  - Two new body shapes go with them: a luxury SUV and a rear-engined sports car. The Notte GT and the Desert G are in Custom.
+- **They drive to those numbers.** The game's engine does the driving. When it pulls slower than the car should, Frankenstein makes up the difference, and it never lets a car go past its own top speed. drive-debug.txt says what it measured.
+- **The Vehicle Spawner from your sheet** (F3, the controller wheel, or the button in F6's Vehicles tab). Categories run down the left: Supercars, Sports Cars, SUVs, Trucks, Motorcycles and Custom. There's a grid of colour thumbnails, the car's top speed and 0-60, and a Spawn button. Schedule I has no motorbikes to build on, and Motorcycles says so.
+- **Driving HUD:** a speedometer (MPH) bottom right and a round minimap that turns with the car bottom left, on any car.
+- **The car prompt now reads like the sheet:** "X / E to Enter Vehicle".
+- Honest limits: the bodies are still Frankenstein's own code-built shapes until lookalike models can be fetched (see the card about the model sites), and they won't be photoreal in Schedule I's style. A walk-in garage showroom isn't built yet: the spawner brings any car to you instead.
+- Not tested in game yet.
+
 ## v3.43.1 (2026-10-23)
 - **Getting to the city island:** a "Go to the city island" button at the top of F6, "City island" on the controller wheel, and a "Go to the island" button on the F4 map.
 - **Fixed:** gang names and HQ labels in the world no longer draw over F6, the map or other menus.

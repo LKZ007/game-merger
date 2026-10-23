@@ -28,6 +28,11 @@ namespace Frankenstein
             ["wedge"] = new Shape { Tail = 0.86f, Rear = 0.84f, Cabin = 0.66f, Front = 0.55f, Nose = 0.32f, Roof = 1.1f, C0 = 0.08f, C1 = 0.3f, C2 = 0.42f, C3 = 1.05f, Width = 2.04f, Taper = 0.16f, CabinWidth = 0.6f },
             // long hood, cabin set back, a fastback
             ["gt"] = new Shape { Tail = 0.8f, Rear = 0.86f, Cabin = 0.8f, Front = 0.72f, Nose = 0.56f, Roof = 1.3f, C0 = -0.08f, C1 = 0.3f, C2 = 0.5f, C3 = 0.78f, FrontHang = 1.05f, RearHang = 1f, Width = 1.96f },
+            // a big luxury SUV: tall and long, a gently raked windshield, a rounded roof
+            ["suv"] = new Shape { Clear = 0.3f, Tail = 1.04f, Rear = 1.06f, Cabin = 1.04f, Front = 1f, Nose = 0.9f, Roof = 1.8f, Crown = 0.04f,
+                                  C0 = -0.26f, C1 = -0.1f, C2 = 0.62f, C3 = 0.86f, FrontHang = 0.9f, RearHang = 0.86f, Width = 2f, Taper = 0.1f, CabinWidth = 0.84f },
+            // rear-engined sports car: round nose, the roof sloping all the way down to the tail
+            ["sports"] = new Shape { Tail = 0.78f, Rear = 0.84f, Cabin = 0.8f, Front = 0.62f, Nose = 0.48f, Roof = 1.27f, C0 = -0.12f, C1 = 0.36f, C2 = 0.5f, C3 = 0.86f, FrontHang = 0.9f, RearHang = 1.05f, Width = 1.92f, Taper = 0.2f, CabinWidth = 0.68f },
             // the box: upright everything, high off the ground, flat roof, near-vertical windshield
             ["gwagon"] = new Shape { Clear = 0.36f, Tail = 1.12f, Rear = 1.14f, Cabin = 1.14f, Front = 1.12f, Nose = 1.06f, Roof = 1.96f, Crown = 0.01f,
                                      C0 = -0.32f, C1 = -0.3f, C2 = 0.72f, C3 = 0.78f, FrontHang = 0.82f, RearHang = 0.86f, Width = 1.96f, Taper = 0.03f, CabinWidth = 0.9f, Boxy = 1 },

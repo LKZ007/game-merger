@@ -17,28 +17,53 @@ namespace Frankenstein
     {
         internal class Style
         {
-            public string Key, Name, Base, Kind, Kit;
+            public string Key, Name, Base, Kind, Kit, Category = "Custom";
             public Color Paint, Trim, Lights, Glow;
             public S1API.Vehicles.VehicleColor Fallback;
-            public float Speed = 1f, Wing = 1f;
+            public float Wing = 1f, Mph = 120f, ZeroSixty = 6f;  // top speed and 0-60, as on levy's sheet (Drive keeps them)
         }
 
+        static Style S(string key, string name, string bas, string kit, string cat, Color paint, S1API.Vehicles.VehicleColor fb, float mph, float z60, float glowA = 0)
+        {
+            bool box = kit == "gwagon" || kit == "suv";
+            return new Style
+            {
+                Key = key, Name = name, Base = bas, Kit = kit, Kind = box ? "gwagon" : "super", Category = cat, Paint = paint, Fallback = fb, Mph = mph, ZeroSixty = z60,
+                Trim = box ? new Color(0.75f, 0.76f, 0.8f) : new Color(0.05f, 0.05f, 0.06f), Lights = new Color(0.88f, 0.93f, 1f),
+                Glow = glowA > 0 ? new Color(paint.r, paint.g, paint.b, glowA) : new Color(0, 0, 0, 0),
+            };
+        }
+
+        /// <summary>levy's twelve (unbranded lookalikes, made-up names) and the two earlier extras.</summary>
         public static readonly Style[] Styles =
         {
-            new Style { Key = "velocci", Name = "Velocci 720", Base = "cheetah", Kind = "super", Kit = "super", Paint = new Color(1f, 0.42f, 0.04f),
-                        Trim = new Color(0.06f, 0.06f, 0.07f), Lights = new Color(0.85f, 0.92f, 1f), Glow = new Color(1f, 0.45f, 0.1f),
-                        Fallback = S1API.Vehicles.VehicleColor.Orange, Speed = 1.45f },
-            new Style { Key = "toro", Name = "Toro Furioso", Base = "cheetah", Kind = "super", Kit = "wedge", Paint = new Color(0.98f, 0.78f, 0.02f),
-                        Trim = new Color(0.05f, 0.05f, 0.05f), Lights = new Color(1f, 0.85f, 0.55f), Fallback = S1API.Vehicles.VehicleColor.Yellow,
-                        Speed = 1.55f, Wing = 1.35f },
-            new Style { Key = "notte", Name = "Notte GT", Base = "hounddog", Kind = "super", Kit = "gt", Paint = new Color(0.32f, 0.1f, 0.56f),
-                        Trim = new Color(0.07f, 0.06f, 0.09f), Lights = new Color(0.8f, 0.7f, 1f), Glow = new Color(0.6f, 0.3f, 1f),
-                        Fallback = S1API.Vehicles.VehicleColor.Purple, Speed = 1.4f, Wing = 0.8f },
-            new Style { Key = "gelande", Name = "Gelände G63", Base = "bruiser", Kind = "gwagon", Kit = "gwagon", Paint = new Color(0.04f, 0.04f, 0.05f),
-                        Trim = new Color(0.75f, 0.76f, 0.8f), Lights = new Color(0.9f, 0.95f, 1f), Fallback = S1API.Vehicles.VehicleColor.Black, Speed = 1.25f },
-            new Style { Key = "gelande_desert", Name = "Gelände G Desert", Base = "bruiser", Kind = "gwagon", Kit = "gwagon", Paint = new Color(0.7f, 0.6f, 0.43f),
-                        Trim = new Color(0.08f, 0.08f, 0.08f), Lights = new Color(1f, 0.9f, 0.7f), Fallback = S1API.Vehicles.VehicleColor.LightGrey, Speed = 1.2f },
+            S("velocci", "Velocci P-One", "cheetah", "super", "Supercars", new Color(1f, 0.42f, 0.04f), S1API.Vehicles.VehicleColor.Orange, 240, 2.4f, 1),
+            S("toro", "Toro Furioso", "cheetah", "wedge", "Supercars", new Color(0.38f, 0.82f, 0.08f), S1API.Vehicles.VehicleColor.LightGreen, 217, 2.9f),
+            S("rosso", "Rosso Novanta", "cheetah", "super", "Supercars", new Color(0.86f, 0.05f, 0.05f), S1API.Vehicles.VehicleColor.Red, 211, 2.5f),
+            S("ventara", "Ventara Aria", "hounddog", "gt", "Supercars", new Color(0.5f, 0.12f, 0.78f), S1API.Vehicles.VehicleColor.Purple, 230, 3f, 1),
+            S("uragano", "Toro Uragano", "cheetah", "wedge", "Supercars", new Color(0.08f, 0.32f, 0.92f), S1API.Vehicles.VehicleColor.DarkBlue, 202, 3.2f),
+            S("vitesse", "Vitesse Centaur", "hounddog", "gt", "Supercars", new Color(0.06f, 0.14f, 0.38f), S1API.Vehicles.VehicleColor.Navy, 261, 2.3f, 1),
+            S("stoccarda", "Stoccarda 9 Turbo", "hounddog", "sports", "Sports Cars", new Color(0.72f, 0.73f, 0.75f), S1API.Vehicles.VehicleColor.LightGrey, 205, 2.7f),
+            S("ingolf", "Ingolf R-Ten", "cheetah", "super", "Sports Cars", new Color(0.92f, 0.92f, 0.93f), S1API.Vehicles.VehicleColor.White, 205, 3.1f),
+            S("kentucky", "Kentucky Eight", "cheetah", "super", "Sports Cars", new Color(0.98f, 0.82f, 0.05f), S1API.Vehicles.VehicleColor.Yellow, 194, 2.9f),
+            S("gelande", "Gelände G63", "bruiser", "gwagon", "SUVs", new Color(0.04f, 0.04f, 0.05f), S1API.Vehicles.VehicleColor.Black, 137, 4.5f),
+            S("royale", "Spirit Royale", "bruiser", "suv", "SUVs", new Color(0.03f, 0.03f, 0.04f), S1API.Vehicles.VehicleColor.Black, 155, 4.8f),
+            S("highland", "Highland Sport", "bruiser", "suv", "SUVs", new Color(0.9f, 0.9f, 0.9f), S1API.Vehicles.VehicleColor.White, 150, 5f),
+            S("notte", "Notte GT", "hounddog", "gt", "Custom", new Color(0.32f, 0.1f, 0.56f), S1API.Vehicles.VehicleColor.Purple, 190, 3.6f, 1),
+            S("gelande_desert", "Gelände G Desert", "bruiser", "gwagon", "Custom", new Color(0.7f, 0.6f, 0.43f), S1API.Vehicles.VehicleColor.LightGrey, 130, 5.2f),
         };
+
+        /// <summary>The game counts top speed in km/h; the car must be allowed at least this one's own.</summary>
+        static void Speed(S1API.Vehicles.LandVehicle v, Style s)
+        {
+            try
+            {
+                float was = v.TopSpeed;
+                v.TopSpeed = Mathf.Max(was, s.Mph * 1.609f);
+                Debug(new List<string> { s.Name + ": top speed " + was.ToString("0") + " -> " + v.TopSpeed.ToString("0") + " (" + s.Mph + " mph, 0-60 in " + s.ZeroSixty + " s)" });
+            }
+            catch (Exception) { }
+        }
 
         const string Marker = "Frankenstein kit:";
         static readonly Dictionary<string, string> _cars = new Dictionary<string, string>();  // car id -> style
@@ -63,7 +88,7 @@ namespace Frankenstein
         public static void Restyle(S1API.Vehicles.LandVehicle v, Style s)
         {
             try { v.Color = s.Fallback; } catch (Exception e) { Melon<Plugin>.Logger.Warning("Garage: paint: " + e.Message); }
-            try { v.TopSpeed = v.TopSpeed * s.Speed; } catch (Exception) { }
+            Speed(v, s);
             _pending.Add(new KeyValuePair<object, Style>(v, s));
             _next = 0;
         }
@@ -121,7 +146,7 @@ namespace Frankenstein
                 var car = Rt.Get(v, "S1LandVehicle") as Component;
                 var s = Styles.FirstOrDefault(x => x.Key == key);
                 if (car == null || s == null || StyleOf(car) != null) continue;
-                try { v.TopSpeed = v.TopSpeed * s.Speed; } catch (Exception) { }
+                Speed(v, s);
                 Kit(car, s, true);
             }
         }
@@ -245,7 +270,7 @@ namespace Frankenstein
             var black = new Color(0.04f, 0.04f, 0.05f);
             Func<char, float, float, float, float, float, float, Color, float, bool, Looks.Part> P = (shape, x, y, z, sx, sy, sz, c, shine, glow) =>
                 new Looks.Part { Shape = shape, Pos = new Vector3(x, y, z), Size = new Vector3(sx, sy, sz), Color = c, Shine = shine, Glow = glow };
-            if (s.Kit != "gwagon")
+            if (s.Kind != "gwagon")
             {
                 float yN = b.BeltAtZ(nose - 0.2f * k) - 0.005f, yT = b.BeltAtZ(tail) - 0.1f * k;
                 foreach (var side in new[] { -1f, 1f })
@@ -288,10 +313,13 @@ namespace Frankenstein
                     parts.Add(P('c', 0, belt - (0.1f + i * 0.07f) * k, nose + 0.012f, wN * 0.8f, 0.025f * k, 0.03f * k, s.Trim, 1f, false));  // grille bars
                 parts.Add(P('c', 0, f.Ground + 0.42f * k, nose + 0.06f, wN * 1.9f, 0.14f * k, 0.12f * k, black, 0.4f, false));                   // bumper
                 parts.Add(P('c', 0, f.Ground + 0.42f * k, tail - 0.05f, wT * 1.9f, 0.14f * k, 0.1f * k, black, 0.4f, false));
-                parts.Add(P('z', 0, belt + 0.05f * k, tail - 0.16f * k, 0.74f * k, 0.74f * k, 0.24f * k, black, 0.2f, false));                 // spare wheel
-                parts.Add(P('z', 0, belt + 0.05f * k, tail - 0.285f * k, 0.44f * k, 0.44f * k, 0.02f * k, s.Trim, 0.9f, false));
-                parts.Add(P('c', 0, roof + 0.07f * k, f.Z(0.66f), wN * 1.5f, 0.07f * k, 0.12f * k, black, 0.5f, false));                        // roof light bar
-                parts.Add(P('c', 0, roof + 0.07f * k, f.Z(0.66f) + 0.065f * k, wN * 1.4f, 0.04f * k, 0.01f, s.Lights, 1f, true));
+                if (s.Kit == "gwagon")  // the off-roader's own: the luxury SUVs have neither
+                {
+                    parts.Add(P('z', 0, belt + 0.05f * k, tail - 0.16f * k, 0.74f * k, 0.74f * k, 0.24f * k, black, 0.2f, false));                 // spare wheel
+                    parts.Add(P('z', 0, belt + 0.05f * k, tail - 0.285f * k, 0.44f * k, 0.44f * k, 0.02f * k, s.Trim, 0.9f, false));
+                    parts.Add(P('c', 0, roof + 0.07f * k, f.Z(0.66f), wN * 1.5f, 0.07f * k, 0.12f * k, black, 0.5f, false));                        // roof light bar
+                    parts.Add(P('c', 0, roof + 0.07f * k, f.Z(0.66f) + 0.065f * k, wN * 1.4f, 0.04f * k, 0.01f, s.Lights, 1f, true));
+                }
             }
             return parts;
         }
@@ -319,6 +347,6 @@ namespace Frankenstein
         }
 
         public static Vehicles.Car Car(Style s) =>
-            new Vehicles.Car { Code = s.Base, Name = s.Name, Kind = s.Kind, Color = s.Paint, Style = s };
+            new Vehicles.Car { Code = s.Base, Name = s.Name, Kind = s.Kit == "gwagon" ? "gwagon" : s.Kit == "suv" ? "suv" : s.Kit == "gt" || s.Kit == "sports" ? "sports" : "super", Color = s.Paint, Style = s };
     }
 }

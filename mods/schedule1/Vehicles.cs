@@ -126,6 +126,19 @@ namespace Frankenstein
             return list;
         }
 
+        /// <summary>The car you're in (or next to): the nearest within reach.</summary>
+        public static Component Nearest(Vector3 me, float reach)
+        {
+            Component best = null;
+            float bestGap = reach;
+            foreach (var c in Cars())
+            {
+                float g = Gap(c, me);
+                if (g < bestGap) { bestGap = g; best = c; }
+            }
+            return best;
+        }
+
         /// <summary>How far you are from the car's side (not its middle: a car is long).</summary>
         static float Gap(Component car, Vector3 me)
         {
@@ -288,11 +301,11 @@ namespace Frankenstein
         public static void Draw()
         {
             var me = Player.Local;
-            if (me == null || ItemMenu.IsOpen || Wheel.Open) return;
+            if (me == null || Plugin.MenuUp) return;
             bool inCar;
             try { inCar = me.IsInVehicle; } catch (Exception) { return; }
             if (!inCar && _near == null) return;
-            string text = inCar ? "Get out" : "Get in the " + _nearName;
+            string text = inCar ? "to Exit Vehicle" : "to Enter Vehicle  ·  " + _nearName;
             if (_promptStyle == null)
             {
                 _promptStyle = new GUIStyle(GUI.skin.label) { fontSize = 18, wordWrap = false, clipping = TextClipping.Overflow };

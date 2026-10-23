@@ -395,6 +395,7 @@ namespace Frankenstein
             var selName = _sel < _shown.Count ? _shown[_sel].Name + "  (" + _shown[_sel].Category + ")" : "";
             GUI.Label(new Rect(x + 16, y + H - 28, W - 32, 24),
                 Time.unscaledTime < _toastUntil ? _toast : _shown.Count + " shown  ·  " + selName + "  ·  F6, Esc or B to close");
+            if (_cats.Count > _cat && _cats[_cat] == "Vehicles" && GUI.Button(new Rect(x + W - 236, y + H - 30, 220, 26), "Vehicle Spawner (F3)")) { Close(); Showroom.Toggle(); }
         }
     }
 }
