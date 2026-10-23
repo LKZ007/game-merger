@@ -641,5 +641,14 @@ class FeatureChecklist(unittest.TestCase):
         self.assertIn('call("delete_all_merges", force)', app)
         self.assertIn("def why_not_delete_anyway", read(PKG, "installer.py"))
 
+    def test_348_gta5_empire_story_and_creative(self):
+        src = read(PKG, "mods", "gta5", "FrankensteinEmpire.3.cs")
+        for bit in ('"Street Rat"', '"Kingpin"', "RankXp", "QuestNames", "empire-creative.txt", "CreativeMenu", "creativeHeat",
+                    "switch.json", "SwitchMode", "Unlocked(\"turf\")", "BatchMs"):
+            self.assertIn(bit, src)
+        import json as _j
+        theme = [t for t in _j.loads(read(PKG, "recipes", "gta5.json"))["themes"] if t["id"] == "empire"][0]
+        self.assertIn("Story and Creative modes", [s["name"] for s in theme["slots"]])
+
 if __name__ == "__main__":
     unittest.main()

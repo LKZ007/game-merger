@@ -93,6 +93,11 @@
           "builtin": "Frankenstein's own GTA V script: four properties to buy (Grapeseed farm, Sandy Shores lab, Strawberry grow house, Docks lab). Buy supplies, start a batch (weed, meth or coke) and collect it when it's ready, or hire a worker who runs the lab while you're away. F5 (or hold D-pad left) opens the empire menu with waypoints."
         },
         {
+          "name": "Story and Creative modes",
+          "search": "",
+          "builtin": "Story plays like Schedule I: you start with a small stash house in Strawberry and a few supplies, earn XP from batches, sales and turf wars, and climb ranks from Street Rat to Kingpin that unlock the bigger properties, meth, workers, dealers, turf wars and coke, with an objective on screen. Creative is for testing: everything owned and unlocked, unlimited money and supplies, 30-second batches, heat off unless you turn it on, and test tools in the F5 menu. Each mode keeps its own saves and empire; switch in game from the F5 menu (works on a controller) or Shift+F10."
+        },
+        {
           "name": "Street dealing and dealers",
           "search": "",
           "builtin": "Walk up to someone and press E (D-pad right) to offer product; the price is better on your own turf, and some buyers are undercover cops. Dealers you hire sell your stock every in-game hour on the turf you hold."

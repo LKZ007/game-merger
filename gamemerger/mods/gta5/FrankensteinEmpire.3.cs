@@ -11,6 +11,14 @@
 // Heat: selling, cooking and fighting draw the police; a lot of heat brings raids on your labs.
 // F5: the empire menu (on a controller, hold D-pad left for a second; E / D-pad right at a lab). Everything it does is logged to
 // scripts/Frankenstein/empire-debug.txt, and the empire is saved to scripts/Frankenstein/empire.txt.
+//
+// Two modes, each with its own empire (Creative's is saved to empire-creative.txt):
+// Story plays like Schedule I: you start with one small stash house and a few supplies, earn XP from every batch,
+// sale and turf war, and climb ranks (Street Rat to Kingpin) that unlock the bigger properties, meth, workers,
+// dealers, turf wars and coke, with a step-by-step objective on screen.
+// Creative is for testing: everything unlocked and owned, unlimited money and supplies, 30-second batches, no heat
+// unless you turn it on, and test tools in the F5 menu (product, heat, raids, turf wars, ranks, teleports).
+// The mode is the save's own (Frankenstein's Creative switch); the F5 menu can switch it too, so a controller can.
 using System;
 using System.Collections.Generic;
 using System.Drawing;
@@ -33,7 +41,7 @@ public class FrankensteinEmpire : Script
     {
         public string Id, Name, Kind;   // kind: farm (weed), lab (meth, coke), stash
         public Vector3 At;
-        public int Price;
+        public int Price, Rank;         // Story: the rank that puts it up for sale
         public bool Owned, Worker;
         public int Supplies;            // one unit makes one batch
         public string Batch = "";       // what's growing or cooking
@@ -58,10 +66,10 @@ public class FrankensteinEmpire : Script
 
     readonly List<Lab> labs = new List<Lab>
     {
-        new Lab { Id = "grapeseed", Name = "Grapeseed farm", Kind = "farm", At = new Vector3(2434f, 4969f, 46.8f), Price = 45000 },
-        new Lab { Id = "sandy", Name = "Sandy Shores trailer lab", Kind = "lab", At = new Vector3(1972f, 3817f, 33.4f), Price = 60000 },
+        new Lab { Id = "grapeseed", Name = "Grapeseed farm", Kind = "farm", At = new Vector3(2434f, 4969f, 46.8f), Price = 45000, Rank = 1 },
+        new Lab { Id = "sandy", Name = "Sandy Shores trailer lab", Kind = "lab", At = new Vector3(1972f, 3817f, 33.4f), Price = 60000, Rank = 2 },
         new Lab { Id = "strawberry", Name = "Strawberry stash house", Kind = "farm", At = new Vector3(-14f, -1440f, 31.1f), Price = 30000 },
-        new Lab { Id = "docks", Name = "Elysian Island warehouse", Kind = "lab", At = new Vector3(155f, -3080f, 5.9f), Price = 90000 },
+        new Lab { Id = "docks", Name = "Elysian Island warehouse", Kind = "lab", At = new Vector3(155f, -3080f, 5.9f), Price = 90000, Rank = 5 },
     };
 
     readonly List<Gang> gangs = new List<Gang>
@@ -75,13 +83,22 @@ public class FrankensteinEmpire : Script
         new Gang { Id = "kkangpae", Name = "Kkangpae", Model = "g_m_y_korean_01", Zones = new[] { "KOREAT" }, Color = Color.FromArgb(220, 60, 60), Gun = WeaponHash.SMG },
     };
 
+    // Story's ranks (Schedule I's ladder) and what each one unlocks
+    static readonly string[] Ranks = { "Street Rat", "Hoodlum", "Peddler", "Hustler", "Bagman", "Enforcer", "Shot Caller", "Block Boss", "Underlord", "Kingpin" };
+    static readonly int[] RankXp = { 0, 300, 800, 1600, 3000, 5000, 8000, 12000, 17000, 25000 };
+    static readonly Dictionary<string, int> Needs = new Dictionary<string, int>
+    {
+        { "weed", 0 }, { "meth", 2 }, { "worker", 3 }, { "dealer", 4 }, { "turf", 4 }, { "truce", 4 }, { "coke", 5 },
+    };
+
     // ---------- state ----------
 
     readonly Dictionary<string, int> stock = new Dictionary<string, int> { { "weed", 0 }, { "meth", 0 }, { "coke", 0 } };
     readonly HashSet<string> turf = new HashSet<string>();          // zones you hold
     readonly Dictionary<string, int> dealers = new Dictionary<string, int>();  // zone -> dealers working it
     int heat, earned, lastHour = -1;
-    bool on, loaded;
+    bool on, loaded, creative, creativeHeat, fresh;
+    int xp, quest, madeCount, packedCount, soldCount, warsWon, nextTopUp, switchConfirm;
     readonly HashSet<int> served = new HashSet<int>();
     readonly List<string> log = new List<string>();
 
@@ -109,10 +126,12 @@ public class FrankensteinEmpire : Script
         try
         {
             var p = Path.Combine(Dir, "settings.json");
-            on = File.Exists(p) && System.Text.RegularExpressions.Regex.IsMatch(File.ReadAllText(p), "\"empire\"\\s*:\\s*true");
+            var text = File.Exists(p) ? File.ReadAllText(p) : "";
+            on = System.Text.RegularExpressions.Regex.IsMatch(text, "\"empire\"\\s*:\\s*true");
+            creative = System.Text.RegularExpressions.Regex.IsMatch(text, "\"creative\"\\s*:\\s*true");
         }
         catch (Exception) { on = false; }
-        Say(on ? "empire on (Schedule I x Hood Warfare merge)" : "empire off (not this merge's Extension)");
+        Say(on ? "empire on (Schedule I x Hood Warfare merge), " + (creative ? "Creative" : "Story") : "empire off (not this merge's Extension)");
     }
 
     // ---------- every frame ----------
@@ -122,11 +141,13 @@ public class FrankensteinEmpire : Script
         if (!on) return;
         var me = Game.Player.Character;
         if (me == null || !me.Exists() || Game.IsLoading) return;
-        if (!loaded) { Load(); loaded = true; Blips(); Say("loaded: " + labs.Count(l => l.Owned) + " labs, " + turf.Count + " turf, $" + earned + " earned"); }
+        if (!loaded) { Load(); loaded = true; Begin(); Blips(); Say("loaded: " + labs.Count(l => l.Owned) + " labs, " + turf.Count + " turf, $" + earned + " earned, " + RankName + " (" + xp + " XP)"); }
         try
         {
             Production();
             Hourly();
+            Creative();
+            Quests();
             Heat();
             War(me);
             Interact(me);
@@ -154,11 +175,13 @@ public class FrankensteinEmpire : Script
     {
         if (l.Supplies <= 0) { Notification.Show("~r~No supplies at " + l.Name + "."); return; }
         if (l.Batch.Length > 0) { Notification.Show(l.Name + " is busy."); return; }
-        l.Supplies--;
+        if (!Unlocked(what)) { Notification.Show(Title(what) + " unlocks at " + Ranks[Needs[what]] + "."); return; }
+        if (!creative) l.Supplies--;
         l.Batch = what;
-        l.ReadyAt = Game.GameTime + BatchMinutes[what] * 60000;
-        heat = Math.Min(100, heat + (what == "weed" ? 2 : 5));
-        if (!quiet) Notification.Show("~g~" + Title(what) + "~s~ started at " + l.Name + ": ready in " + BatchMinutes[what] + " min.");
+        l.ReadyAt = Game.GameTime + BatchMs(what);
+        AddHeat(what == "weed" ? 2 : 5);
+        madeCount++;
+        if (!quiet) Notification.Show("~g~" + Title(what) + "~s~ started at " + l.Name + ": ready in " + Mins(BatchMs(what)) + ".");
         Say(l.Name + ": started " + what + (quiet ? " (worker)" : ""));
         Save();
     }
@@ -169,7 +192,9 @@ public class FrankensteinEmpire : Script
         if (Game.GameTime < l.ReadyAt) { Notification.Show(Title(l.Batch) + " ready in " + Mins(l.ReadyAt - Game.GameTime) + "."); return; }
         int n = BatchSize[l.Batch];
         stock[l.Batch] += n;
+        packedCount++;
         Notification.Show("~g~+" + n + " " + l.Batch + "~s~ packaged at " + l.Name + (quiet ? " by your worker" : "") + ".");
+        AddXp(l.Batch == "weed" ? 20 : l.Batch == "meth" ? 40 : 60, "batch");
         Say(l.Name + ": +" + n + " " + l.Batch);
         l.Batch = "";
         Save();
@@ -188,7 +213,7 @@ public class FrankensteinEmpire : Script
         var p = have[rnd.Next(have.Count)];
         int price = (int)(StreetPrice[p] * (mine ? 1.3 : 1.0) * (0.8 + rnd.NextDouble() * 0.4));
         bool cop = Function.Call<int>(Hash.GET_PED_TYPE, who) == 6 || Function.Call<int>(Hash.GET_PED_TYPE, who) == 27;
-        if (cop) { Game.Player.WantedLevel = Math.Max(Game.Player.WantedLevel, 2); Notification.Show("~r~That was an undercover cop!"); heat = Math.Min(100, heat + 15); return; }
+        if (cop && (!creative || creativeHeat)) { Game.Player.WantedLevel = Math.Max(Game.Player.WantedLevel, 2); Notification.Show("~r~That was an undercover cop!"); AddHeat(15); return; }
         if (owner != null && !mine && owner.Rep < 0 && rnd.Next(3) == 0)
         {
             Notification.Show("~r~" + owner.Name + " don't like you dealing on their turf.");
@@ -200,8 +225,10 @@ public class FrankensteinEmpire : Script
         stock[p]--;
         Game.Player.Money += price;
         earned += price;
-        heat = Math.Min(100, heat + 3);
+        soldCount++;
+        AddHeat(3);
         Notification.Show("Sold 1 " + p + " for ~g~$" + price + (mine ? "~s~ (your turf)" : ""));
+        AddXp(Math.Max(5, price / 10), "sale");
         if (heat > 40 && rnd.Next(100) < heat / 4 && World.GetNearbyPeds(me, 40f).Any(x => Function.Call<int>(Hash.GET_PED_TYPE, x) == 6))
         {
             Game.Player.WantedLevel = Math.Max(Game.Player.WantedLevel, 1);
@@ -243,6 +270,7 @@ public class FrankensteinEmpire : Script
     /// <summary>A lot of heat (or a big empire) brings trouble: police raids on your labs, gangs taking turf back.</summary>
     void Heat()
     {
+        if (creative && !creativeHeat) return;
         if (Game.GameTime < nextRaid) return;
         nextRaid = Game.GameTime + 120000;
         var rnd = new Random(Game.GameTime);
@@ -302,7 +330,7 @@ public class FrankensteinEmpire : Script
         warGang = g;
         warEnds = Game.GameTime + WarMinutes * 60000;
         g.Rep = Math.Min(g.Rep, -20);
-        heat = Math.Min(100, heat + 15);
+        AddHeat(15);
         Screen.ShowSubtitle((defend ? "Defend " : "Turf war: take ") + Game.GetLocalizedString(zone) + " from " + g.Name + ". Take out their crew.", 6000);
         Say("turf war in " + zone + " against " + g.Name + " (" + warPeds.Count + " of them)");
     }
@@ -318,7 +346,9 @@ public class FrankensteinEmpire : Script
             turf.Add(warZone);
             warGang.Rep -= 10;
             Game.Player.Money += 2500;
+            warsWon++;
             Notification.Show("~g~" + Game.GetLocalizedString(warZone) + " is yours.~s~ It pays every hour, and your dealers can work it.");
+            AddXp(250, "turf war");
             Say("took " + warZone);
             EndWar();
         }
@@ -374,6 +404,12 @@ public class FrankensteinEmpire : Script
         string zone = Zone(me.Position);
         var g = GangOf(zone);
         if (g == null || turf.Contains(zone) || warZone.Length > 0) { holdStart = -1; return; }
+        if (!Unlocked("turf"))
+        {
+            if (Game.GameTime > nextHint) { nextHint = Game.GameTime + 120000; Notification.Show(g.Name + " run " + Game.GetLocalizedString(zone) + ". Turf wars unlock at " + Ranks[Needs["turf"]] + "."); }
+            holdStart = -1;
+            return;
+        }
         if (Game.GameTime > nextHint) { nextHint = Game.GameTime + 60000; Notification.Show(g.Name + " run " + Game.GetLocalizedString(zone) + ". Hold ~INPUT_CONTEXT~ to start a turf war."); }
         if (Game.IsControlPressed(GTA.Control.Context))
         {
@@ -390,6 +426,7 @@ public class FrankensteinEmpire : Script
         var list = new List<KeyValuePair<string, Action>>();
         if (!l.Owned)
         {
+            if (!creative && Rank < l.Rank) { list.Add(Item("For sale at " + Ranks[l.Rank] + " (you're " + RankName + ")", () => { })); Open(l.Name, list); return; }
             list.Add(Item("Buy for $" + l.Price.ToString("N0"), () =>
             {
                 if (Game.Player.Money < l.Price) { Notification.Show("~r~Not enough money."); return; }
@@ -400,19 +437,20 @@ public class FrankensteinEmpire : Script
         else
         {
             if (l.Batch.Length > 0) list.Add(Item(Game.GameTime >= l.ReadyAt ? "Package the " + l.Batch : Title(l.Batch) + ": " + Mins(l.ReadyAt - Game.GameTime) + " left", () => Collect(l)));
-            else if (l.Kind == "farm") list.Add(Item("Grow weed (1 supply, " + BatchMinutes["weed"] + " min)", () => Start(l, "weed")));
+            else if (l.Kind == "farm") list.Add(Item("Grow weed (1 supply, " + Mins(BatchMs("weed")) + ")", () => Start(l, "weed")));
             else
             {
-                list.Add(Item("Cook meth (1 supply, " + BatchMinutes["meth"] + " min)", () => Start(l, "meth")));
-                list.Add(Item("Cook coke (1 supply, " + BatchMinutes["coke"] + " min)", () => Start(l, "coke")));
+                list.Add(Item(Unlocked("meth") ? "Cook meth (1 supply, " + Mins(BatchMs("meth")) + ")" : "Meth: unlocks at " + Ranks[Needs["meth"]], () => Start(l, "meth")));
+                list.Add(Item(Unlocked("coke") ? "Cook coke (1 supply, " + Mins(BatchMs("coke")) + ")" : "Coke: unlocks at " + Ranks[Needs["coke"]], () => Start(l, "coke")));
             }
             list.Add(Item("Buy 5 supplies ($" + (5 * SupplyPrice) + ")  ·  has " + l.Supplies, () =>
             {
                 if (Game.Player.Money < 5 * SupplyPrice) { Notification.Show("~r~Not enough money."); return; }
                 Game.Player.Money -= 5 * SupplyPrice; l.Supplies += 5; Save();
             }));
-            if (!l.Worker) list.Add(Item("Hire a worker ($" + WorkerPrice + ", $100 an hour)", () =>
+            if (!l.Worker) list.Add(Item(Unlocked("worker") ? "Hire a worker ($" + WorkerPrice + ", $100 an hour)" : "Workers: unlock at " + Ranks[Needs["worker"]], () =>
             {
+                if (!Unlocked("worker")) return;
                 if (Game.Player.Money < WorkerPrice) { Notification.Show("~r~Not enough money."); return; }
                 Game.Player.Money -= WorkerPrice; l.Worker = true; Save();
                 Notification.Show("Your worker keeps " + l.Name + " running while there are supplies.");
@@ -425,14 +463,16 @@ public class FrankensteinEmpire : Script
     {
         var me = Game.Player.Character;
         var list = new List<KeyValuePair<string, Action>>();
+        if (creative) list.Add(Item("Creative test tools...", CreativeMenu));
+        else list.Add(Item("Objective: " + QuestText(), () => QuestWaypoint()));
         foreach (var l in labs)
         {
             var lab = l;
-            list.Add(Item((l.Owned ? "Your " : "For sale: ") + l.Name + (l.Owned ? "  ·  " + (l.Batch.Length > 0 ? l.Batch + " " + (Game.GameTime >= l.ReadyAt ? "ready" : Mins(l.ReadyAt - Game.GameTime)) : "idle") + ", " + l.Supplies + " supplies" + (l.Worker ? ", worker" : "") : "  ·  $" + l.Price.ToString("N0")),
+            list.Add(Item((l.Owned ? "Your " : !creative && Rank < l.Rank ? "Locked (" + Ranks[l.Rank] + "): " : "For sale: ") + l.Name + (l.Owned ? "  ·  " + (l.Batch.Length > 0 ? l.Batch + " " + (Game.GameTime >= l.ReadyAt ? "ready" : Mins(l.ReadyAt - Game.GameTime)) : "idle") + ", " + l.Supplies + " supplies" + (l.Worker ? ", worker" : "") : "  ·  $" + l.Price.ToString("N0")),
                 () => { Function.Call(Hash.SET_NEW_WAYPOINT, lab.At.X, lab.At.Y); Notification.Show("Waypoint set: " + lab.Name); }));
         }
         string zone = Zone(me.Position);
-        if (turf.Contains(zone))
+        if (turf.Contains(zone) && Unlocked("dealer"))
             list.Add(Item("Put a dealer on " + Game.GetLocalizedString(zone) + " ($" + DealerPrice + ")  ·  has " + (dealers.ContainsKey(zone) ? dealers[zone] : 0), () =>
             {
                 if (Game.Player.Money < DealerPrice) { Notification.Show("~r~Not enough money."); return; }
@@ -444,12 +484,162 @@ public class FrankensteinEmpire : Script
             list.Add(Item(g.Name + ": " + (g.Rep <= -20 ? "at war" : g.Rep >= 40 ? "allies" : "neutral") + " (" + g.Rep + ")  ·  " + string.Join(", ", g.Zones.Select(z => Game.GetLocalizedString(z) + (turf.Contains(z) ? " (yours)" : ""))),
                 () =>
                 {
+                    if (!Unlocked("truce")) { Notification.Show("Truces unlock at " + Ranks[Needs["truce"]] + "."); return; }
                     if (Game.Player.Money < 10000) { Notification.Show("A truce with " + gang.Name + " costs $10,000."); return; }
                     Game.Player.Money -= 10000; gang.Rep = Math.Min(100, gang.Rep + 30); Save();
                     Notification.Show("You paid " + gang.Name + " $10,000. Relations: " + gang.Rep + ".");
                 }));
         }
-        Open("EMPIRE  ·  earned $" + earned.ToString("N0") + "  ·  heat " + heat, list);
+        list.Add(Item(Game.GameTime < switchConfirm ? "Press again to switch to " + (creative ? "Story" : "Creative") : "Switch this game to " + (creative ? "Story" : "Creative") + "...", SwitchMode));
+        Open((creative ? "CREATIVE" : "STORY") + "  ·  " + RankName + "  ·  earned $" + earned.ToString("N0") + "  ·  heat " + heat, list);
+    }
+
+    /// <summary>The same switch as Frankenstein's Shift+F10, reachable from a controller: Frankenstein restarts the
+    /// game in the other mode, each with its own saves and its own empire.</summary>
+    void SwitchMode()
+    {
+        if (Game.GameTime >= switchConfirm) { switchConfirm = Game.GameTime + 8000; MainMenu(); sel = items.Count - 1; return; }
+        switchConfirm = 0;
+        try
+        {
+            File.WriteAllText(Path.Combine(Dir, "switch.json"), "{\"to\": \"" + (creative ? "normal" : "creative") + "\"}");
+            Notification.Show("Save, then quit from the pause menu. Frankenstein starts the game again in " + (creative ? "Story" : "Creative") + ".");
+            Say("switch to " + (creative ? "story" : "creative") + " asked");
+        }
+        catch (Exception e) { Notification.Show("~r~Couldn't switch: " + e.Message); }
+    }
+
+    // ---------- Creative: everything, for testing ----------
+
+    void CreativeMenu()
+    {
+        var me = Game.Player.Character;
+        var list = new List<KeyValuePair<string, Action>>();
+        list.Add(Item("+50 of each product", () => { foreach (var p in Products) stock[p] += 50; Save(); }));
+        list.Add(Item("Finish every batch now", () => { foreach (var l in labs) if (l.Batch.Length > 0) l.ReadyAt = Game.GameTime; }));
+        list.Add(Item("Heat and raids: " + (creativeHeat ? "on" : "off"), () => { creativeHeat = !creativeHeat; if (!creativeHeat) heat = 0; Save(); CreativeMenu(); }));
+        list.Add(Item("Set heat to 90 and test a raid", () => { creativeHeat = true; heat = 90; nextRaid = 0; Save(); }));
+        string zone = Zone(me.Position);
+        var g = GangOf(zone);
+        if (g != null && warZone.Length == 0) list.Add(Item("Start a turf war here (" + g.Name + ")", () => BeginWar(zone, g)));
+        if (warZone.Length > 0) list.Add(Item("Win this turf war", () => { foreach (var p in warPeds) if (p != null && p.Exists()) p.Kill(); }));
+        list.Add(Item("Take every gang's turf", () => { foreach (var x in gangs) foreach (var z in x.Zones) turf.Add(z); Save(); }));
+        list.Add(Item("Clear my turf, dealers and gang feelings", () => { turf.Clear(); dealers.Clear(); foreach (var x in gangs) x.Rep = 0; Save(); }));
+        foreach (var l in labs)
+        {
+            var lab = l;
+            list.Add(Item("Go to " + l.Name, () => { me.Position = lab.At + new Vector3(0, 0, 0.5f); }));
+        }
+        Open("CREATIVE TEST TOOLS", list);
+    }
+
+    /// <summary>Creative's unlimited money and supplies, topped up every few seconds.</summary>
+    void Creative()
+    {
+        if (!creative || Game.GameTime < nextTopUp) return;
+        nextTopUp = Game.GameTime + 5000;
+        if (Game.Player.Money < 1000000) Game.Player.Money = 1000000;
+        foreach (var l in labs) { l.Owned = true; if (l.Supplies < 99) l.Supplies = 99; }
+        if (!creativeHeat) heat = 0;
+    }
+
+    // ---------- Story: ranks, unlocks and objectives, like Schedule I ----------
+
+    int Rank { get { int r = 0; for (int i = 0; i < RankXp.Length; i++) if (xp >= RankXp[i]) r = i; return r; } }
+    string RankName { get { return creative ? "Creative" : Ranks[Rank]; } }
+    bool Unlocked(string what) { int n; return creative || !Needs.TryGetValue(what, out n) || Rank >= n; }
+    int BatchMs(string what) { return creative ? 30000 : BatchMinutes[what] * 60000; }
+
+    void AddHeat(int n)
+    {
+        if (creative && !creativeHeat) return;
+        heat = Math.Min(100, heat + n);
+    }
+
+    void AddXp(int n, string why)
+    {
+        if (creative) return;
+        int before = Rank;
+        xp += n;
+        if (Rank > before)
+        {
+            var now = new List<string>();
+            foreach (var kv in Needs) if (kv.Value > before && kv.Value <= Rank) now.Add(kv.Key == "worker" ? "workers" : kv.Key == "dealer" ? "dealers" : kv.Key == "turf" ? "turf wars" : kv.Key == "truce" ? "truces" : kv.Key);
+            foreach (var l in labs) if (l.Rank > before && l.Rank <= Rank) { now.Add(l.Name); }
+            Blips();
+            Screen.ShowSubtitle("~p~Rank up: " + Ranks[Rank] + "~s~" + (now.Count > 0 ? "  ·  Unlocked: " + string.Join(", ", now.ToArray()) : ""), 8000);
+            Say("rank " + Ranks[Rank] + " (" + why + ")");
+        }
+    }
+
+    /// <summary>A new Story empire starts like Schedule I: one small place, a couple of supplies, and a first job.</summary>
+    void Begin()
+    {
+        if (creative) { Creative(); return; }
+        if (!fresh) return;
+        var start = labs.First(l => l.Id == "strawberry");
+        start.Owned = true;
+        start.Supplies = 3;
+        quest = 0;
+        Screen.ShowSubtitle("Your uncle left you a stash house in Strawberry and a few supplies. Start small.", 9000);
+        QuestWaypoint();
+        Save();
+        Say("new story empire");
+    }
+
+    static readonly string[] QuestNames =
+    {
+        "Go to your stash house in Strawberry",
+        "Grow your first weed (press E at the stash house)",
+        "Package the weed when it's ready",
+        "Sell 5 bags to people on the street",
+        "Reach Hoodlum and buy the Grapeseed farm",
+        "Reach Peddler, buy the Sandy Shores lab and cook meth",
+        "Reach Hustler and hire a worker",
+        "Reach Bagman and win a turf war",
+        "Reach Enforcer and cook coke at the Elysian Island warehouse",
+        "Become Kingpin",
+    };
+    int QuestCount { get { return QuestNames.Length; } }
+    string QuestText() { return quest >= QuestCount ? "You're the Kingpin. Keep growing." : QuestNames[quest]; }
+
+    bool QuestDone(int q)
+    {
+        var me = Game.Player.Character;
+        switch (q)
+        {
+            case 0: return me.Position.DistanceTo(labs.First(l => l.Id == "strawberry").At) < 6f;
+            case 1: return madeCount > 0;
+            case 2: return packedCount > 0;
+            case 3: return soldCount >= 5;
+            case 4: return labs.First(l => l.Id == "grapeseed").Owned;
+            case 5: return labs.First(l => l.Id == "sandy").Owned && (stock["meth"] > 0 || labs.Any(l => l.Batch == "meth"));
+            case 6: return labs.Any(l => l.Worker);
+            case 7: return warsWon > 0;
+            case 8: return labs.First(l => l.Id == "docks").Owned && (stock["coke"] > 0 || labs.Any(l => l.Batch == "coke"));
+            case 9: return Rank >= Ranks.Length - 1;
+        }
+        return false;
+    }
+
+    void QuestWaypoint()
+    {
+        string id = quest <= 2 ? "strawberry" : quest == 4 ? "grapeseed" : quest == 5 ? "sandy" : quest == 8 ? "docks" : "";
+        var l = labs.FirstOrDefault(x => x.Id == id);
+        if (l != null) Function.Call(Hash.SET_NEW_WAYPOINT, l.At.X, l.At.Y);
+    }
+
+    void Quests()
+    {
+        if (creative || quest >= QuestCount || !QuestDone(quest)) return;
+        int reward = 500 + quest * 750;
+        Game.Player.Money += reward;
+        Notification.Show("~g~Objective done:~s~ " + QuestNames[quest] + "  ·  +$" + reward.ToString("N0"));
+        AddXp(50 + quest * 25, "objective");
+        quest++;
+        if (quest < QuestCount) { Notification.Show("Next: " + QuestNames[quest]); QuestWaypoint(); }
+        Say("objective " + quest + " done");
+        Save();
     }
 
     static KeyValuePair<string, Action> Item(string text, Action a) { return new KeyValuePair<string, Action>(text, a); }
@@ -505,6 +695,18 @@ public class FrankensteinEmpire : Script
         new ContainerElement(new PointF(rx, 720 - 70), new SizeF(282, 26), Color.FromArgb(180, 10, 8, 14)).Draw();
         new TextElement(line, new PointF(rx + 10, 720 - 66), 0.3f, Color.FromArgb(220, 220, 230), Font.ChaletLondon).Draw();
         new ContainerElement(new PointF(rx, 720 - 44), new SizeF(282 * heat / 100f, 4), Color.FromArgb(230, 230, 60, 60)).Draw();
+        // mode, rank and the current objective, top left under the radar's opposite corner
+        new ContainerElement(new PointF(18, 18), new SizeF(360, creative ? 26 : 50), Color.FromArgb(180, 10, 8, 14)).Draw();
+        if (creative)
+            new TextElement("CREATIVE  ·  F5 / hold D-pad left: test tools", new PointF(28, 22), 0.32f, Color.FromArgb(200, 170, 255), Font.ChaletLondon).Draw();
+        else
+        {
+            int r = Rank, next = r + 1 < RankXp.Length ? RankXp[r + 1] : RankXp[r];
+            new TextElement(Ranks[r] + "  ·  " + xp + (r + 1 < RankXp.Length ? " / " + next + " XP" : " XP"), new PointF(28, 22), 0.32f, Color.FromArgb(200, 170, 255), Font.ChaletLondon).Draw();
+            float f = r + 1 < RankXp.Length ? (xp - RankXp[r]) / (float)Math.Max(1, next - RankXp[r]) : 1f;
+            new ContainerElement(new PointF(250, 30), new SizeF(118 * Math.Min(1f, f), 6), Color.FromArgb(220, 150, 90, 250)).Draw();
+            new TextElement(QuestText(), new PointF(28, 44), 0.28f, Color.White, Font.ChaletLondon).Draw();
+        }
         if (warZone.Length > 0)
             new TextElement(warPeds.Count(p => p.IsAlive) + " left  ·  " + Mins(warEnds - Game.GameTime), new PointF(640, 40), 0.5f, Color.FromArgb(255, 90, 90), Font.ChaletLondon, Alignment.Center).Draw();
     }
@@ -514,6 +716,8 @@ public class FrankensteinEmpire : Script
         foreach (var l in labs)
         {
             if (l.Blip != null && l.Blip.Exists()) l.Blip.Delete();
+            l.Blip = null;
+            if (!creative && !l.Owned && Rank < l.Rank) continue;  // Story: a property shows on the map once your rank puts it up for sale
             l.Blip = World.CreateBlip(l.At);
             l.Blip.Sprite = l.Kind == "farm" ? (BlipSprite)140 : (BlipSprite)499;  // weed leaf, meth lab
             l.Blip.Color = l.Owned ? BlipColor.Green : BlipColor.White;
@@ -537,14 +741,16 @@ public class FrankensteinEmpire : Script
 
     // ---------- saving: one key=value line each ----------
 
-    string SaveFile { get { return Path.Combine(Dir, "empire.txt"); } }
+    string SaveFile { get { return Path.Combine(Dir, creative ? "empire-creative.txt" : "empire.txt"); } }
 
     void Save()
     {
         try
         {
             var lines = new List<string> { "heat=" + heat, "earned=" + earned, "turf=" + string.Join(",", turf.ToArray()),
-                                           "dealers=" + string.Join(",", dealers.Select(kv => kv.Key + ":" + kv.Value).ToArray()) };
+                                           "dealers=" + string.Join(",", dealers.Select(kv => kv.Key + ":" + kv.Value).ToArray()),
+                                           "xp=" + xp, "quest=" + quest, "made=" + madeCount, "packed=" + packedCount, "sold=" + soldCount,
+                                           "wars=" + warsWon, "creativeHeat=" + (creativeHeat ? 1 : 0) };
             foreach (var p in Products) lines.Add("stock." + p + "=" + stock[p]);
             foreach (var l in labs)
             {
@@ -564,7 +770,7 @@ public class FrankensteinEmpire : Script
     {
         try
         {
-            if (!File.Exists(SaveFile)) return;
+            if (!File.Exists(SaveFile)) { fresh = true; return; }
             foreach (var raw in File.ReadAllLines(SaveFile))
             {
                 int eq = raw.IndexOf('=');
@@ -573,6 +779,13 @@ public class FrankensteinEmpire : Script
                 int n;
                 if (k == "heat" && int.TryParse(v, out n)) heat = n;
                 else if (k == "earned" && int.TryParse(v, out n)) earned = n;
+                else if (k == "xp" && int.TryParse(v, out n)) xp = n;
+                else if (k == "quest" && int.TryParse(v, out n)) quest = n;
+                else if (k == "made" && int.TryParse(v, out n)) madeCount = n;
+                else if (k == "packed" && int.TryParse(v, out n)) packedCount = n;
+                else if (k == "sold" && int.TryParse(v, out n)) soldCount = n;
+                else if (k == "wars" && int.TryParse(v, out n)) warsWon = n;
+                else if (k == "creativeHeat") creativeHeat = v == "1";
                 else if (k == "turf") foreach (var z in v.Split(',')) { if (z.Length > 0) turf.Add(z); }
                 else if (k == "dealers") foreach (var d in v.Split(',')) { var b = d.Split(':'); if (b.Length == 2 && int.TryParse(b[1], out n)) dealers[b[0]] = n; }
                 else if (k.StartsWith("stock.") && stock.ContainsKey(k.Substring(6)) && int.TryParse(v, out n)) stock[k.Substring(6)] = n;

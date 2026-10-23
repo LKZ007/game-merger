@@ -3,6 +3,12 @@
 Every release, newest first. Downloads are on the [releases page](https://github.com/LKZ007/game-merger/releases).
 The app was called Game Merger before 3.8.0.
 
+## v3.48.0 (2026-10-23)
+- **Story and Creative in the GTA V Schedule I x Hood Warfare merge.**
+  - **Story plays like Schedule I.** You start with a small stash house in Strawberry and a few supplies. Batches, sales, turf wars and objectives give XP, and you climb ten ranks from Street Rat to Kingpin. The ranks unlock the Grapeseed farm, meth and the Sandy Shores lab, workers, dealers, turf wars, truces, and finally coke and the Elysian Island warehouse. The current objective, your rank and an XP bar are on screen, with a cash reward and a waypoint for each step. Locked properties only show on the map once they're for sale.
+  - **Creative is for testing.** Everything is owned and unlocked, money and supplies are unlimited, batches take 30 seconds, and heat is off unless you turn it on. The F5 menu has test tools: +50 product, finish batches, heat and raid tests, start or win a turf war, take or clear turf, and teleports to every property.
+  - **Each mode keeps its own saves and its own empire.** Switch in game from the F5 menu (it works on a controller) or with Shift+F10.
+
 ## v3.47.1 (2026-10-23)
 - **Delete works on older merge copies.** Copies made by older versions of Frankenstein (like the Elden Ring x Hogwarts Legacy one) didn't carry its marker, so Delete left them alone. Now Delete and Delete all merges ask "Delete anyway?" for those, since they're listed in Frankenstein's own records as merge copies. Even then, Frankenstein refuses any folder that is, or holds, an installed game or a merge's original, a top-level folder, a link, or anything inside Steam's or Windows' folders. Your installed games and their real saves are never touched.
 

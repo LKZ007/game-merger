@@ -1,2 +1,2 @@
-VERSION = "3.47.1"
+VERSION = "3.48.0"
 REPO = "LKZ007/game-merger"  # updates are published as GitHub releases here
