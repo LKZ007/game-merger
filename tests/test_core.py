@@ -1237,8 +1237,7 @@ class PackTests(unittest.TestCase):
         made[1].pack()
         os.makedirs(saves.slot_root(made[0].id), exist_ok=True)
         jobs = []
-        fake = types.SimpleNamespace(_playing=None, _me=lambda: {"id": "me", "admin": True},
-                                     _run=lambda fn: jobs.append(fn(types.SimpleNamespace(write=lambda *_: None, progress=None))))
+        fake = self._fake_api(jobs)
         api.Api.delete_all_merges(fake)
         mine = {m.id for m in made}
         self.assertFalse(any(m.id in mine for m in installer.Merge.all()))
@@ -1249,6 +1248,47 @@ class PackTests(unittest.TestCase):
             self.assertFalse(os.path.exists(installer.Merge.record_dir(m.id)))
             self.assertFalse(os.path.exists(saves.slot_root(m.id)))
         self.assertEqual(open(os.path.join(base, "Game.exe")).read(), "exe")  # the installed game stays
+
+    def _fake_api(self, jobs, games=()):
+        from gamemerger import api
+        fake = types.SimpleNamespace(_playing=None, _me=lambda: {"id": "me", "admin": True}, _games=list(games),
+                                     _run=lambda fn: jobs.append(fn(types.SimpleNamespace(write=lambda *_: None, progress=None))))
+        fake._protected = lambda: api.Api._protected(fake)
+        fake._my_merges = lambda: api.Api._my_merges(fake)
+        return fake
+
+    def test_unmarked_old_copies_delete_only_when_asked_and_safe(self):
+        from gamemerger import api
+        root = tempfile.mkdtemp()
+        base = os.path.join(root, "Steam", "Game")
+        os.makedirs(base)
+        with open(os.path.join(base, "Game.exe"), "w") as f:
+            f.write("exe")
+        r = types.SimpleNamespace(id="t", name="Test", launch_exe=lambda t: None)
+        t = types.SimpleNamespace(id="th", name="Theme")
+        m = installer.Merge.create(r, t, base, os.path.join(root, "out"), installer.MODE_COPY, "Old copy")
+        os.remove(os.path.join(m.target_path, installer.COPY_MARKER))  # adopted from an older version: no marker
+        fake = self._fake_api([])
+        self.assertEqual([x["id"] for x in api.Api.delete_check(fake, m.id)], [m.id])
+        with self.assertRaises(installer.MergeError):
+            m.delete()  # not without asking
+        self.assertTrue(os.path.isdir(m.target_path))
+        # never the original, an installed game, or a folder around one, even when asked
+        for target in (base, os.path.dirname(base)):
+            bad = installer.Merge(dict(m.data, target_path=target))
+            self.assertTrue(bad.why_not_delete_anyway())
+            with self.assertRaises(installer.MergeError):
+                bad.delete(force=True)
+        other = os.path.join(root, "out", "Other game")
+        os.makedirs(other)
+        self.assertIn("installed game", installer.Merge(dict(m.data, target_path=os.path.join(root, "out"))).why_not_delete_anyway([other]))
+        steam = os.path.join(root, "steamapps", "common", "X")
+        os.makedirs(steam)
+        self.assertIn("Steam", installer.Merge(dict(m.data, target_path=steam)).why_not_delete_anyway())
+        self.assertEqual(open(os.path.join(base, "Game.exe")).read(), "exe")
+        m.delete(force=True)  # asked, and safe
+        self.assertFalse(os.path.exists(m.target_path))
+        self.assertEqual(open(os.path.join(base, "Game.exe")).read(), "exe")
 
     def test_inplace_merges_are_never_packed(self):
         m = installer.Merge({"id": "x", "name": "X", "mode": installer.MODE_INPLACE, "base_path": "/", "target_path": "/"})

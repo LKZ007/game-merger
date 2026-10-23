@@ -1,5 +1,5 @@
 "use strict";
-window.APP_BUILD = "3.47.0";  // must match index.html: a mixed-up install is caught at start
+window.APP_BUILD = "3.47.1";  // must match index.html: a mixed-up install is caught at start
 
 // ---------- talking to the Python side ----------
 const TOKEN = document.querySelector('meta[name="gm-token"]')?.content;
@@ -866,6 +866,18 @@ function sparks(cv, delay) {
 }
 
 // Shows a progress window for a background job until it finishes.
+// Copies made by older versions can lack Frankenstein's marker. They're still this merge's folder in Frankenstein's own
+// records, so ask once whether to delete them anyway (the originals and installed games are always refused).
+// Returns true to delete them too, false when there's nothing to ask, null when cancelled.
+async function deleteAnyway(list) {
+  if (!list || !list.length) return false;
+  const rows = list.map((x) => `<li><b>${esc(x.name)}</b>: ${esc(x.path)}${x.refused ? ` <span class="muted">(will be left alone: ${esc(x.refused)})</span>` : ` <span class="muted">(original stays at ${esc(x.original)})</span>`}</li>`).join("");
+  const ok = list.some((x) => !x.refused);
+  if (!ok) { await modal("Left alone", `<p>These folders can't be deleted safely, so Frankenstein won't touch them:</p><ul>${rows}</ul>`); return false; }
+  return (await modal("Delete anyway?", `<p class="muted">These copies were made by an older Frankenstein and don't carry its marker, but they're listed in Frankenstein's own records as merge copies. Delete them anyway? Your installed games and their real saves are never touched.</p><ul>${rows}</ul>`,
+    [{ label: "Cancel", value: false }, { label: "Delete anyway", value: true, danger: true }])) ? true : null;
+}
+
 async function followJob(id, title) {
   $("#modalTitle").textContent = title;
   // merges also get the little terminal window that streams the rebuild, file by file
@@ -1484,7 +1496,10 @@ async function mergeAction(id, act) {
       if (await confirmBox("Undo all mods?", `This removes every mod from “${m.name}” and puts the original files back.`, "Undo all mods")) { await followJob(await call("undo", id), "Undoing"); loadMerges(); }
     } else if (act === "delete") {
       const text = m.mode === "inplace" ? "This undoes all mods in your original install and forgets this merge." : `This deletes the merged copy at ${m.folder}. Your original game is not touched.`;
-      if (await confirmBox("Delete merge?", text, "Delete", true)) { await followJob(await call("delete", id), "Deleting"); loadMerges(); }
+      if (!(await confirmBox("Delete merge?", text, "Delete", true))) return;
+      const force = await deleteAnyway(await call("delete_check", id));
+      if (force === null) return;
+      await followJob(await call("delete", id, force), "Deleting"); loadMerges();
     }
   } catch (e) { modal("That didn't work", `<p>${esc(errText(e))}</p>`); }
 }
@@ -2013,7 +2028,9 @@ async function loadSettings() {
   $("#deleteAll").onclick = async () => {
     const n = (state.merges || []).length;
     if (!(await confirmBox("Delete all merges?", `This deletes ${n || "every"} merge${n === 1 ? "" : "s"}: the copies, their packed zips and their own saves. Your installed games and their real saves stay as they are. It can't be undone.`, "Delete all", true))) return;
-    const j = await followJob(await call("delete_all_merges"), "Deleting all merges");
+    const force = await deleteAnyway(await call("delete_check"));
+    if (force === null) return;
+    const j = await followJob(await call("delete_all_merges", force), "Deleting all merges");
     if (j && j.result) toast(`Deleted ${j.result.deleted} merge${j.result.deleted === 1 ? "" : "s"}, ${fmtGB(j.result.freed)} freed.` + (j.result.failed.length ? ` Not deleted: ${j.result.failed.join(", ")}.` : ""), 8000);
     loadMerges();
   };

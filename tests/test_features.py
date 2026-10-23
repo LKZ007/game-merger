@@ -631,8 +631,15 @@ class FeatureChecklist(unittest.TestCase):
         self.assertIn("mods/gta5/FrankensteinEmpire.3.cs", api)
         self.assertIn("def delete_all_merges", api)
         app = read(PKG, "web", "app.js")
-        self.assertIn('call("delete_all_merges")', app)
+        self.assertIn('call("delete_all_merges"', app)
         self.assertIn("Deleting all merges", app)
+
+    def test_3471_delete_anyway_for_old_copies(self):
+        app = read(PKG, "web", "app.js")
+        self.assertIn('call("delete_check"', app)
+        self.assertIn('call("delete", id, force)', app)
+        self.assertIn('call("delete_all_merges", force)', app)
+        self.assertIn("def why_not_delete_anyway", read(PKG, "installer.py"))
 
 if __name__ == "__main__":
     unittest.main()

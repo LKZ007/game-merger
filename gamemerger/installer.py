@@ -753,8 +753,35 @@ class Merge:
                 return
             d = os.path.dirname(d)
 
-    def delete(self, log=_noop):
-        """Delete the separate copy (never the original), or undo an in-place merge."""
+    def unmarked(self):
+        """True when this merge's copy is there but has no Frankenstein marker (copies adopted from older versions)."""
+        return (self.mode != MODE_INPLACE and os.path.isdir(self.target_path)
+                and not os.path.isfile(os.path.join(self.target_path, COPY_MARKER)))
+
+    def why_not_delete_anyway(self, protect=()):
+        """Why an unmarked copy can't be deleted even when you say "delete anyway", or "" when it can. It must be
+        the folder Frankenstein's own record names for this merge, a real folder (not a link), at least two levels
+        below a drive, outside Steam's and Windows' folders, and not the original game or any installed game, nor
+        inside or around one."""
+        here = os.path.normcase(os.path.abspath(self.target_path))
+        if os.path.islink(self.target_path) or getattr(os.path, "isjunction", lambda _p: False)(self.target_path):
+            return "it's a link to another folder"
+        parts = [x for x in os.path.splitdrive(here)[1].split(os.sep) if x]
+        if len(parts) < 2:
+            return "it's a top-level folder"
+        if {"steamapps", "windows", "program files", "program files (x86)", "programdata"} & {x.lower() for x in parts}:
+            return "it's inside Steam's or Windows' own folders"
+        for other in [self.base_path] + list(protect):
+            if not other:
+                continue
+            o = os.path.normcase(os.path.abspath(other))
+            if here == o or o.startswith(here + os.sep) or here.startswith(o + os.sep):
+                return "it is, or holds, an installed game (%s)" % other
+        return ""
+
+    def delete(self, log=_noop, force=False, protect=()):
+        """Delete the separate copy (never the original), or undo an in-place merge. A copy without Frankenstein's
+        marker (one adopted from an older version) is only deleted with force, after the safety checks above."""
         if self.mode == MODE_INPLACE:
             self.undo(log)
         else:
@@ -762,5 +789,11 @@ class Merge:
                 shutil.rmtree(self.target_path)
                 log("Deleted %s." % self.target_path)
             elif os.path.exists(self.target_path):
-                raise MergeError("%s doesn't look like a Frankenstein copy, so it was left alone." % self.target_path)
+                if not force:
+                    raise MergeError("%s doesn't look like a Frankenstein copy, so it was left alone." % self.target_path)
+                why = self.why_not_delete_anyway(protect)
+                if why:
+                    raise MergeError("%s was left alone: %s." % (self.target_path, why))
+                shutil.rmtree(self.target_path)
+                log("Deleted %s (an older copy without Frankenstein's marker; the original at %s is untouched)." % (self.target_path, self.base_path))
         shutil.rmtree(self.record_dir(self.id), ignore_errors=True)

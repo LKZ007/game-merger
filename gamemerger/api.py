@@ -3625,24 +3625,40 @@ class Api:
         m = Merge.load(merge_id)
         return self._run(lambda job: m.undo(log=job.write))
 
-    def delete(self, merge_id):
+    def _protected(self):
+        """Folders no delete may touch: every installed game, and every merge's original."""
+        return [g.path for g in self._games if getattr(g, "path", None)] + [x.data.get("base_path", "") for x in Merge.all()]
+
+    def delete_check(self, merge_id=None):
+        """Before deleting: the merges whose copy has no Frankenstein marker (adopted from older versions), so the
+        app can ask "delete anyway?", and whether each one passes the safety checks."""
+        ms = [Merge.load(merge_id)] if merge_id else self._my_merges()
+        protect = self._protected()
+        return [{"id": m.id, "name": m.name, "path": m.target_path, "original": m.data.get("base_path", ""),
+                 "refused": m.why_not_delete_anyway(protect)} for m in ms if m.unmarked()]
+
+    def _my_merges(self):
+        me = self._me()
+        return [m for m in Merge.all() if m.data.get("owner") == me.get("id") or (m.data.get("owner") is None and me.get("admin"))]
+
+    def delete(self, merge_id, force=False):
         if self._playing == merge_id:
             raise MergeError("Close the game before deleting this merge.")
         m = Merge.load(merge_id)
+        protect = self._protected()
 
         def work(job):
-            m.delete(log=job.write)
+            m.delete(log=job.write, force=bool(force), protect=protect)
             saves.delete_slot(merge_id)
             if m.data.get("mc_root"):
                 minecraft.remove_profile(m.data["mc_root"], merge_id)
         return self._run(work)
 
-    def delete_all_merges(self):
+    def delete_all_merges(self, force=False):
         """Settings > Delete all merges: every merge's copy, its packed zip and its own saves, one after another.
         The installed games and their real saves are never touched (an in-place merge is undone instead)."""
         if self._playing:
             raise MergeError("Close the game first.")
-        me = self._me()
 
         def size(p):
             try:
@@ -3650,8 +3666,10 @@ class Api:
             except OSError:
                 return 0
 
+        protect = self._protected()
+
         def work(job):
-            mine = [m for m in Merge.all() if m.data.get("owner") == me.get("id") or (m.data.get("owner") is None and me.get("admin"))]
+            mine = self._my_merges()
             freed, done, failed = 0, 0, []
             for i, m in enumerate(mine):
                 job.progress = [i, len(mine)]
@@ -3659,7 +3677,7 @@ class Api:
                 before = sum(size(p) for p in (m.target_path if m.mode != MODE_INPLACE else "", Merge.record_dir(m.id),
                                                 saves.slot_root(m.id), saves.zip_path(m.id)) if p)
                 try:
-                    m.delete(log=job.write)
+                    m.delete(log=job.write, force=bool(force), protect=protect)
                     saves.delete_slot(m.id)
                     if m.data.get("mc_root"):
                         minecraft.remove_profile(m.data["mc_root"], m.id)

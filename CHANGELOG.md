@@ -3,6 +3,9 @@
 Every release, newest first. Downloads are on the [releases page](https://github.com/LKZ007/game-merger/releases).
 The app was called Game Merger before 3.8.0.
 
+## v3.47.1 (2026-10-23)
+- **Delete works on older merge copies.** Copies made by older versions of Frankenstein (like the Elden Ring x Hogwarts Legacy one) didn't carry its marker, so Delete left them alone. Now Delete and Delete all merges ask "Delete anyway?" for those, since they're listed in Frankenstein's own records as merge copies. Even then, Frankenstein refuses any folder that is, or holds, an installed game or a merge's original, a top-level folder, a link, or anything inside Steam's or Windows' folders. Your installed games and their real saves are never touched.
+
 ## v3.47.0 (2026-10-23)
 - **A new merge with GTA V as the Host: Schedule I x Hood Warfare in Los Santos (milestone 1).** Make it from a GTA V merge by picking "Schedule I x Hood Warfare: business, gangs and guns" as the Extension. Story mode only, offline, on Frankenstein's own copy of the game.
   - **Labs, farms and production.** Buy four properties (Grapeseed farm, Sandy Shores lab, Strawberry grow house, Docks lab), buy supplies, start a batch of weed, meth or coke and collect it when it's ready. Hire a worker and the lab runs by itself.
