@@ -295,7 +295,7 @@ namespace Frankenstein
             return n;
         }
 
-        static bool Call(object o, string method, params object[] args)
+        internal static bool Call(object o, string method, params object[] args)
         {
             if (o == null) return false;
             var m = o.GetType().GetMethods(BindingFlags.Public | BindingFlags.Instance)

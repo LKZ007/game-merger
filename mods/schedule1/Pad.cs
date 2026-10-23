@@ -26,6 +26,7 @@ namespace Frankenstein
 
         public static ushort Now, Pressed, Released;
         public static Vector2 Stick;
+        public static float RightTrigger;
         /// <summary>True once the controller is used, false again when the mouse moves: prompts show buttons then.</summary>
         public static bool InUse;
         static ushort _prev;
@@ -40,6 +41,7 @@ namespace Frankenstein
         {
             Now = 0;
             Stick = Vector2.zero;
+            RightTrigger = 0;
             if (_ok)
             {
                 try
@@ -48,6 +50,7 @@ namespace Frankenstein
                     {
                         Now = s.Buttons;
                         Stick = new Vector2(s.LX / 32768f, s.LY / 32768f);
+                        RightTrigger = s.RT / 255f;
                     }
                 }
                 catch (Exception) { _ok = false; }  // no XInput on this PC

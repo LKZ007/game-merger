@@ -1,4 +1,12 @@
-## Frankenstein 3.32.0
+## Frankenstein 3.32.1
+
+- **Melee swings hit harder: the bat, knife, machete and the rest.**
+  - The camera pulls back while you wind up and whips through as you swing.
+  - When you hit someone, the moment freezes for a split second, the screen shakes, they're knocked back and they take extra damage on top of the game's own.
+  - Hold attack (left mouse, or RT on a controller) for half a second before letting go for a heavy swing: twice the damage and a bigger knock.
+  - There's no new sound yet: the game's own hit sound plays. Not tested in game yet.
+
+### Also in 3.32.0
 
 - **Schedule I: Creative is now a game mode on each save, like Minecraft.** There's one set of saves now, not a separate Creative copy.
   - On the main menu, **Game Mode** (between New Game and Settings) picks Survival or Creative for the game you start or load next. Click it, or press Y on a controller.

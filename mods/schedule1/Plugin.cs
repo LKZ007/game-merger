@@ -15,7 +15,7 @@ namespace Frankenstein
     {
         /// <summary>The Frankenstein release this mod came with (equal to gamemerger/version.py; a test checks).
         /// Shown on F6's title and in MelonLoader's log, where the app reads it back for the merge's card.</summary>
-        public const string Version = "3.32.0";
+        public const string Version = "3.32.1";
         float _next;
         public static bool MenuAllowed = true;
         public static System.Collections.Generic.List<string> Kit = new System.Collections.Generic.List<string>();
@@ -83,6 +83,7 @@ namespace Frankenstein
             Pad.Update();
             try { Mode.Tick(); } catch (Exception e) { Melon<Plugin>.Logger.Warning("Game mode: " + e.Message); }
             try { Vehicles.Update(); } catch (Exception e) { Melon<Plugin>.Logger.Warning("Vehicles: " + e.Message); }
+            try { Melee.Update(); } catch (Exception e) { Melon<Plugin>.Logger.Warning("Swing: " + e.Message); }
             try { Fly.Update(); } catch (Exception e) { Melon<Plugin>.Logger.Warning("Fly: " + e.Message); }
             try { Wheel.Update(); } catch (Exception e) { Melon<Plugin>.Logger.Warning("Wheel: " + e.Message); }
             ItemMenu.Update();
@@ -109,6 +110,7 @@ namespace Frankenstein
         public override void OnLateUpdate()
         {
             try { Fly.LateUpdate(); } catch (Exception e) { Melon<Plugin>.Logger.Warning("Fly: " + e.Message); }
+            try { Melee.LateUpdate(); } catch (Exception e) { Melon<Plugin>.Logger.Warning("Swing: " + e.Message); }
         }
 
         public override void OnGUI()

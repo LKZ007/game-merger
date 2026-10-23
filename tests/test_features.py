@@ -299,6 +299,13 @@ class FeatureChecklist(unittest.TestCase):
         self.assertNotIn('merge_id + "~creative" if creative', api, "one set of saves")
         self.assertIn("_members", read(ROOT, "mods", "schedule1", "Rt.cs"))  # reflection cached: less lag
 
+    def test_3321_heavier_swing(self):
+        dll = open(os.path.join(PKG, "mods", "schedule1", "Frankenstein.dll"), "rb").read()
+        self.assertIn("Heavy hit!".encode("utf-16-le"), dll)
+        melee = read(ROOT, "mods", "schedule1", "Melee.cs")
+        for x in ("timeScale", "RightTrigger", "Warp", "_shake"):
+            self.assertIn(x, melee)
+
     def test_3313_new_logo_on_shortcuts(self):
         from PIL import Image
         ico = Image.open(os.path.join(ROOT, "installer", "Frankenstein.ico"))
