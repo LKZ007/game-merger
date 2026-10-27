@@ -3,6 +3,9 @@
 Every release, newest first. Downloads are on the [releases page](https://github.com/LKZ007/game-merger/releases).
 The app was called Game Merger before 3.8.0.
 
+## v3.53.1 (2026-10-27)
+- **Fixed: GTA V said "Please run Grand Theft Auto V using Rockstar Games Launcher" (ERR_NO_LAUNCHER).** Play now starts GTA V through its own launcher (PlayGTAV.exe), still offline in Story mode, and the mods still come back out of your GTA V folder when the game closes.
+
 ## v3.53.0 (2026-10-27)
 - **GTA V x Schedule I x Hood Warfare comes ready made.** Once Frankenstein finds GTA V, it makes the merge by itself and puts it in My merges, ready to play.
   - **It plays in your own GTA V, with no 100 GB copy.** The mods (Script Hook V, Script Hook V .NET and Frankenstein's scripts) go into your GTA V folder only while you play from Frankenstein. When the game closes, they come back out and every file they covered is put back, so your folder is exactly as before. Normal GTA V and GTA Online never see them. If Frankenstein closes while the game runs, it cleans up the next time it starts. Your Story saves are backed up first.

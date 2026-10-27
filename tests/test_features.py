@@ -745,5 +745,12 @@ class FeatureChecklist(unittest.TestCase):
             self.assertIn(bit, emp)
         self.assertIn("GetNearbyProps", read(PKG, "mods", "gta5", "FrankensteinRagdoll.3.cs"))
 
+    def test_3531_gta_starts_through_its_launcher(self):
+        api = read(PKG, "api.py")
+        self.assertIn("def _launcher_for(", api)
+        self.assertIn('"PlayGTAV.exe"', api)
+        self.assertIn("subprocess.Popen([self._launcher_for(r, exe)] + args", api)
+        self.assertNotIn("StraightIntoFreemode", api + read(PKG, "recipes", "gta5.json"))   # that one goes to GTA Online
+
 if __name__ == "__main__":
     unittest.main()

@@ -3361,10 +3361,21 @@ class Api:
             subprocess.Popen(cmd, cwd=os.path.dirname(cmd[0]))
             eldenring.start_tools_when_ready(m.target_path, saves.running)  # Creative is in the game, every Play
         else:
-            subprocess.Popen([exe] + args, cwd=os.path.dirname(exe))
+            subprocess.Popen([self._launcher_for(r, exe)] + args, cwd=os.path.dirname(exe))
         self._discord_playing(m, r.processes or [os.path.basename(exe)])
         self._start_mapper(m, r.processes or [os.path.basename(exe)])
         return True
+
+    @staticmethod
+    def _launcher_for(r, exe):
+        """GTA V from the Rockstar Games Launcher (and Steam's) refuses to start from GTA5.exe ("ERR_NO_LAUNCHER"):
+        PlayGTAV.exe next to it goes through the launcher, which passes the offline Story arguments on. The play
+        still ends when GTA5.exe closes (the recipe's processes), not the launcher."""
+        if r and r.id == "gta5":
+            play = os.path.join(os.path.dirname(exe), "PlayGTAV.exe")
+            if os.path.isfile(play):
+                return play
+        return exe
 
     # ---------- creative / sandbox mode ----------
 
