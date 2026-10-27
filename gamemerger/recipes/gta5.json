@@ -90,12 +90,22 @@
           "name": "Labs, farms and production",
           "search": "",
           "hero": true,
-          "builtin": "Frankenstein's own GTA V script: four properties to buy (Grapeseed farm, Sandy Shores lab, Strawberry grow house, Docks lab). Buy supplies, start a batch (weed, meth or coke) and collect it when it's ready, or hire a worker who runs the lab while you're away. F5 (or hold D-pad left) opens the empire menu with waypoints."
+          "builtin": "Frankenstein's own GTA V script: five properties to buy (Strawberry stash house, Grapeseed farm, Sandy Shores lab, La Mesa gun workshop, Elysian Island warehouse). Buy supplies, start a batch (weed, meth, coke or gun crates) and collect it when it's ready. Specialist workers: a botanist, chemist or gunsmith who runs the place, a handler who packs 25% more, and a cleaner who halves the heat and keeps raids off it. Rest at any property you own (sleep 6 hours) and stock up on snacks there. F5 (or hold D-pad left) opens the empire menu with waypoints."
         },
         {
           "name": "Story and Creative modes",
           "search": "",
-          "builtin": "Story plays like Schedule I: you start with a small stash house in Strawberry and a few supplies, earn XP from batches, sales and turf wars, and climb ranks from Street Rat to Kingpin that unlock the bigger properties, meth, workers, dealers, turf wars and coke, with an objective on screen. Creative is for testing: everything owned and unlocked, unlimited money and supplies, 30-second batches, heat off unless you turn it on, and test tools in the F5 menu. Each mode keeps its own saves and empire; switch in game from the F5 menu (works on a controller) or Shift+F10."
+          "builtin": "Story plays like Schedule I, in 18 objectives with phone calls from Uncle Ray: your uncle's stash house in Strawberry, your first weed, a first customer, mixing, the bigger properties, workers, a turf war, your own crew, La Sombra's cartel, guns and coke, up to Kingpin. Ranks from Street Rat to Kingpin unlock each step, and big moments get a cutscene. Creative is for testing: everything owned and unlocked, unlimited money and supplies, 30-second batches, heat and survival off unless you turn them on, and test tools in the F5 menu (product, customers, crew, cartel, survival, raids, turf wars, cutscenes). Each mode keeps its own saves and empire; switch in game from the F5 menu (works on a controller) or Shift+F10."
+        },
+        {
+          "name": "Mixing and effects",
+          "search": "",
+          "builtin": "Like Schedule I's mixing: at a property, add up to three ingredients to a product (cucumber, banana, energy drink, paracetamol, motor oil, chili, battery, glow sticks, gasoline). Each one gives an effect (Refreshing, Calming, Energizing, Spicy, Glowing and so on) that raises the street price, changes how hooked people get and costs a little more each batch."
+        },
+        {
+          "name": "Customers and addiction",
+          "search": "",
+          "builtin": "14 named customers across five areas that open as you rank up. Give someone a free sample (better odds when your mix has the effect they like); once they're hooked they text you orders every in-game hour, bigger and better paid the more hooked they are. F5 > Customers lists them with waypoints."
         },
         {
           "name": "Street dealing and dealers",
@@ -108,6 +118,16 @@
           "builtin": "GTA V's own gangs hold their real neighbourhoods (Families, Ballas, Vagos, Aztecas, Marabunta, The Lost, Kkangpae). Hold E (D-pad right) in a gang's zone to start a four-minute turf war against armed crews; win it and the zone is yours and pays every hour. Gangs try to take turf back, or you can buy a truce."
         },
         {
+          "name": "Your crew",
+          "search": "",
+          "builtin": "From Bagman you hire crew members ($3,000 each, $150 an hour), call them to follow you and fight, and buy them better gear (Street to Elite). Left at home they guard your turf, so gangs often fail to take it back. Crew who die are gone."
+        },
+        {
+          "name": "La Sombra (cartel)",
+          "search": "",
+          "builtin": "Once you're big enough, the La Sombra cartel wants a meeting at the Sandy Shores airfield. Pay them 15% and they keep the gangs off your turf, or tell them to get lost: then they ambush you, and you hit their three stashes and finally their boss at a ranch in the hills. You can stop paying later from the F5 menu."
+        },
+        {
           "name": "Police heat and raids",
           "search": "",
           "builtin": "Dealing and fighting raise heat; high heat brings police raids on your labs and a wanted level. Heat cools off over time."
@@ -115,7 +135,22 @@
         {
           "name": "Hood Warfare guns",
           "search": "weapon",
-          "builtin": "GTA V's own guns, given by Frankenstein's spawner (F7 gives every weapon). Hood Warfare's own gun models are a later milestone; weapon mods can add more (picks below)."
+          "builtin": "The La Mesa gun workshop makes gun crates you sell to GTA V's gangs (the better your relations, the better they pay). F5 > Arsenal buys weapon kits that unlock by rank (Street, Corner, Soldier, Heavy) and body armour. These are GTA V's own guns; Hood Warfare's own gun models aren't built. Weapon mods can add more (picks below)."
+        },
+        {
+          "name": "Vehicles",
+          "search": "vehicle",
+          "builtin": "F5 > Vehicles: a garage of 13 GTA V cars and bikes that unlock by rank, from a Sanchez and lowriders to an armoured Kuruma, an Insurgent and a T20. Buy once, call it to you any time, upgrade engine, brakes, gearbox, suspension and armour, and paint it purple, black or gold. These are GTA V's own models (car mods can add more)."
+        },
+        {
+          "name": "Survival",
+          "search": "",
+          "builtin": "Outward-style needs in Story: hunger, thirst and energy bars on the HUD. Eat and drink from the F5 menu (snacks and drinks from your properties) or at GTA V's vending machines and food stands (E). Empty bars hurt you and stop you sprinting; no energy makes you stumble, so rest at a property. Off in Creative unless you turn it on."
+        },
+        {
+          "name": "Gang Beasts ragdoll",
+          "search": "",
+          "builtin": "Frankenstein's ragdoll script on GTA V's own physics: J (double-tap D-pad down) flops you over, punches and melee hits send people flying, and sprinting into someone knocks them over. Shift+J turns the launches off. Grabbing and climbing like Gang Beasts aren't built."
         },
         {
           "name": "Cinematic look",

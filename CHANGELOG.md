@@ -3,6 +3,21 @@
 Every release, newest first. Downloads are on the [releases page](https://github.com/LKZ007/game-merger/releases).
 The app was called Game Merger before 3.8.0.
 
+## v3.52.0 (2026-10-27)
+- **The GTA V Schedule I x Hood Warfare merge, built out.** Existing empires carry over (your story progress moves to the matching step of the longer story).
+  - **Mixing.** At a property, add up to three ingredients to weed, meth or coke (cucumber, banana, energy drink, paracetamol, motor oil, chili, battery, glow sticks, gasoline). Each gives an effect that raises the price, changes how hooked people get, and costs a bit more per batch.
+  - **Customers and addiction.** 14 named customers across five areas that open as you rank up. Give one a free sample; once hooked, they text orders every in-game hour, bigger and better paid the more hooked they are. F5 > Customers.
+  - **Specialist workers.** Besides the botanist, chemist or gunsmith who runs a place, hire a handler (25% more product) and a cleaner (half the heat, and raids skip that property).
+  - **A longer Story.** 18 objectives with Uncle Ray phoning in each one, from your first sample, resting and mixing up to your crew, La Sombra, guns, coke and Kingpin.
+  - **La Sombra's cartel.** A meeting at the Sandy Shores airfield: pay 15% and they keep the gangs off your turf, or refuse and fight them (ambushes, three stashes, then their boss at a ranch).
+  - **Guns.** The La Mesa gun workshop makes crates you sell to GTA V's gangs, and F5 > Arsenal sells weapon kits by rank, plus body armour.
+  - **Your crew.** Hire crew, gear them up (Street to Elite), call them to fight beside you, or leave them guarding your turf.
+  - **Vehicles.** F5 > Vehicles: 13 GTA V rides to buy, call to you, upgrade and paint.
+  - **Survival.** Hunger, thirst and energy in Story, with vending machines and food stands, snacks from your properties, and sleeping at a property.
+  - **Gang Beasts-style ragdoll.** J (double-tap D-pad down) flops you, punches and melee hits send people flying, and sprinting into people knocks them over. Shift+J turns launches off.
+  - **New cutscenes** for your first customer, La Sombra's meeting, your first stash taken, your first gun crates and beating La Sombra. Creative has test tools for all of it.
+  - Not yet tested in the game: positions, balance and cutscene cameras may need tuning.
+
 ## v3.51.0 (2026-10-27)
 - **GTA V from the Rockstar Games Launcher shows up now.** Frankenstein finds games installed through the Rockstar Games Launcher (GTA V, GTA V Enhanced and others) and through Ubisoft Connect, as well as Steam, Epic, GOG and the Xbox app. It checks the launchers' own records, Windows' Apps list, and the usual install folders on every drive. Settings > Your game accounts lists what it found from each one. A game it still can't see can be added with Library > Add game folder.
 - **Fixed "certificate verify failed" when checking for updates or downloading.** Frankenstein now checks secure connections with Windows' own certificate store, the same way your browser does, so antivirus HTTPS scanning no longer blocks it. Check for updates also retries, falls back to GitHub's releases page and then to Windows' own curl, and if it still can't get through, it says why and offers a button to download the newest version.

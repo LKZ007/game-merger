@@ -677,5 +677,37 @@ class FeatureChecklist(unittest.TestCase):
             self.assertIn(bit, det)
         self.assertIn("Rockstar Games Launcher", read(PKG, "web", "app.js"))
 
+    def test_352_full_empire(self):
+        emp = read(PKG, "mods", "gta5", "FrankensteinEmpire.3.cs")
+        # Schedule I: mixing, customers and addiction, specialist workers, rest
+        for bit in ("void MixMenu(", "static readonly Effect[] Effects", "void Sample(Customer c)", "void Deliver(Customer c)",
+                    "void CustomerHour()", "c.Addiction", "l.Handler", "l.Cleaner", "void Rest(Lab l)"):
+            self.assertIn(bit, emp)
+        # story: 18 objectives with Uncle Ray, and old saves carried over
+        self.assertIn("static readonly string[] QuestRay", emp)
+        self.assertIn("static int OldQuest(int q)", emp)
+        self.assertIn('"story=2"', emp)
+        self.assertEqual(emp.count("case 17: return Rank"), 1)
+        # cartel arc, crew, arsenal, vehicles, survival
+        for bit in ("void CartelTick(Ped me)", "bool CartelInteract(Ped me)", "void CartelWar()", "void CallCrew()", "crewGuard",
+                    "void ArsenalMenu()", "void VehiclesMenu()", "static readonly Ride[] Rides", "void Survival(Ped me)", "void UseVend()",
+                    "Customers(me);", "CrewTick();", "Survival(me);", "CartelTick(me);", "if (CartelInteract(me)) return;"):
+            self.assertIn(bit, emp)
+        # everything is saved, and stock covers gun crates too
+        for bit in ('"cust." + c.Id', '"mix." + kv.Key', '"crew=" + crewHired', '"survival="', '"cartel=" + cartel', "foreach (var p in Goods) lines.Add"):
+            self.assertIn(bit, emp)
+        # Creative test tools for the new systems
+        for bit in ("Every customer orders now", "La Sombra: war now", "Survival: ", "+20 gun crates"):
+            self.assertIn(bit, emp)
+        rag = read(PKG, "mods", "gta5", "FrankensteinRagdoll.3.cs")
+        for bit in ('"\\"empire\\"', "Keys.J", "Control.CharacterWheel", "ApplyForce", "ragdoll-debug.txt"):
+            self.assertIn(bit, rag)
+        self.assertIn("mods/gta5/FrankensteinRagdoll.3.cs", read(PKG, "api.py"))
+        import json
+        theme = [t for t in json.loads(read(PKG, "recipes", "gta5.json"))["themes"] if t["id"] == "empire"][0]
+        names = [s["name"] for s in theme["slots"]]
+        for n in ("Mixing and effects", "Customers and addiction", "Your crew", "La Sombra (cartel)", "Vehicles", "Survival", "Gang Beasts ragdoll"):
+            self.assertIn(n, names)
+
 if __name__ == "__main__":
     unittest.main()

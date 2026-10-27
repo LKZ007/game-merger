@@ -563,6 +563,7 @@ class Api:
     REQUIRED = ["web/index.html", "web/app.js", "web/app.css", "recipes/cyberpunk2077.json", "recipes/schedule1.json",
                 "recipes/gta5.json", "mods/schedule1/Frankenstein.dll", "mods/cyberpunk2077/frankenstein_items/init.lua",
                 "mods/gta5/Frankenstein.3.cs", "mods/gta5/FrankensteinMenu.3.cs", "mods/gta5/FrankensteinEmpire.3.cs",
+                "mods/gta5/FrankensteinRagdoll.3.cs",
                 "recipes/eldenring.json", "mods/eldenring/README.txt"]
 
     def _self_check(self):
