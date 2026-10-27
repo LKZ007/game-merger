@@ -78,7 +78,19 @@ def opened_arg():
     return None
 
 
+def use_windows_certificates():
+    """Every HTTPS call (updates, mods, covers, models) checks certificates the way Windows and browsers do, with
+    Windows' own certificate store. Without this the bundled Python only trusts its own list, and a PC whose
+    antivirus scans HTTPS gets CERTIFICATE_VERIFY_FAILED on everything."""
+    try:
+        import truststore
+        truststore.inject_into_ssl()
+    except Exception:
+        pass  # not on Windows or not bundled: Python's own certificate list still works on most PCs
+
+
 def main():
+    use_windows_certificates()
     arg = opened_arg()
     if "--browser" not in sys.argv and not instance.claim():
         # already open: pass on what we were opened with (or just bring it to the front) and leave

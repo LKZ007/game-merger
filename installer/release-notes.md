@@ -1,4 +1,9 @@
-## Frankenstein 3.50.0
+## Frankenstein 3.51.0
+
+- **GTA V from the Rockstar Games Launcher shows up now.** Frankenstein finds games installed through the Rockstar Games Launcher (GTA V, GTA V Enhanced and others) and through Ubisoft Connect, as well as Steam, Epic, GOG and the Xbox app. It checks the launchers' own records, Windows' Apps list, and the usual install folders on every drive. Settings > Your game accounts lists what it found from each one. A game it still can't see can be added with Library > Add game folder.
+- **Fixed "certificate verify failed" when checking for updates or downloading.** Frankenstein now checks secure connections with Windows' own certificate store, the same way your browser does, so antivirus HTTPS scanning no longer blocks it. Check for updates also retries, falls back to GitHub's releases page and then to Windows' own curl, and if it still can't get through, it says why and offers a button to download the newest version.
+
+### Also in 3.50.0
 
 - **Cutscenes in the GTA V Schedule I x Hood Warfare Story.** Story's big moments now play as short cutscenes, filmed with GTA V's own cameras, letterboxed, with your Uncle Ray on the phone: the start in Strawberry, every rank-up, every property you buy, your first meth and first coke, your first turf war won and lost, the first police raid, and Kingpin, with a sweep over the city. Each one plays once per save, and only when you're safe (no wanted level, no turf war). Enter, Space or A skips one. In Creative, the F5 test tools can replay any of them.
 

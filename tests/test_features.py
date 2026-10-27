@@ -665,5 +665,17 @@ class FeatureChecklist(unittest.TestCase):
             self.assertIn(bit, src)
         self.assertIn("EndScene();\n    }", src)  # a reloaded script never leaves the camera stuck
 
+    def test_351_certificates_updates_and_rockstar(self):
+        self.assertIn("truststore", read(os.path.dirname(PKG), "requirements.txt"))
+        self.assertIn("truststore.inject_into_ssl()", read(PKG, "app.py"))
+        up = read(PKG, "updater.py")
+        for bit in ("_curl_run", "releases/latest", "UpdateError", "time.sleep(2 * (attempt + 1))"):
+            self.assertIn(bit, up)
+        self.assertIn("Download the newest version", read(PKG, "web", "app.js"))
+        det = read(PKG, "detect.py")
+        for bit in ("def find_rockstar", "def find_ubisoft", "InstallFolder", "Ubisoft\\Launcher\\Installs"):
+            self.assertIn(bit, det)
+        self.assertIn("Rockstar Games Launcher", read(PKG, "web", "app.js"))
+
 if __name__ == "__main__":
     unittest.main()

@@ -1,5 +1,5 @@
 "use strict";
-window.APP_BUILD = "3.50.0";  // must match index.html: a mixed-up install is caught at start
+window.APP_BUILD = "3.51.0";  // must match index.html: a mixed-up install is caught at start
 
 // ---------- talking to the Python side ----------
 const TOKEN = document.querySelector('meta[name="gm-token"]')?.content;
@@ -1187,7 +1187,13 @@ async function checkUpdateNow() {
   const r = await call("check_update_now").catch((e) => ({ error: errText(e) }));
   b.disabled = false;
   label.textContent = "Check for updates";
-  if (r.error) return toast(r.error, 5000);
+  if (r.error) {
+    // the check couldn't get through: say why, and offer the installer straight from the website
+    const go = await modal("Couldn't check for updates", `<p>${esc(r.error)}</p><p class="muted">You can download the newest Frankenstein straight from GitHub instead. Run it and it updates this install; your merges and saves stay.</p>`,
+      [{ label: "Close", value: false }, { label: "Download the newest version", value: true, primary: true }]);
+    if (go) call("open_url", r.download || "https://github.com/LKZ007/game-merger/releases/latest/download/FrankensteinSetup.exe");
+    return;
+  }
   if (r.update) return offerUpdate(r.update, true);
   toast(`You're on the newest version (${r.current}).`);
 }
@@ -1892,6 +1898,8 @@ async function renderAccounts() {
       st.epic.on ? `<button class="btn ghost danger" data-off="Epic">Sign out</button>` : `<button class="btn primary" data-acc="epic">Sign in</button>`)}
     ${row("GOG", st.gog.on ? "Connected through GOG Galaxy" : st.gog.available ? "GOG Galaxy is on this PC, so your whole GOG library can show." : "Install GOG Galaxy and sign in there to show your GOG library.",
       st.gog.on ? `<button class="btn ghost danger" data-off="GOG">Disconnect</button>` : st.gog.available ? `<button class="btn primary" data-acc="gog">Connect</button>` : "")}
+    ${row("Rockstar Games Launcher", (st.rockstar || []).length ? `Found on this PC: ${esc(st.rockstar.join(", "))}` : "Games installed through the Rockstar Games Launcher (like GTA V) show up by themselves. None found on this PC yet.", "")}
+    ${row("Ubisoft Connect", (st.ubisoft || []).length ? `Found on this PC: ${esc(st.ubisoft.join(", "))}` : "Games installed through Ubisoft Connect show up by themselves. None found on this PC yet.", "")}
     ${row("Xbox / Microsoft Store", "Microsoft doesn't let other apps list the games you own, so only games installed here show.", "")}
     <p class="muted small">Sign-ins are kept in Windows Credential Manager on this PC.${st.devices.length ? " Other PCs seen: " + esc(st.devices.join(", ")) + "." : ""}</p>`;
   const busy = (b, on) => { b.disabled = on; };
@@ -2177,7 +2185,7 @@ function splashClap() {
 }
 
 // ---------- start ----------
-const SPLASH = ["It's alive! Finding your games…", "Checking Steam, Epic, GOG and the Xbox app…", "Grabbing your box art…", "Working out how each game is modded…"];
+const SPLASH = ["It's alive! Finding your games…", "Checking Steam, Epic, GOG, Rockstar, Ubisoft and the Xbox app…", "Grabbing your box art…", "Working out how each game is modded…"];
 
 // waits for a step, but never longer than `ms` (the step carries on in the background)
 const atMost = (p, ms) => Promise.race([p, sleep(ms)]);

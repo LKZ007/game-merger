@@ -1157,6 +1157,9 @@ class Api:
                           "error": self._settings.get("steam_error", "")},
                 "epic": {"name": epic.get("name", "") if epic else "", "on": bool(epic)},
                 "gog": {"available": bool(accounts.galaxy_db()), "on": bool(self._settings.get("gog_on"))},
+                # no sign-in for these two (neither launcher lets other apps list what you own): their installed games are found by themselves
+                "rockstar": [g.name for g in self._games if g.source == "Rockstar Games Launcher"],
+                "ubisoft": [g.name for g in self._games if g.source == "Ubisoft Connect"],
                 "devices": [d.get("device") for d in accounts.other_devices(self._settings.get("cloud_folder"))]}
 
     def steam_connect(self, profile=None, key=None):
@@ -2779,9 +2782,9 @@ class Api:
             self._update = updater.latest()
             err = ""
         except Exception as e:
-            self._update, err = None, "Couldn't reach GitHub (%s). Check your internet and try again." % e
+            self._update, err = None, str(e) if isinstance(e, updater.UpdateError) else "Couldn't reach GitHub (%s)." % e
         return {"current": VERSION, "latest": (self._update or {}).get("version") or (VERSION if not err else ""),
-                "update": self._update, "error": err}
+                "update": self._update, "error": err, "download": updater.STABLE}
 
     def install_update(self):
         info = getattr(self, "_update", None) or updater.latest()
@@ -2790,7 +2793,10 @@ class Api:
 
         def work(job):
             job.write("Downloading Frankenstein %s ..." % info["version"])
-            setup = updater.download(info, progress=lambda d, n: setattr(job, "progress", [d, n]))
+            try:
+                setup = updater.download(info, progress=lambda d, n: setattr(job, "progress", [d, n]))
+            except updater.UpdateError as e:
+                raise MergeError(str(e))
             job.write("Installing. Frankenstein will close and open again in a few seconds.")
             updater.run_installer(setup)
             threading.Timer(1.5, self._quit).start()

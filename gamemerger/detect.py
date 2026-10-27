@@ -1,4 +1,5 @@
-"""Find games installed through Steam, Epic, GOG, the Xbox app, and folders the user added."""
+"""Find games installed through Steam, Epic, GOG, the Xbox app, the Rockstar Games Launcher, Ubisoft Connect,
+and folders the user added."""
 
 import glob
 import json
@@ -125,6 +126,98 @@ def find_gog():
     return games
 
 
+def _reg_subkeys(root, key):
+    """(subkey name, full key) under a registry key, from both registry views."""
+    if winreg is None:
+        return []
+    out = []
+    for view in (0, getattr(winreg, "KEY_WOW64_32KEY", 0)):
+        try:
+            with winreg.OpenKey(root, key, 0, winreg.KEY_READ | view) as k:
+                i = 0
+                while True:
+                    try:
+                        sub = winreg.EnumKey(k, i)
+                    except OSError:
+                        break
+                    i += 1
+                    if sub not in [s for s, _ in out]:
+                        out.append((sub, key + "\\" + sub))
+        except OSError:
+            continue
+    return out
+
+
+# folders the Rockstar Games Launcher keeps for itself, not games
+ROCKSTAR_NOT_GAMES = {"launcher", "social club", "rockstar games launcher"}
+
+
+def find_rockstar(program_dirs=None):
+    """Games from the Rockstar Games Launcher (GTA V, GTA V Enhanced, Red Dead Redemption 2...): each title's
+    InstallFolder in the registry under Rockstar Games, plus the launcher's default Program Files folder."""
+    games, seen = [], set()
+
+    def add(name, path):
+        if path and os.path.isdir(path) and os.path.normcase(os.path.normpath(path)) not in seen:
+            seen.add(os.path.normcase(os.path.normpath(path)))
+            games.append(InstalledGame(name, os.path.normpath(path), "Rockstar Games Launcher"))
+
+    if winreg is not None:
+        for key in (r"SOFTWARE\WOW6432Node\Rockstar Games", r"SOFTWARE\Rockstar Games"):
+            for sub, full in _reg_subkeys(winreg.HKEY_LOCAL_MACHINE, key):
+                if sub.lower() not in ROCKSTAR_NOT_GAMES:
+                    for value in ("InstallFolder", "InstallFolderEpic", "InstallFolderSteam", "InstallLocation"):
+                        add(sub, _reg_value(winreg.HKEY_LOCAL_MACHINE, full, value))
+        # the launcher also registers each game it installs with Windows' Apps list, publisher Rockstar Games
+        for key in (r"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall",
+                    r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"):
+            for _sub, full in _reg_subkeys(winreg.HKEY_LOCAL_MACHINE, key):
+                if "rockstar" not in str(_reg_value(winreg.HKEY_LOCAL_MACHINE, full, "Publisher") or "").lower():
+                    continue
+                name = _reg_value(winreg.HKEY_LOCAL_MACHINE, full, "DisplayName") or ""
+                if name.lower() not in ROCKSTAR_NOT_GAMES and "launcher" not in name.lower() and "social club" not in name.lower():
+                    add(name, (_reg_value(winreg.HKEY_LOCAL_MACHINE, full, "InstallLocation") or "").strip('"'))
+    if program_dirs is None:
+        program_dirs = [os.path.join(os.environ.get(v, d), "Rockstar Games")
+                        for v, d in (("PROGRAMFILES", r"C:\Program Files"), ("PROGRAMFILES(X86)", r"C:\Program Files (x86)"))]
+        # games put on another drive from the launcher's install dialog
+        if os.name == "nt":
+            for d in string.ascii_uppercase:
+                for sub in (r"Program Files\Rockstar Games", "Rockstar Games", r"Games\Rockstar Games"):
+                    program_dirs.append("%s:\\%s" % (d, sub))
+    for root in program_dirs:
+        if not os.path.isdir(root):
+            continue
+        for name in sorted(os.listdir(root)):
+            path = os.path.join(root, name)
+            if name.lower() in ROCKSTAR_NOT_GAMES or not os.path.isdir(path):
+                continue
+            if any(f.lower().endswith(".exe") for f in os.listdir(path)):
+                add(name, path)
+    if os.name == "nt" and program_dirs is not None:
+        # GTA V moved straight onto a drive or a Games folder, outside any launcher's own folder
+        for d in string.ascii_uppercase:
+            for sub in ("Grand Theft Auto V", "Grand Theft Auto V Enhanced", r"Games\Grand Theft Auto V", r"Games\Grand Theft Auto V Enhanced"):
+                path = "%s:\\%s" % (d, sub)
+                if os.path.isfile(os.path.join(path, "GTA5.exe")) or os.path.isfile(os.path.join(path, "GTA5_Enhanced.exe")):
+                    add(os.path.basename(path), path)
+    return games
+
+
+def find_ubisoft():
+    """Games from Ubisoft Connect: each install's InstallDir in the registry under Ubisoft\\Launcher\\Installs."""
+    games = []
+    if winreg is None:
+        return games
+    for key in (r"SOFTWARE\WOW6432Node\Ubisoft\Launcher\Installs", r"SOFTWARE\Ubisoft\Launcher\Installs"):
+        for _sub, full in _reg_subkeys(winreg.HKEY_LOCAL_MACHINE, key):
+            path = _reg_value(winreg.HKEY_LOCAL_MACHINE, full, "InstallDir")
+            if path and os.path.isdir(path):
+                path = os.path.normpath(path)
+                games.append(InstalledGame(os.path.basename(path) or path, path, "Ubisoft Connect"))
+    return games
+
+
 def find_xbox(drives=None):
     """Xbox app / Microsoft Store games installed to <drive>:\\XboxGames (where Forza usually lives)."""
     if drives is None:
@@ -167,7 +260,7 @@ def match_recipes(games, recipes):
 
 def scan(recipes, manual_folders=()):
     games = []
-    for finder in (find_steam, find_epic, find_gog, find_xbox, find_minecraft):
+    for finder in (find_steam, find_epic, find_gog, find_rockstar, find_ubisoft, find_xbox, find_minecraft):
         try:
             games.extend(finder())
         except Exception:  # one broken launcher must not hide the others

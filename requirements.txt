@@ -4,3 +4,4 @@ pillow>=10.0
 icoextract>=0.1.4
 cryptography>=42
 zstandard>=0.22
+truststore>=0.9

@@ -1290,6 +1290,26 @@ class PackTests(unittest.TestCase):
         self.assertFalse(os.path.exists(m.target_path))
         self.assertEqual(open(os.path.join(base, "Game.exe")).read(), "exe")
 
+    def test_rockstar_launcher_games_are_found(self):
+        from gamemerger import detect
+        root = tempfile.mkdtemp()
+        os.makedirs(os.path.join(root, "Grand Theft Auto V"))
+        open(os.path.join(root, "Grand Theft Auto V", "PlayGTAV.exe"), "w").close()
+        os.makedirs(os.path.join(root, "Launcher"))
+        open(os.path.join(root, "Launcher", "Launcher.exe"), "w").close()
+        os.makedirs(os.path.join(root, "Empty folder"))
+        found = detect.find_rockstar([root])
+        self.assertEqual([(g.name, g.source) for g in found], [("Grand Theft Auto V", "Rockstar Games Launcher")])
+        self.assertIn(detect.find_rockstar, detect.scan.__code__.co_consts + tuple(detect.scan.__globals__.values()))
+
+    def test_updater_finds_the_release_without_the_api(self):
+        from gamemerger import updater
+        self.assertEqual(updater._tag_from_page("https://github.com/LKZ007/game-merger/releases/tag/v3.51.0"), "v3.51.0")
+        info = updater._info("v3.51.0")
+        self.assertTrue(info["url"].endswith("/releases/download/v3.51.0/FrankensteinSetup.exe"))
+        self.assertEqual(info["version"], "3.51.0")
+        self.assertIn("antivirus", updater._why(Exception("[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed")))
+
     def test_inplace_merges_are_never_packed(self):
         m = installer.Merge({"id": "x", "name": "X", "mode": installer.MODE_INPLACE, "base_path": "/", "target_path": "/"})
         self.assertIn("original", m.can_pack())
