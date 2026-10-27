@@ -2,8 +2,8 @@
 // physical brawling on top of GTA V's own Euphoria ragdolls. It only runs where settings.json has "empire": true.
 //
 // J (controller: double-tap D-pad down) flops you over, like letting go in Gang Beasts; press it again while down
-// to stay down longer. Punches, kicks and melee weapons send people flying instead of just knocking them back, and
-// a sprinting shoulder barge knocks over whoever you run into. Shift+J turns the launches on and off.
+// to stay down longer. Punches, kicks and melee weapons send people (and loose props) flying instead of just knocking
+// them back, and a sprinting shoulder barge knocks over whoever you run into. Shift+J turns the launches on and off.
 // Everything it does is logged to scripts/Frankenstein/ragdoll-debug.txt.
 using System;
 using System.Collections.Generic;
@@ -103,6 +103,16 @@ public class FrankensteinRagdoll : Script
             p.Ragdoll(3500, RagdollType.Relax);
             p.ApplyForce(away * power + new Vector3(0, 0, power * 0.45f), Vector3.Zero, ForceType.MaxForceRot2);
             Say("launched " + p.Handle + (group == WeaponGroup.Melee ? " (weapon)" : " (fists)"));
+        }
+        // bins, cones, boxes and chairs you hit go flying too
+        foreach (var o in World.GetNearbyProps(me.Position, 2.5f))
+        {
+            if (o == null || !o.Exists() || !o.HasBeenDamagedBy(me)) continue;
+            o.ClearLastWeaponDamage();
+            var away = o.Position - me.Position;
+            away.Z = 0;
+            away.Normalize();
+            o.ApplyForce(away * 8f + new Vector3(0, 0, 3f), Vector3.Zero, ForceType.MaxForceRot2);
         }
     }
 

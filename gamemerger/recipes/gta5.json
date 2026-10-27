@@ -80,7 +80,7 @@
         "schedule 1",
         "hood warfare"
       ],
-      "description": "Los Santos as Schedule I's business and Hood Warfare's gang war: buy labs and farms, cook and grow product, sell it on the street, hire workers and dealers, and take turf from GTA V's own gangs in timed turf wars, with police heat and raids. Built by Frankenstein's own GTA V script from GTA V's own people, places and guns; nothing is copied from Schedule I or Hood Warfare. Story mode only, offline.",
+      "description": "Los Santos as Schedule I's business and Hood Warfare's gang war, laid out like the concept city map: buy labs, farms and houses, cook, mix and grow product, win customers and sell on the street, hire workers and a crew, take turf from GTA V's gangs and the La Sombra cartel, buy supercars and survive the nights. Built by Frankenstein's own GTA V scripts from GTA V's own people, places, cars and guns; nothing is copied from Schedule I or Hood Warfare. Plays in your own GTA V: the mods go in only while you play from Frankenstein, offline in Story mode.",
       "frameworks": [
         "scripthookv",
         "shvdn"
@@ -128,6 +128,11 @@
           "builtin": "Once you're big enough, the La Sombra cartel wants a meeting at the Sandy Shores airfield. Pay them 15% and they keep the gangs off your turf, or tell them to get lost: then they ambush you, and you hit their three stashes and finally their boss at a ranch in the hills. You can stop paying later from the F5 menu."
         },
         {
+          "name": "The city map",
+          "search": "",
+          "builtin": "The expanded city map laid over Los Santos and Blaine County: Downtown, Shopping & Nightlife (Vinewood Boulevard), Uptown Hills (Vinewood Hills), Lake Park and the Suburbs (Mirror Park), the Construction Zone, Port, Airport, Industrial District, Trailer Park (Sandy Shores), Farms (Grapeseed) and the Countryside, each discovered as you go. Every gang's HQ is on the map (Crips HQ: the Families, Bloods HQ: the Ballas, Yakuza HQ: Kkangpae, Mafia HQ, London HQ, Outlaw HQ: the Lost MC, Cartel HQ: La Sombra's ranch). Four houses to buy for rent, a bed and a raid-proof stash, and eight hidden places with locked caches. GTA V's world is one connected map already; brand-new land would need a map mod."
+        },
+        {
           "name": "Police heat and raids",
           "search": "",
           "builtin": "Dealing and fighting raise heat; high heat brings police raids on your labs and a wanted level. Heat cools off over time."
@@ -140,12 +145,12 @@
         {
           "name": "Vehicles",
           "search": "vehicle",
-          "builtin": "F5 > Vehicles: a garage of 13 GTA V cars and bikes that unlock by rank, from a Sanchez and lowriders to an armoured Kuruma, an Insurgent and a T20. Buy once, call it to you any time, upgrade engine, brakes, gearbox, suspension and armour, and paint it purple, black or gold. These are GTA V's own models (car mods can add more)."
+          "builtin": "Premium Deluxe Motorsport sells 30 of GTA V's own cars, picked to match the supercar sheet: the Progen T20 (McLaren P1-style), Pegassi Zentorno (Aventador-style), Grotti Itali GTB (Ferrari-style), Pegassi Osiris (Pagani Huayra-style), Pegassi Tempesta (Huracán-style), Truffade Thrax (Chiron-style), Pfister Comet (911-style), Obey 9F (R8-style), Invetero Coquette D10 (Corvette C8-style), Benefactor Dubsta (G63-style), Enus Jubilee (Cullinan-style), Baller ST (Range Rover Sport-style), plus luxury saloons, muscle cars, lowriders, vans, trucks, bikes and armoured cars, each in the sheet's colour, with its top speed and 0-60. Buy them there, call any you own from F5 > Vehicles, and customise the one you're in: performance, wheels, spoiler, bumpers, skirts, exhaust, bonnet, paint, tint, violet neon and repairs. A speedometer shows while you drive. GTA V's own handling, traffic and police chases. Car mods can add licensed real cars (picks below)."
         },
         {
           "name": "Survival",
           "search": "",
-          "builtin": "Outward-style needs in Story: hunger, thirst and energy bars on the HUD. Eat and drink from the F5 menu (snacks and drinks from your properties) or at GTA V's vending machines and food stands (E). Empty bars hurt you and stop you sprinting; no energy makes you stumble, so rest at a property. Off in Creative unless you turn it on."
+          "builtin": "Outward-style needs in Story: hunger, thirst, energy and body temperature bars on the HUD. Cold nights, rain, snow, swimming and mountain tops chill you, the desert sun overheats you, and cars, buildings and campfires warm you. Eat and drink from the F5 menu or at vending machines and food stands; search dumpsters for scrap, cloth and food; hunt animals for meat; craft bandages, lockpicks and campfires and cook on them (F5 > Crafting). Off in Creative unless you turn it on."
         },
         {
           "name": "Gang Beasts ragdoll",

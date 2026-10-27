@@ -686,8 +686,8 @@ class FeatureChecklist(unittest.TestCase):
         # story: 18 objectives with Uncle Ray, and old saves carried over
         self.assertIn("static readonly string[] QuestRay", emp)
         self.assertIn("static int OldQuest(int q)", emp)
-        self.assertIn('"story=2"', emp)
-        self.assertEqual(emp.count("case 17: return Rank"), 1)
+        self.assertIn('"story=3"', emp)   # 3.53 added three objectives; older saves are moved along
+        self.assertEqual(emp.count("case 20: return Rank"), 1)
         # cartel arc, crew, arsenal, vehicles, survival
         for bit in ("void CartelTick(Ped me)", "bool CartelInteract(Ped me)", "void CartelWar()", "void CallCrew()", "crewGuard",
                     "void ArsenalMenu()", "void VehiclesMenu()", "static readonly Ride[] Rides", "void Survival(Ped me)", "void UseVend()",
@@ -708,6 +708,42 @@ class FeatureChecklist(unittest.TestCase):
         names = [s["name"] for s in theme["slots"]]
         for n in ("Mixing and effects", "Customers and addiction", "Your crew", "La Sombra (cartel)", "Vehicles", "Survival", "Gang Beasts ragdoll"):
             self.assertIn(n, names)
+
+    def test_3521_extension_tile_keeps_the_host(self):
+        js = read(PKG, "web", "app.js")
+        self.assertIn("Only Make host changes the Host.", js)
+        self.assertIn("state.partner = x.key", js)
+        self.assertNotIn("th.id !== state.themeId", js)  # picking the theme already shown made that game the Host
+        self.assertIn('"source_keys"', read(PKG, "api.py"))
+
+    def test_353_gta_empire_ready_made_and_brief(self):
+        api = read(PKG, "api.py")
+        inst = read(PKG, "installer.py")
+        # levy's GTA V mode: their own install, modded only while played from Frankenstein, put back exactly after
+        for bit in ('MODE_SESSION = "session"', "def attach(", "def detach(", "top_before", "made_dirs", '"hide"'):
+            self.assertIn(bit, inst)
+        for bit in ("def _auto_empire(", "MODE_SESSION", "def _attach(", "rockstar_logos.bik", "Merge.load(mid).detach()",
+                    "took its mods back out of your game folder", "def auto_empire_status(", "def auto_empire_now("):
+            self.assertIn(bit, api)
+        self.assertIn("-scOfflineOnly", read(PKG, "recipes", "gta5.json"))   # offline Story only, never Online
+        js = read(PKG, "web", "app.js")
+        self.assertIn("function empireCard(", js)
+        self.assertIn('"session"].includes(m.mode)', js)
+        emp = read(PKG, "mods", "gta5", "FrankensteinEmpire.3.cs")
+        # levy's supercar sheet, as GTA V's lookalikes, sold at the dealership
+        for car in ('"t20"', '"zentorno"', '"italigtb"', '"osiris"', '"tempesta"', '"thrax"', '"comet2"', '"ninef"', '"coquette4"',
+                    '"dubsta2"', '"jubilee"', '"baller7"', "Dealership", "void TuneMenu(", "void Speedo("):
+            self.assertIn(car, emp)
+        # levy's city map: districts, gang HQs, houses, hidden places
+        for bit in ('"Crips HQ"', '"Bloods HQ"', '"Yakuza HQ"', '"Mafia HQ"', '"London HQ"', '"Outlaw HQ"', '"Shopping & Nightlife"',
+                    '"Uptown Hills"', '"Lake Park"', '"Construction Zone"', '"Trailer Park"', "void MapLayer()", "void Explore(",
+                    "void HouseMenu(", "void OpenCache("):
+            self.assertIn(bit, emp)
+        # survival part two and gang tactics
+        for bit in ("void Temperature(", "void Search()", "void Harvest(", "void CraftMenu()", "prop_beach_fire", "static void Tactics(",
+                    "void GangCars(", '"story=3"', "quest += 3"):
+            self.assertIn(bit, emp)
+        self.assertIn("GetNearbyProps", read(PKG, "mods", "gta5", "FrankensteinRagdoll.3.cs"))
 
 if __name__ == "__main__":
     unittest.main()

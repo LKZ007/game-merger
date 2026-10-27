@@ -23,6 +23,7 @@ from . import paths
 MODE_HARDLINK = "hardlink"  # separate copy that shares unchanged files with the original (almost no extra space)
 MODE_COPY = "copy"          # separate full copy (safest, needs as much space as the game)
 MODE_INPLACE = "inplace"    # mod the original install, with backups of anything replaced
+MODE_SESSION = "session"    # your own install, modded only while you play from Frankenstein (put back exactly after)
 
 COPY_MARKER = ".gamemerger-copy"
 IGNORED_EXT = {".txt", ".md", ".jpg", ".jpeg", ".png", ".gif", ".url", ".pdf", ".webp", ".html", ".nfo"}
@@ -324,11 +325,17 @@ class Merge:
     name = property(lambda s: s.data["name"])
     mode = property(lambda s: s.data["mode"])
     base_path = property(lambda s: s.data["base_path"])
-    target_path = property(lambda s: s.data["target_path"])
+    # a session merge's files live in its own store between plays, and in the game folder only while it runs
+    target_path = property(lambda s: s.data["target_path"] if s.data["mode"] != MODE_SESSION or s.data.get("attached")
+                           else s.session_store)
 
     @staticmethod
     def record_dir(merge_id):
         return os.path.join(paths.sub("merges"), merge_id)
+
+    @property
+    def session_store(self):
+        return os.path.join(self.record_dir(self.id), "session")
 
     @property
     def backup_dir(self):
@@ -360,7 +367,7 @@ class Merge:
     @classmethod
     def create(cls, recipe, theme, base_path, target_parent, mode, name, appid="", log=_noop, progress=_noop, trace=_noop):
         name = safe_name(name)
-        if mode == MODE_INPLACE:
+        if mode in (MODE_INPLACE, MODE_SESSION):
             target = base_path
         else:
             target = os.path.join(target_parent, name)
@@ -382,7 +389,11 @@ class Merge:
             "files": {}, "installs": [], "status": "creating",
         })
         m.save()
-        if mode != MODE_INPLACE:
+        if mode == MODE_SESSION:
+            os.makedirs(m.session_store, exist_ok=True)
+            log("Your own %s stays as it is: the mods go in only while you play it from Frankenstein, and come out "
+                "again when you close it." % recipe.name)
+        elif mode != MODE_INPLACE:
             os.makedirs(target, exist_ok=True)
             with open(os.path.join(target, COPY_MARKER), "w", encoding="utf-8") as f:
                 f.write("Made by Frankenstein from %s\n" % base_path)
@@ -400,7 +411,7 @@ class Merge:
                     with open(tmp, "w") as f:
                         f.write(appid)
                     m.put_file(tmp, os.path.relpath(os.path.join(os.path.dirname(exe), "steam_appid.txt"), target))
-        else:
+        elif mode == MODE_INPLACE:
             log("Modding the original folder. Anything replaced is backed up first.")
         m.data["status"] = "ready"
         m.save()
@@ -411,6 +422,15 @@ class Merge:
         rel = safe_rel(rel)
         dest = os.path.join(self.target_path, rel)
         files = self.data["files"]
+        if self.mode == MODE_SESSION:
+            if self.data.get("attached"):
+                self._session_place_over(rel)
+            files.setdefault(rel, {"replaced": False})
+            if os.path.lexists(dest):
+                os.remove(dest)
+            os.makedirs(os.path.dirname(dest), exist_ok=True)
+            shutil.copy2(src, dest)
+            return
         if rel not in files:
             entry = {"replaced": False}
             if os.path.lexists(dest):
@@ -487,6 +507,116 @@ class Merge:
         p = os.path.join(self.record_dir(self.id), "archives", install["kept"])
         return p if os.path.isfile(p) else None
 
+    # ---------- session merges: your own game folder, modded only while you play ----------
+
+    def _session_place_over(self, rel):
+        """While attached: a game file about to be covered by one of this merge's is moved to the backup first,
+        once (a file this merge placed itself is just replaced)."""
+        placed = self.data.setdefault("placed", [])
+        if rel in placed:
+            return
+        real = os.path.join(self.data["target_path"], rel)
+        if os.path.lexists(real):
+            b = os.path.join(self.backup_dir, rel)
+            os.makedirs(os.path.dirname(b), exist_ok=True)
+            if os.path.lexists(b):
+                os.remove(b)
+            shutil.move(real, b)
+            self.data.setdefault("session_backups", []).append(rel)
+        self._session_note_dirs(rel)
+        placed.append(rel)
+
+    def _session_note_dirs(self, rel):
+        """Folders this merge creates in the game folder: everything in them comes back out with it."""
+        root, made = self.data["target_path"], self.data.setdefault("made_dirs", [])
+        parts = rel.replace("\\", "/").split("/")[:-1]
+        for i in range(1, len(parts) + 1):
+            d = "/".join(parts[:i])
+            if not os.path.isdir(os.path.join(root, *d.split("/"))):
+                if d not in made:
+                    made.append(d)
+                break
+
+    def attach(self, log=_noop):
+        """Put this merge's files into your game folder for one play. Anything they cover is backed up first, and a
+        list of what was there is kept, so detach() puts the folder back exactly."""
+        if self.mode != MODE_SESSION or self.data.get("attached"):
+            return
+        root, store = self.data["target_path"], self.session_store
+        if not os.path.isdir(root):
+            raise MergeError("Couldn't find your game at %s." % root)
+        self.data.update(placed=[], session_backups=[], made_dirs=[], top_before=sorted(os.listdir(root)),
+                         hidden=[])
+        rels = []
+        for d, _dirs, files in os.walk(store):
+            for f in files:
+                rels.append(os.path.relpath(os.path.join(d, f), store).replace(os.sep, "/"))
+        self.data["attached"] = True   # saved before the first move, so a crash part way is still put back
+        self.save()
+        for rel in sorted(rels):
+            self._session_place_over(rel)
+            dest = os.path.join(root, *rel.split("/"))
+            os.makedirs(os.path.dirname(dest), exist_ok=True)
+            shutil.move(os.path.join(store, *rel.split("/")), dest)
+        for rel in self.data.get("hide", []):
+            # game files this merge switches off while it runs (GTA V's intro movie): kept in the backup
+            real = os.path.join(root, *rel.split("/"))
+            if os.path.isfile(real):
+                b = os.path.join(self.backup_dir, rel)
+                os.makedirs(os.path.dirname(b), exist_ok=True)
+                if os.path.lexists(b):
+                    os.remove(b)
+                shutil.move(real, b)
+                self.data["hidden"].append(rel)
+        self.save()
+        log("Added %d mod file(s) to %s for this play." % (len(rels), root))
+
+    def detach(self, log=_noop):
+        """Take this merge's files (and anything the game wrote into folders it made) back out of your game folder,
+        and put every file they covered back. Your game folder ends up as it was before Play."""
+        if self.mode != MODE_SESSION or not self.data.get("attached"):
+            return
+        root, store = self.data["target_path"], self.session_store
+
+        def keep(real, rel):
+            dest = os.path.join(store, *rel.split("/"))
+            os.makedirs(os.path.dirname(dest), exist_ok=True)
+            if os.path.isdir(dest) and not os.path.islink(dest):
+                shutil.rmtree(dest)
+            elif os.path.lexists(dest):
+                os.remove(dest)
+            shutil.move(real, dest)
+
+        for rel in self.data.get("placed", []):
+            real = os.path.join(root, *rel.split("/"))
+            if os.path.lexists(real):
+                keep(real, rel)
+        # what the game and the mods wrote while it ran: inside folders this merge made, and new files at the top
+        before = set(self.data.get("top_before", []))
+        for d in self.data.get("made_dirs", []):
+            real = os.path.join(root, *d.split("/"))
+            if os.path.isdir(real):
+                for dd, _dirs, files in os.walk(real):
+                    for f in files:
+                        p = os.path.join(dd, f)
+                        keep(p, os.path.relpath(p, root).replace(os.sep, "/"))
+                shutil.rmtree(real, ignore_errors=True)
+        if before:
+            for name in os.listdir(root):
+                if name not in before:
+                    keep(os.path.join(root, name), name)
+        for rel in self.data.get("session_backups", []) + self.data.get("hidden", []):
+            b = os.path.join(self.backup_dir, *rel.split("/"))
+            real = os.path.join(root, *rel.split("/"))
+            if os.path.lexists(b):
+                os.makedirs(os.path.dirname(real), exist_ok=True)
+                if os.path.lexists(real):
+                    os.remove(real)
+                shutil.move(b, real)
+        self.data.update(attached=False, placed=[], session_backups=[], made_dirs=[], hidden=[])
+        self.save()
+        log("Your game folder is back as it was.")
+
     def undo(self, log=_noop):
         """Remove everything Frankenstein added and put replaced files back."""
         self.must_be_unpacked()
@@ -559,7 +689,7 @@ class Merge:
 
     def can_pack(self):
         """Why this merge can't be packed, or None if it can."""
-        if self.mode == MODE_INPLACE:
+        if self.mode in (MODE_INPLACE, MODE_SESSION):
             return "it mods the original game folder, so there's no copy to pack"
         if self.packed:
             return "it's already packed"
@@ -755,7 +885,7 @@ class Merge:
 
     def unmarked(self):
         """True when this merge's copy is there but has no Frankenstein marker (copies adopted from older versions)."""
-        return (self.mode != MODE_INPLACE and os.path.isdir(self.target_path)
+        return (self.mode not in (MODE_INPLACE, MODE_SESSION) and os.path.isdir(self.target_path)
                 and not os.path.isfile(os.path.join(self.target_path, COPY_MARKER)))
 
     def why_not_delete_anyway(self, protect=()):
@@ -784,6 +914,8 @@ class Merge:
         marker (one adopted from an older version) is only deleted with force, after the safety checks above."""
         if self.mode == MODE_INPLACE:
             self.undo(log)
+        elif self.mode == MODE_SESSION:
+            self.detach(log)   # its files only ever live in its own record folder between plays
         else:
             if os.path.isfile(os.path.join(self.target_path, COPY_MARKER)):
                 shutil.rmtree(self.target_path)

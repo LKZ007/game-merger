@@ -1,5 +1,5 @@
 "use strict";
-window.APP_BUILD = "3.52.0";  // must match index.html: a mixed-up install is caught at start
+window.APP_BUILD = "3.53.0";  // must match index.html: a mixed-up install is caught at start
 
 // ---------- talking to the Python side ----------
 const TOKEN = document.querySelector('meta[name="gm-token"]')?.content;
@@ -212,7 +212,8 @@ function renderLibrary() {
         <div class="row"><button class="btn primary" id="addFolder2">Add game folder</button></div>
       </div></section>`;
   }
-  const partner = t?.source_key ?? null;
+  // the Extension tile you picked, if it's one of this theme's (a game can be installed twice, or have a merge copy)
+  const partner = t ? ((t.source_keys || []).includes(state.partner) ? state.partner : t.source_key ?? null) : null;
   const tiles = state.games.map((x) => `
       <button class="tile ${x.base ? "base" : ""} ${x.key === state.selected ? "selected picked" : ""} ${x.key === partner ? "partner picked" : ""}" data-key="${x.key}" data-cover="${x.key}" aria-pressed="${x.key === state.selected}">
         ${x.key === state.selected ? `<span class="pick-badge host">Host</span>` : x.key === partner ? `<span class="pick-badge">Extension</span>` : ""}
@@ -232,9 +233,15 @@ function renderLibrary() {
   renderOwnedShelf();
   el.querySelectorAll(".tile").forEach((b) => (b.onclick = () => {
     const x = game(b.dataset.key);
-    // a game that one of the host's themes merges in: pick it as the second game
-    const th = !x || x.key === state.selected ? null : g?.themes.find((y) => y.source_key === x.key);
-    if (th && th.id !== state.themeId) { state.themeId = th.id; return renderLibrary(); }
+    if (!x || x.key === state.selected) return;
+    // with a Host picked, another game's tile is the Extension: the Host's ready-made theme for it comes first
+    // (GTA V + Schedule I is the empire merge). Only Make host changes the Host.
+    if (g) {
+      const has = (y) => (y.source_keys || [y.source_key]).includes(x.key);
+      const th = g.themes.find((y) => has(y) && !y.id.startsWith("style-")) || g.themes.find(has);
+      if (th) { state.themeId = th.id; state.partner = x.key; return renderLibrary(); }
+      return toast(`${g.name} has no merge with ${x.name} yet. To make ${x.name} the Host, press Make host on it.`);
+    }
     if (!x.base) return toast(`Frankenstein couldn't read ${x.name}'s folder. Try Rescan.`);
     state.selected = x.key;
     state.themeId = x.themes[0]?.id;
@@ -244,6 +251,7 @@ function renderLibrary() {
     e.stopPropagation();
     const x = game(h.dataset.host);
     state.selected = x.key;
+    state.partner = null;
     state.themeId = x.themes[0]?.id;
     renderLibrary();
   }));
@@ -987,7 +995,7 @@ async function loadMerges() {
               ${m.needs_upgrade ? `<button data-act="upgrade" title="Give this merge everything new merges get. Mods and saves stay as they are.">Upgrade</button>` : ""}
               <button data-act="folder">Open folder</button>
               <hr>
-              ${m.packed?.on ? `<button data-act="unpack">Unpack now</button>` : m.mode !== "inplace" && !m.playing ? `<button data-act="pack" title="Keep only what this merge changed and delete the copy. Play rebuilds it from your installed game.">Pack away to save space</button>` : ""}
+              ${m.packed?.on ? `<button data-act="unpack">Unpack now</button>` : !["inplace", "session"].includes(m.mode) && !m.playing ? `<button data-act="pack" title="Keep only what this merge changed and delete the copy. Play rebuilds it from your installed game.">Pack away to save space</button>` : ""}
               <button data-act="undo">Undo all mods</button>
               <button data-act="delete" class="danger">Delete</button>
             </div></div>
@@ -1000,9 +1008,11 @@ async function loadMerges() {
       </div>
     </div>`).join("");
   const now = state.merges.find((m) => m.playing);
+  const emp = await call("auto_empire_status").catch(() => null);
   el.innerHTML = `<div class="page"><div class="row" style="justify-content:space-between"><h1>My merges</h1><button class="btn" id="importBtn">Open a merge from a friend</button></div>
     <p class="lede">Every merge can be played, added to, or rolled back, and each one keeps its own save files. Deleting a merge never touches your original game.</p>
     ${now ? `<div class="playing-banner" role="status"><span class="dot" aria-hidden="true"></span><div class="grow"><strong>${esc(now.name)} is running.</strong> <span class="muted">Its own saves are loaded. Your normal saves come back when you close the game.</span></div></div>` : ""}
+    ${empireCard(emp)}
     ${items || `<div class="empty">No merges yet. Pick a base game in the Library and press Merge.</div>`}</div>`;
   el.querySelectorAll("[data-merge-cover]").forEach(async (c) => {
     if (!c.dataset.mergeCover) return;
@@ -1019,6 +1029,22 @@ async function loadMerges() {
     if (open) menu.querySelector("button")?.focus();
   }));
   $("#importBtn").onclick = async () => { const p = await call("pick_share_file"); if (p) importMerge(p); };
+  if ($("#empNow")) $("#empNow").onclick = async () => { try { await call("auto_empire_now"); } catch (e) { toast(errText(e)); } loadMerges(); };
+  if ($("#empHide")) $("#empHide").onclick = async () => { await call("auto_empire_dismiss").catch(() => null); loadMerges(); };
+  if (emp?.state === "making") setTimeout(() => { if (state.view === "merges") loadMerges(); }, 4000);
+}
+
+// The ready-made GTA V empire merge: made by itself once GTA V is found; this card shows it being made, or why it stopped.
+function empireCard(e) {
+  if (!e || !["making", "failed"].includes(e.state)) return "";
+  const pct = e.progress ? Math.round((100 * e.progress[0]) / Math.max(1, e.progress[1])) : null;
+  const body = e.state === "making"
+    ? `Frankenstein is making it for you: Script Hook V, Script Hook V .NET and the empire scripts. They go into your own GTA V only while you play it from here, and come back out when you close it.${pct != null ? ` ${pct}%` : ""}<div class="muted small">${esc(e.line || "")}</div>`
+    : `Making it stopped: ${esc(e.error || "")}`;
+  return `<div class="card merge empire-ready" role="status"><div class="merge-info"><div class="merge-name">${esc(e.name)}</div>
+      <div class="muted">GTA V × Schedule I × Hood Warfare · Story mode, offline</div><p>${body}</p></div>
+      ${e.state === "making" ? "" : `<div class="merge-actions"><button class="btn primary" id="empNow">Try again</button>
+        <button class="btn ghost" id="empHide">Not now</button></div>`}</div>`;
 }
 
 function closeMore() {

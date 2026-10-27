@@ -1,4 +1,19 @@
-## Frankenstein 3.52.0
+## Frankenstein 3.53.0
+
+- **GTA V x Schedule I x Hood Warfare comes ready made.** Once Frankenstein finds GTA V, it makes the merge by itself and puts it in My merges, ready to play.
+  - **It plays in your own GTA V, with no 100 GB copy.** The mods (Script Hook V, Script Hook V .NET and Frankenstein's scripts) go into your GTA V folder only while you play from Frankenstein. When the game closes, they come back out and every file they covered is put back, so your folder is exactly as before. Normal GTA V and GTA Online never see them. If Frankenstein closes while the game runs, it cleans up the next time it starts. Your Story saves are backed up first.
+  - **Straight into Story mode, offline.** The Rockstar intro movie is skipped and the game starts offline, so it never goes near GTA Online.
+- **Fixed: picking Schedule I next to GTA V made Schedule I the Host.** Clicking another game's tile now always picks it as the Extension. Only Make host changes the Host.
+- **The city from the concept map.** The districts on the map are laid over Los Santos and Blaine County, and each appears on GTA V's map once you discover it: Downtown, Shopping & Nightlife, Uptown Hills, Lake Park, the Suburbs, the Construction Zone, Port, Airport, the Industrial District, Trailer Park, Farms and the Countryside. Every gang's HQ is marked: Crips HQ (the Families), Bloods HQ (the Ballas), Yakuza HQ (Kkangpae), Outlaw HQ (the Lost MC), and two new crews, the Mafia and the London Firm. Cartel HQ is La Sombra's ranch.
+- **Houses and hidden places.** Four houses to buy that pay rent every hour, with a bed and a raid-proof stash. Eight hidden places, each with a locked cache to pick open.
+- **The supercar sheet.** Premium Deluxe Motorsport sells 30 of GTA V's own cars, chosen as the closest lookalikes of the sheet and painted in its colours: the T20 (P1-style), Zentorno (Aventador-style), Itali GTB (Ferrari-style), Osiris (Huayra-style), Tempesta (Huracán-style), Thrax (Chiron-style), Comet (911-style), 9F (R8-style), Coquette D10 (C8-style), Dubsta (G-Wagon-style), Jubilee (Cullinan-style) and Baller ST (Range Rover-style), plus luxury saloons, muscle cars, lowriders, vans, trucks, bikes and armoured cars. Each shows its top speed and 0-60 time. You can customise the car you're in (performance, wheels, spoiler, bumpers, skirts, exhaust, bonnet, paint, tint, violet neon) and repair it. There's a speedometer while you drive.
+- **Gangs fight smarter.** Gang crews take cover and push forward, and backup arrives in their own cars. Gangs at war with you jump your dealers.
+- **More survival.** A body temperature bar: cold nights, rain, snow, water and mountains chill you, the desert sun overheats you, and cars, buildings and campfires warm you up. Search dumpsters for scrap, cloth and food, and hunt animals for meat. Craft bandages, lockpicks and campfires, and cook on the campfire (F5 > Crafting).
+- **More story.** Three new objectives before Kingpin: buy a house, buy a car at the dealership, and find three hidden places. Existing saves move along. There's also a new cutscene for your first house.
+- **Ragdoll:** punches and melee hits now knock loose props flying too.
+- Not yet tested in the game: map positions (houses, HQs, hidden places), balance and car stats may need tuning.
+
+### Also in 3.52.0
 
 - **The GTA V Schedule I x Hood Warfare merge, built out.** Existing empires carry over (your story progress moves to the matching step of the longer story).
   - **Mixing.** At a property, add up to three ingredients to weed, meth or coke (cucumber, banana, energy drink, paracetamol, motor oil, chili, battery, glow sticks, gasoline). Each gives an effect that raises the price, changes how hooked people get, and costs a bit more per batch.

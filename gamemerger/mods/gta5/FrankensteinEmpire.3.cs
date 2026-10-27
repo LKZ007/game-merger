@@ -1,6 +1,7 @@
 // Frankenstein's GTA V empire: Schedule I's business and Hood Warfare's gangs, rebuilt inside GTA V's story mode.
 // Script Hook V .NET compiles it when the game starts (".3.cs"). It only runs in a merge whose Extension is
-// "Schedule I x Hood Warfare" (settings.json has "empire": true), offline, on Frankenstein's own copy of the game.
+// "Schedule I x Hood Warfare" (settings.json has "empire": true), offline in Story mode, and only while Frankenstein
+// plays the merge (its files leave the game folder again when the game closes).
 //
 // Business (Schedule I): buy a lab, buy supplies, grow weed, cook meth and coke, package it, sell it to people on
 // the street (walk up to someone and press E / D-pad right), hire a worker who keeps the lab running and dealers
@@ -26,8 +27,12 @@
 // addiction), 14 customers who take a free sample, get hooked and text orders, specialist workers (handler, cleaner),
 // resting at your properties, and La Sombra's cartel arc (pay 15% or fight: ambushes, three stashes, the boss).
 // From Hood Warfare: the La Mesa gun workshop's crates for the gangs, weapon kits (F5 > Arsenal), and a crew you hire,
-// gear up and call to fight beside you or leave guarding your turf. Plus a garage of rides to buy, call, upgrade and
-// paint (F5 > Vehicles), and Outward-style survival in Story (hunger, thirst, energy; vending machines work).
+// gear up and call to fight beside you or leave guarding your turf; gang crews take cover and arrive in their cars.
+// levy's city map over Los Santos: districts you discover, every gang's HQ (Crips, Bloods, Yakuza, Mafia, London,
+// Outlaw; Cartel is La Sombra's ranch), houses that pay rent, hidden places with caches, and Premium Deluxe Motorsport
+// selling GTA V's lookalikes of levy's supercar sheet, with wheels, body parts, paint, neon and repairs.
+// Outward-style survival in Story: hunger, thirst, energy and body temperature, vending machines, dumpsters to
+// search, animals to hunt, crafting (bandages, lockpicks, campfires) and cooking.
 using System;
 using System.Collections.Generic;
 using System.Drawing;
@@ -68,6 +73,9 @@ public class FrankensteinEmpire : Script
         public int Rep;                 // how they feel about you: -100 war, 0 neutral, 100 allies
         public WeaponHash Gun;
         public BlipColor Ring;          // its turf rings on the map
+        public string Hq = "", Car = "";  // its headquarters on levy's city map, and what its crews drive
+        public Vector3 HqAt;
+        public Blip HqBlip;
     }
 
     // the middle of each gang neighbourhood and how far it reaches, for the coloured turf rings on the map
@@ -77,7 +85,7 @@ public class FrankensteinEmpire : Script
         { "CHAMH", new[] { -150f, -1620f, 260f } }, { "STRAW", new[] { 90f, -1400f, 260f } }, { "DAVIS", new[] { 110f, -1760f, 280f } },
         { "RANCHO", new[] { 420f, -1880f, 260f } }, { "CYPRE", new[] { 820f, -2280f, 300f } }, { "EBURO", new[] { 1350f, -2050f, 280f } },
         { "EAST_V", new[] { 880f, -160f, 280f } }, { "STAB", new[] { 70f, 3700f, 200f } }, { "SANDY", new[] { 1800f, 3720f, 380f } },
-        { "KOREAT", new[] { -680f, -900f, 300f } },
+        { "KOREAT", new[] { -680f, -900f, 300f } }, { "DELPE", new[] { -1450f, -560f, 320f } }, { "ROCKF", new[] { -820f, -150f, 320f } },
     };
     readonly List<Blip> rings = new List<Blip>();
 
@@ -115,15 +123,20 @@ public class FrankensteinEmpire : Script
         new Lab { Id = "lamesa", Name = "La Mesa gun workshop", Sprite = 110, Kind = "guns", At = new Vector3(716f, -962f, 30.4f), Price = 75000, Rank = 4 },
     };
 
+    // GTA V's own gangs, plus two crews from levy's city map (the Mafia and the London firm), each with the HQ the map
+    // shows: Crips HQ is the Families' Grove Street, Bloods HQ the Ballas', Yakuza HQ the Kkangpae's Little Seoul,
+    // Outlaw HQ the Lost MC's Stab City. Cartel HQ is La Sombra's ranch (their story arc).
     readonly List<Gang> gangs = new List<Gang>
     {
-        new Gang { Id = "families", Name = "The Families", Model = "g_m_y_famca_01", Zones = new[] { "CHAMH", "STRAW" }, Color = Color.FromArgb(40, 180, 70), Gun = WeaponHash.MicroSMG, Ring = BlipColor.Green },
-        new Gang { Id = "ballas", Name = "Ballas", Model = "g_m_y_ballaorig_01", Zones = new[] { "DAVIS" }, Color = Color.FromArgb(150, 60, 200), Gun = WeaponHash.Pistol, Ring = BlipColor.Purple },
-        new Gang { Id = "vagos", Name = "Vagos", Model = "g_m_y_mexgoon_01", Zones = new[] { "RANCHO", "CYPRE" }, Color = Color.FromArgb(240, 200, 30), Gun = WeaponHash.AssaultRifle, Ring = BlipColor.Yellow },
-        new Gang { Id = "aztecas", Name = "Aztecas", Model = "g_m_y_azteca_01", Zones = new[] { "EBURO" }, Color = Color.FromArgb(60, 160, 230), Gun = WeaponHash.SawnOffShotgun, Ring = BlipColor.BlueLight },
-        new Gang { Id = "marabunta", Name = "Marabunta Grande", Model = "g_m_y_salvagoon_01", Zones = new[] { "EAST_V" }, Color = Color.FromArgb(70, 120, 230), Gun = WeaponHash.Pistol, Ring = BlipColor.BlueDark },
-        new Gang { Id = "lost", Name = "The Lost MC", Model = "g_m_y_lost_01", Zones = new[] { "STAB", "SANDY" }, Color = Color.FromArgb(200, 200, 200), Gun = WeaponHash.PumpShotgun, Ring = BlipColor.White },
-        new Gang { Id = "kkangpae", Name = "Kkangpae", Model = "g_m_y_korean_01", Zones = new[] { "KOREAT" }, Color = Color.FromArgb(220, 60, 60), Gun = WeaponHash.SMG, Ring = BlipColor.Red },
+        new Gang { Id = "families", Name = "The Families", Model = "g_m_y_famca_01", Zones = new[] { "CHAMH", "STRAW" }, Color = Color.FromArgb(40, 180, 70), Gun = WeaponHash.MicroSMG, Ring = BlipColor.Green, Hq = "Crips HQ", HqAt = new Vector3(-120f, -1560f, 33f), Car = "chino" },
+        new Gang { Id = "ballas", Name = "Ballas", Model = "g_m_y_ballaorig_01", Zones = new[] { "DAVIS" }, Color = Color.FromArgb(150, 60, 200), Gun = WeaponHash.Pistol, Ring = BlipColor.Purple, Hq = "Bloods HQ", HqAt = new Vector3(100f, -1900f, 21f), Car = "buccaneer" },
+        new Gang { Id = "vagos", Name = "Vagos", Model = "g_m_y_mexgoon_01", Zones = new[] { "RANCHO", "CYPRE" }, Color = Color.FromArgb(240, 200, 30), Gun = WeaponHash.AssaultRifle, Ring = BlipColor.Yellow, Hq = "Vagos HQ", HqAt = new Vector3(340f, -2040f, 21f), Car = "manana" },
+        new Gang { Id = "aztecas", Name = "Aztecas", Model = "g_m_y_azteca_01", Zones = new[] { "EBURO" }, Color = Color.FromArgb(60, 160, 230), Gun = WeaponHash.SawnOffShotgun, Ring = BlipColor.BlueLight, Hq = "Aztecas HQ", HqAt = new Vector3(1300f, -1700f, 54f), Car = "voodoo" },
+        new Gang { Id = "marabunta", Name = "Marabunta Grande", Model = "g_m_y_salvagoon_01", Zones = new[] { "EAST_V" }, Color = Color.FromArgb(70, 120, 230), Gun = WeaponHash.Pistol, Ring = BlipColor.BlueDark, Hq = "Marabunta HQ", HqAt = new Vector3(1080f, -320f, 67f), Car = "emperor" },
+        new Gang { Id = "lost", Name = "The Lost MC", Model = "g_m_y_lost_01", Zones = new[] { "STAB", "SANDY" }, Color = Color.FromArgb(200, 200, 200), Gun = WeaponHash.PumpShotgun, Ring = BlipColor.White, Hq = "Outlaw HQ", HqAt = new Vector3(65f, 3720f, 39.7f), Car = "daemon" },
+        new Gang { Id = "kkangpae", Name = "Kkangpae", Model = "g_m_y_korean_01", Zones = new[] { "KOREAT" }, Color = Color.FromArgb(220, 60, 60), Gun = WeaponHash.SMG, Ring = BlipColor.Red, Hq = "Yakuza HQ", HqAt = new Vector3(-700f, -880f, 23f), Car = "fugitive" },
+        new Gang { Id = "mafia", Name = "The Mafia", Model = "g_m_m_armgoon_01", Zones = new[] { "DELPE" }, Color = Color.FromArgb(120, 120, 130), Gun = WeaponHash.Pistol50, Ring = BlipColor.Grey, Hq = "Mafia HQ", HqAt = new Vector3(-1450f, -560f, 33f), Car = "schafter2" },
+        new Gang { Id = "london", Name = "The London Firm", Model = "s_m_m_highsec_01", Zones = new[] { "ROCKF" }, Color = Color.FromArgb(230, 230, 240), Gun = WeaponHash.CarbineRifle, Ring = BlipColor.Orange, Hq = "London HQ", HqAt = new Vector3(-820f, -150f, 37f), Car = "cognoscenti" },
     };
 
     // Story's ranks (Schedule I's ladder) and what each one unlocks
@@ -190,7 +203,7 @@ public class FrankensteinEmpire : Script
         if (!on) return;
         var me = Game.Player.Character;
         if (me == null || !me.Exists() || Game.IsLoading) return;
-        if (!loaded) { Load(); loaded = true; Begin(); Blips(); Look(); Say("loaded: " + labs.Count(l => l.Owned) + " labs, " + turf.Count + " turf, $" + earned + " earned, " + RankName + " (" + xp + " XP)"); }
+        if (!loaded) { Load(); loaded = true; Begin(); Blips(); MapLayer(); Look(); Say("loaded: " + labs.Count(l => l.Owned) + " labs, " + turf.Count + " turf, $" + earned + " earned, " + RankName + " (" + xp + " XP)"); }
         if (playing != null) { try { Scenes(me); } catch (Exception ex) { Say("cutscene: " + ex.Message); EndScene(); } return; }  // a cutscene owns the screen
         try
         {
@@ -203,6 +216,9 @@ public class FrankensteinEmpire : Script
             Customers(me);
             CrewTick();
             Survival(me);
+            Temperature(me);
+            Scavenge(me);
+            Explore(me);
             CartelTick(me);
             Interact(me);
             Hud(me);
@@ -394,11 +410,13 @@ public class FrankensteinEmpire : Script
             p.RelationshipGroup = enemies;
             p.Weapons.Give(rnd.Next(3) == 0 ? WeaponHash.AssaultRifle : g.Gun, 500, true, true);
             p.Armor = 40;
+            Tactics(p);
             p.Task.FightAgainst(me);
             p.AddBlip().Color = BlipColor.Red;
             warPeds.Add(p);
         }
         model.MarkAsNoLongerNeeded();
+        try { GangCars(g, me); } catch (Exception ex) { Say("gang cars: " + ex.Message); }
         warZone = zone;
         warGang = g;
         warEnds = Game.GameTime + WarMinutes * 60000;
@@ -465,6 +483,44 @@ public class FrankensteinEmpire : Script
         {
             Screen.ShowHelpTextThisFrame("~INPUT_CONTEXT~ Buy something to eat or drink");
             if (Game.IsControlJustPressed(GTA.Control.Context)) UseVend();
+            return;
+        }
+        if (dumpster != null && dumpster.Exists())
+        {
+            Screen.ShowHelpTextThisFrame("~INPUT_CONTEXT~ Search the dumpster");
+            if (Game.IsControlJustPressed(GTA.Control.Context)) Search();
+            return;
+        }
+        var animal = AnimalNear(me);
+        if (animal != null)
+        {
+            Screen.ShowHelpTextThisFrame("~INPUT_CONTEXT~ Take the meat");
+            if (Game.IsControlJustPressed(GTA.Control.Context)) Harvest(animal);
+            return;
+        }
+        var cache = SecretNear(me);
+        if (cache != null)
+        {
+            Screen.ShowHelpTextThisFrame("~INPUT_CONTEXT~ Pick the lock (" + lockpicks + " lockpicks)");
+            if (Game.IsControlJustPressed(GTA.Control.Context)) OpenCache(cache);
+            return;
+        }
+        var house = HouseNear(me);
+        foreach (var h in houses)
+            if (me.Position.DistanceTo(h.At) < 50f)
+                World.DrawMarker(MarkerType.VerticalCylinder, h.At - new Vector3(0, 0, 1f), Vector3.Zero, Vector3.Zero, new Vector3(1.4f, 1.4f, 0.5f), h.Owned ? Color.FromArgb(150, 160, 90, 250) : Color.FromArgb(150, 240, 240, 240));
+        if (house != null)
+        {
+            Screen.ShowHelpTextThisFrame("~INPUT_CONTEXT~ " + (house.Owned ? house.Name : "Look at " + house.Name + " ($" + house.Price.ToString("N0") + ")"));
+            if (Game.IsControlJustPressed(GTA.Control.Context)) HouseMenu(house);
+            return;
+        }
+        if (me.Position.DistanceTo(Dealership) < 40f)
+            World.DrawMarker(MarkerType.VerticalCylinder, Dealership - new Vector3(0, 0, 1f), Vector3.Zero, Vector3.Zero, new Vector3(1.6f, 1.6f, 0.6f), Color.FromArgb(150, 160, 90, 250));
+        if (me.Position.DistanceTo(Dealership) < 3f)
+        {
+            Screen.ShowHelpTextThisFrame("~INPUT_CONTEXT~ Premium Deluxe Motorsport: buy a car");
+            if (Game.IsControlJustPressed(GTA.Control.Context)) VehiclesMenu(true);
             return;
         }
         var cust = CustomerNear(me);
@@ -880,33 +936,73 @@ public class FrankensteinEmpire : Script
 
     // ---------- vehicles: buy, own, call and upgrade ----------
 
-    class Ride { public string Model, Name; public int Price, Rank; }
+    // GTA V's own cars, picked to match levy's supercar sheet: each is GTA's fictional lookalike of the car on the sheet
+    // (Model), with a fallback that's in every copy of the game, in the sheet's colour. Bought at the dealership.
+    class Ride { public string Model, Fallback, Name, Like, Cat; public int Price, Rank; public VehicleColor Color; }
+    static readonly string[] RideCats = { "Supercars", "Sports cars", "SUVs", "Luxury", "Muscle and lowriders", "Trucks and vans", "Motorcycles", "Armoured" };
     static readonly Ride[] Rides =
     {
-        new Ride { Model = "sanchez", Name = "Sanchez dirt bike", Price = 8000, Rank = 0 },
-        new Ride { Model = "speedo", Name = "Speedo delivery van", Price = 12000, Rank = 0 },
-        new Ride { Model = "chino2", Name = "Chino lowrider", Price = 15000, Rank = 1 },
-        new Ride { Model = "buccaneer2", Name = "Buccaneer lowrider", Price = 20000, Rank = 1 },
-        new Ride { Model = "faction2", Name = "Faction lowrider", Price = 25000, Rank = 2 },
-        new Ride { Model = "moonbeam2", Name = "Moonbeam custom van", Price = 22000, Rank = 2 },
-        new Ride { Model = "bati", Name = "Bati 801 bike", Price = 25000, Rank = 2 },
-        new Ride { Model = "granger", Name = "Granger SUV", Price = 35000, Rank = 3 },
-        new Ride { Model = "baller2", Name = "Baller", Price = 60000, Rank = 3 },
-        new Ride { Model = "dubsta2", Name = "Dubsta", Price = 80000, Rank = 4 },
-        new Ride { Model = "kuruma2", Name = "Armoured Kuruma", Price = 150000, Rank = 5 },
-        new Ride { Model = "insurgent2", Name = "Insurgent", Price = 250000, Rank = 7 },
-        new Ride { Model = "t20", Name = "T20 supercar", Price = 500000, Rank = 9 },
+        new Ride { Model = "t20", Name = "Progen T20", Like = "McLaren P1-style hybrid hypercar", Cat = "Supercars", Price = 220000, Rank = 6, Color = VehicleColor.MetallicOrange },
+        new Ride { Model = "zentorno", Fallback = "infernus", Name = "Pegassi Zentorno", Like = "Lamborghini Aventador-style supercar", Cat = "Supercars", Price = 190000, Rank = 5, Color = VehicleColor.MetallicLime },
+        new Ride { Model = "italigtb", Fallback = "turismor", Name = "Grotti Itali GTB", Like = "Ferrari SF90-style sports car", Cat = "Supercars", Price = 180000, Rank = 5, Color = VehicleColor.MetallicRaceYellow },
+        new Ride { Model = "osiris", Fallback = "entityxf", Name = "Pegassi Osiris", Like = "Pagani Huayra-style hypercar", Cat = "Supercars", Price = 240000, Rank = 7, Color = VehicleColor.MetallicPurple },
+        new Ride { Model = "tempesta", Fallback = "infernus", Name = "Pegassi Tempesta", Like = "Lamborghini Huracán-style supercar", Cat = "Supercars", Price = 160000, Rank = 4, Color = VehicleColor.MetallicUltraBlue },
+        new Ride { Model = "thrax", Fallback = "adder", Name = "Truffade Thrax", Like = "Bugatti Chiron-style hypercar", Cat = "Supercars", Price = 300000, Rank = 8, Color = VehicleColor.MetallicDarkBlue },
+        new Ride { Model = "adder", Name = "Truffade Adder", Like = "Bugatti Veyron-style hypercar", Cat = "Supercars", Price = 250000, Rank = 7, Color = VehicleColor.MetallicBlack },
+        new Ride { Model = "comet2", Name = "Pfister Comet", Like = "Porsche 911 Turbo S-style sports car", Cat = "Sports cars", Price = 90000, Rank = 3, Color = VehicleColor.MetallicSilver },
+        new Ride { Model = "ninef", Name = "Obey 9F", Like = "Audi R8-style sports car", Cat = "Sports cars", Price = 95000, Rank = 3, Color = VehicleColor.MetallicFrostWhite },
+        new Ride { Model = "coquette4", Fallback = "coquette", Name = "Invetero Coquette D10", Like = "Chevrolet Corvette C8-style sports car", Cat = "Sports cars", Price = 110000, Rank = 4, Color = VehicleColor.MetallicRaceYellow },
+        new Ride { Model = "dubsta2", Fallback = "dubsta", Name = "Benefactor Dubsta", Like = "Mercedes G63-style luxury 4x4", Cat = "SUVs", Price = 80000, Rank = 3, Color = VehicleColor.MetallicBlack },
+        new Ride { Model = "jubilee", Fallback = "baller2", Name = "Enus Jubilee", Like = "Rolls-Royce Cullinan-style SUV", Cat = "SUVs", Price = 150000, Rank = 5, Color = VehicleColor.MetallicBlack },
+        new Ride { Model = "baller7", Fallback = "baller2", Name = "Gallivanter Baller ST", Like = "Range Rover Sport-style SUV", Cat = "SUVs", Price = 70000, Rank = 2, Color = VehicleColor.MetallicFrostWhite },
+        new Ride { Model = "granger", Name = "Declasse Granger", Like = "full-size SUV", Cat = "SUVs", Price = 35000, Rank = 1, Color = VehicleColor.MetallicBlack },
+        new Ride { Model = "superd", Name = "Enus Super Diamond", Like = "Rolls-Royce-style luxury saloon", Cat = "Luxury", Price = 120000, Rank = 4, Color = VehicleColor.MetallicBlack },
+        new Ride { Model = "windsor", Fallback = "superd", Name = "Enus Windsor", Like = "Rolls-Royce Wraith-style coupe", Cat = "Luxury", Price = 140000, Rank = 5, Color = VehicleColor.MetallicPurple },
+        new Ride { Model = "schafter2", Name = "Benefactor Schafter", Like = "executive sedan", Cat = "Luxury", Price = 45000, Rank = 2, Color = VehicleColor.MetallicBlack },
+        new Ride { Model = "dominator", Name = "Vapid Dominator", Like = "muscle car", Cat = "Muscle and lowriders", Price = 40000, Rank = 2, Color = VehicleColor.MetallicBlack },
+        new Ride { Model = "chino2", Fallback = "chino", Name = "Vapid Chino lowrider", Like = "lowrider", Cat = "Muscle and lowriders", Price = 15000, Rank = 1, Color = VehicleColor.MetallicPurple },
+        new Ride { Model = "buccaneer2", Fallback = "buccaneer", Name = "Albany Buccaneer lowrider", Like = "lowrider", Cat = "Muscle and lowriders", Price = 20000, Rank = 1, Color = VehicleColor.MetallicPurple },
+        new Ride { Model = "faction2", Fallback = "faction", Name = "Willard Faction lowrider", Like = "lowrider", Cat = "Muscle and lowriders", Price = 25000, Rank = 2, Color = VehicleColor.MetallicPurple },
+        new Ride { Model = "speedo", Name = "Vapid Speedo", Like = "delivery van (moves product)", Cat = "Trucks and vans", Price = 12000, Rank = 0, Color = VehicleColor.MetallicFrostWhite },
+        new Ride { Model = "moonbeam2", Fallback = "moonbeam", Name = "Declasse Moonbeam custom", Like = "custom van", Cat = "Trucks and vans", Price = 22000, Rank = 2, Color = VehicleColor.MetallicPurple },
+        new Ride { Model = "sandking", Name = "Vapid Sandking", Like = "off-road pickup", Cat = "Trucks and vans", Price = 38000, Rank = 2, Color = VehicleColor.MetallicBlack },
+        new Ride { Model = "mule", Name = "Maibatsu Mule", Like = "box truck (business deliveries)", Cat = "Trucks and vans", Price = 30000, Rank = 3, Color = VehicleColor.MetallicFrostWhite },
+        new Ride { Model = "sanchez", Name = "Maibatsu Sanchez", Like = "dirt bike", Cat = "Motorcycles", Price = 8000, Rank = 0, Color = VehicleColor.MetallicOrange },
+        new Ride { Model = "bati", Name = "Pegassi Bati 801", Like = "superbike", Cat = "Motorcycles", Price = 25000, Rank = 2, Color = VehicleColor.MetallicBlack },
+        new Ride { Model = "hakuchou", Fallback = "bati", Name = "Shitzu Hakuchou", Like = "hyperbike", Cat = "Motorcycles", Price = 60000, Rank = 4, Color = VehicleColor.MetallicPurple },
+        new Ride { Model = "kuruma2", Fallback = "kuruma", Name = "Karin Kuruma (armoured)", Like = "armoured sedan", Cat = "Armoured", Price = 150000, Rank = 5, Color = VehicleColor.MetallicBlack },
+        new Ride { Model = "insurgent2", Fallback = "insurgent", Name = "HVY Insurgent", Like = "armoured truck", Cat = "Armoured", Price = 250000, Rank = 7, Color = VehicleColor.MatteBlack },
     };
     readonly HashSet<string> garage = new HashSet<string>();
     Vehicle called;
     int paint;
-    static readonly VehicleColor[] Paints = { VehicleColor.MetallicPurple, VehicleColor.MetallicBlack, VehicleColor.PureGold, VehicleColor.MattePurple };
-    static readonly string[] PaintNames = { "purple", "black", "gold", "matte purple" };
+    static readonly VehicleColor[] Paints = { VehicleColor.MetallicPurple, VehicleColor.MetallicBlack, VehicleColor.PureGold, VehicleColor.MattePurple, VehicleColor.MetallicOrange, VehicleColor.MetallicLime, VehicleColor.MetallicRed, VehicleColor.MetallicUltraBlue, VehicleColor.MetallicFrostWhite };
+    static readonly string[] PaintNames = { "purple", "black", "gold", "matte purple", "orange", "lime green", "red", "blue", "white" };
+    // Premium Deluxe Motorsport, the dealership on Adam's Apple Boulevard: buy cars here (Creative also from F5)
+    static readonly Vector3 Dealership = new Vector3(-56.6f, -1096.6f, 26.4f);
+    Blip dealerBlip;
+
+    static Model RideModel(Ride r)
+    {
+        var m = new Model(r.Model);
+        if ((!m.IsInCdImage || !m.IsVehicle) && r.Fallback != null) m = new Model(r.Fallback);
+        return m;
+    }
+
+    /// <summary>Top speed and 0-60 from GTA V's own handling for that model, for the showroom list.</summary>
+    static string RideStats(Ride r)
+    {
+        var m = RideModel(r);
+        if (!m.IsInCdImage || !m.IsVehicle) return "not in your copy of GTA V";
+        float top = Function.Call<float>(Hash.GET_VEHICLE_MODEL_ESTIMATED_MAX_SPEED, m.Hash) * 2.237f;
+        float acc = Function.Call<float>(Hash.GET_VEHICLE_MODEL_ACCELERATION, m.Hash);
+        return "top ~" + (int)top + " mph" + (acc > 0 ? ", 0-60 ~" + Math.Max(2.0, Math.Round(26.8 / (acc * 9.81 * 1.2), 1)).ToString("0.0", CultureInfo.InvariantCulture) + " s" : "");
+    }
 
     Vehicle SpawnRide(Ride r)
     {
         var me = Game.Player.Character;
-        var model = new Model(r.Model);
+        var model = RideModel(r);
         if (!model.IsInCdImage || !model.IsVehicle) { Notification.Show("~r~The " + r.Name + " isn't in your copy of GTA V."); return null; }
         if (!model.Request(5000)) { Notification.Show("~r~The " + r.Name + " didn't load. Try again."); return null; }
         if (called != null && called.Exists() && me.CurrentVehicle != called) called.Delete();
@@ -915,57 +1011,139 @@ public class FrankensteinEmpire : Script
         model.MarkAsNoLongerNeeded();
         if (called == null) return null;
         called.Mods.InstallModKit();
-        called.Mods.PrimaryColor = Paints[paint];
+        called.Mods.PrimaryColor = r.Color;
         called.Mods.SecondaryColor = VehicleColor.MetallicBlack;
+        called.Mods.LicensePlate = "EMPIRE";
         var b = called.AddBlip();
         b.Sprite = BlipSprite.PersonalVehicleCar;
         b.Color = BlipColor.Purple;
         b.Name = "Your " + r.Name;
         Notification.Show("Your ~p~" + r.Name + "~s~ is parked nearby.");
+        Say("called " + r.Model + (model.Hash == new Model(r.Model).Hash ? "" : " (fallback " + r.Fallback + ")"));
         return called;
     }
 
-    void VehiclesMenu()
+    bool Pay(int cost)
     {
-        var me = Game.Player.Character;
+        if (creative) return true;
+        if (Game.Player.Money < cost) { Notification.Show("~r~Not enough money."); return false; }
+        Game.Player.Money -= cost;
+        return true;
+    }
+
+    /// <summary>Customising the car you're in: performance, wheels, body parts, paint, tint, neon and repairs.</summary>
+    void TuneMenu(Vehicle cur)
+    {
         var list = new List<KeyValuePair<string, Action>>();
-        var cur = me.CurrentVehicle;
-        if (cur != null && cur.Exists())
+        cur.Mods.InstallModKit();
+        list.Add(Item("Repair it ($500)", () => { if (Pay(500)) { cur.Repair(); Notification.Show("~g~Repaired."); } }));
+        list.Add(Item("Performance: engine, brakes, gearbox, suspension, armour ($8,000)", () =>
         {
-            list.Add(Item("Upgrade this one: engine, brakes, gearbox, suspension, armour ($8,000)", () =>
+            if (!Pay(8000)) return;
+            foreach (var t in new[] { VehicleModType.Engine, VehicleModType.Brakes, VehicleModType.Transmission, VehicleModType.Suspension, VehicleModType.Armor })
+                if (cur.Mods[t].Count > 0) cur.Mods[t].Index = cur.Mods[t].Count - 1;
+            Function.Call(Hash.TOGGLE_VEHICLE_MOD, cur, 18, true);   // turbo
+            Notification.Show("~g~Upgraded.");
+        }));
+        foreach (var part in new[] { VehicleModType.FrontWheel, VehicleModType.Spoilers, VehicleModType.FrontBumper, VehicleModType.RearBumper, VehicleModType.SideSkirt, VehicleModType.Exhaust, VehicleModType.Hood, VehicleModType.Grille, VehicleModType.Roof })
+        {
+            var t = part;
+            int n = cur.Mods[t].Count;
+            if (n == 0) continue;
+            string name = t == VehicleModType.FrontWheel ? "Wheels" : t == VehicleModType.Spoilers ? "Spoiler" : t == VehicleModType.FrontBumper ? "Front bumper" : t == VehicleModType.RearBumper ? "Rear bumper" :
+                          t == VehicleModType.SideSkirt ? "Side skirts" : t == VehicleModType.Exhaust ? "Exhaust" : t == VehicleModType.Hood ? "Bonnet" : t == VehicleModType.Grille ? "Grille" : "Roof";
+            list.Add(Item(name + ": " + (cur.Mods[t].Index + 2) + " of " + (n + 1) + " ($750)", () =>
             {
-                if (!creative && Game.Player.Money < 8000) { Notification.Show("~r~Not enough money."); return; }
-                if (!creative) Game.Player.Money -= 8000;
-                cur.Mods.InstallModKit();
-                foreach (var t in new[] { VehicleModType.Engine, VehicleModType.Brakes, VehicleModType.Transmission, VehicleModType.Suspension, VehicleModType.Armor })
-                    if (cur.Mods[t].Count > 0) cur.Mods[t].Index = cur.Mods[t].Count - 1;
-                Notification.Show("~g~Upgraded.");
-            }));
-            list.Add(Item("Paint this one " + PaintNames[(paint + 1) % Paints.Length] + " ($1,000)", () =>
-            {
-                if (!creative && Game.Player.Money < 1000) { Notification.Show("~r~Not enough money."); return; }
-                if (!creative) Game.Player.Money -= 1000;
-                paint = (paint + 1) % Paints.Length;
-                cur.Mods.PrimaryColor = Paints[paint];
-                Save();
+                if (!Pay(750)) return;
+                if (t == VehicleModType.FrontWheel && cur.Mods[t].Index < 0) cur.Mods.WheelType = cur.Model.IsBike ? VehicleWheelType.BikeWheels : VehicleWheelType.HighEnd;
+                cur.Mods[t].Index = cur.Mods[t].Index + 1 >= n ? -1 : cur.Mods[t].Index + 1;
+                TuneMenu(cur);
             }));
         }
-        foreach (var r in Rides)
+        list.Add(Item("Paint: " + PaintNames[(paint + 1) % Paints.Length] + " ($1,000)", () =>
+        {
+            if (!Pay(1000)) return;
+            paint = (paint + 1) % Paints.Length;
+            cur.Mods.PrimaryColor = Paints[paint];
+            Save();
+            TuneMenu(cur);
+        }));
+        list.Add(Item("Window tint ($400)", () => { if (Pay(400)) cur.Mods.WindowTint = cur.Mods.WindowTint == VehicleWindowTint.PureBlack ? VehicleWindowTint.None : VehicleWindowTint.PureBlack; }));
+        list.Add(Item("Violet neon ($2,000)", () =>
+        {
+            if (!Pay(2000)) return;
+            foreach (VehicleNeonLight n in Enum.GetValues(typeof(VehicleNeonLight))) cur.Mods.SetNeonLightsOn(n, true);
+            cur.Mods.NeonLightsColor = Color.FromArgb(160, 60, 255);
+        }));
+        Open("CUSTOMISE  ·  " + cur.DisplayName, list);
+    }
+
+    /// <summary>The showroom: every car by category with its stats. Buying happens at the dealership (anywhere in Creative).</summary>
+    void ShowroomMenu(string cat, bool atDealer)
+    {
+        var list = new List<KeyValuePair<string, Action>>();
+        foreach (var r in Rides.Where(x => x.Cat == cat))
         {
             var ride = r;
             bool owned = garage.Contains(r.Model), open = creative || Rank >= r.Rank;
-            list.Add(Item(owned ? "Call your " + r.Name : open ? "Buy the " + r.Name + "  ·  $" + r.Price.ToString("N0") : r.Name + "  ·  unlocks at " + Ranks[r.Rank], () =>
+            string what = r.Name + " (" + r.Like + ")  ·  " + RideStats(r);
+            list.Add(Item(owned ? "Call: " + what : !open ? r.Name + "  ·  unlocks at " + Ranks[r.Rank] : (atDealer || creative ? "Buy $" + r.Price.ToString("N0") + ": " : "At the dealership $" + r.Price.ToString("N0") + ": ") + what, () =>
             {
-                if (owned || creative) { SpawnRide(ride); return; }
+                if (owned || creative) { if (creative) garage.Add(ride.Model); SpawnRide(ride); Save(); return; }
                 if (!open) return;
+                if (!atDealer)
+                {
+                    Function.Call(Hash.SET_NEW_WAYPOINT, Dealership.X, Dealership.Y);
+                    Notification.Show("Buy it at Premium Deluxe Motorsport. Waypoint set.");
+                    return;
+                }
                 if (Game.Player.Money < ride.Price) { Notification.Show("~r~Not enough money."); return; }
                 if (SpawnRide(ride) == null) return;
                 Game.Player.Money -= ride.Price;
                 garage.Add(ride.Model);
+                AddXp(ride.Price / 1000, "bought a car");
+                Say("bought " + ride.Model);
                 Save();
             }));
         }
-        Open("VEHICLES  ·  " + garage.Count + " owned", list);
+        Open(cat.ToUpperInvariant() + (atDealer ? "  ·  PREMIUM DELUXE MOTORSPORT" : "  ·  GARAGE"), list);
+    }
+
+    void VehiclesMenu() { VehiclesMenu(false); }
+
+    void VehiclesMenu(bool atDealer)
+    {
+        var me = Game.Player.Character;
+        var list = new List<KeyValuePair<string, Action>>();
+        var cur = me.CurrentVehicle;
+        if (cur != null && cur.Exists()) list.Add(Item("Customise and repair the car you're in...", () => TuneMenu(cur)));
+        if (garage.Count > 0)
+            list.Add(Item("Your garage (" + garage.Count + ")...", () =>
+            {
+                var mine = new List<KeyValuePair<string, Action>>();
+                foreach (var r in Rides.Where(x => garage.Contains(x.Model))) { var ride = r; mine.Add(Item(r.Name + "  ·  " + r.Like, () => SpawnRide(ride))); }
+                Open("YOUR GARAGE", mine);
+            }));
+        foreach (var c in RideCats)
+        {
+            var cat = c;
+            list.Add(Item(c + " (" + Rides.Count(r => r.Cat == c) + ", " + Rides.Count(r => r.Cat == c && garage.Contains(r.Model)) + " owned)...", () => ShowroomMenu(cat, atDealer)));
+        }
+        if (!atDealer && !creative) list.Add(Item("Waypoint to the dealership", () => { Function.Call(Hash.SET_NEW_WAYPOINT, Dealership.X, Dealership.Y); }));
+        Open(atDealer ? "PREMIUM DELUXE MOTORSPORT  ·  NEXT LEVEL VEHICLES" : "VEHICLES  ·  " + garage.Count + " owned", list);
+    }
+
+    /// <summary>A speedometer while you drive, like the concept art's.</summary>
+    void Speedo(Ped me)
+    {
+        var v = me.CurrentVehicle;
+        if (v == null || !v.Exists() || !v.Model.IsCar && !v.Model.IsBike) return;
+        float mph = v.Speed * 2.237f;
+        new ContainerElement(new PointF(1280 - 150, 720 - 160), new SizeF(130, 70), Color.FromArgb(170, 10, 8, 14)).Draw();
+        new TextElement(((int)mph).ToString(), new PointF(1280 - 85, 720 - 158), 0.9f, Color.White, Font.ChaletLondon, Alignment.Center).Draw();
+        new TextElement("MPH", new PointF(1280 - 85, 720 - 112), 0.28f, Color.FromArgb(200, 170, 255), Font.ChaletLondon, Alignment.Center).Draw();
+        float f = Math.Min(1f, mph / 220f);
+        new ContainerElement(new PointF(1280 - 145, 720 - 96), new SizeF(120 * f, 4), mph > 150 ? Color.FromArgb(240, 120, 40) : Color.FromArgb(160, 90, 250)).Draw();
     }
 
     // ---------- survival (Outward-style): hunger, thirst and energy ----------
@@ -1032,7 +1210,9 @@ public class FrankensteinEmpire : Script
 
     bool CanRest(Lab l) { return l.Owned; }
 
-    void Rest(Lab l)
+    void Rest(Lab l) { Rest(l.Name); }
+
+    void Rest(string where)
     {
         Screen.FadeOut(800);
         Wait(1000);
@@ -1044,7 +1224,8 @@ public class FrankensteinEmpire : Script
         Save();
         Wait(300);
         Screen.FadeIn(800);
-        Notification.Show("You slept 6 hours at " + l.Name + ". ~g~Energy 100.");
+        warmth = Math.Max(warmth, 55f);
+        Notification.Show("You slept 6 hours at " + where + ". ~g~Energy 100.");
     }
 
     void StockUp()
@@ -1251,9 +1432,341 @@ public class FrankensteinEmpire : Script
     int HourlyExtras()
     {
         CustomerHour();
+        int rent = HouseRent();
+        if (rent > 0) { Game.Player.Money += rent; earned += rent; Notification.Show("Rent from your houses: ~g~$" + rent); }
+        var rnd = new Random(Game.GameTime);
+        foreach (var z in dealers.Keys.ToList())
+        {
+            // a gang at war with you hits your dealers on turf next to theirs
+            var angry = gangs.FirstOrDefault(g => g.Rep <= -40);
+            if (angry == null || dealers[z] <= 0 || rnd.Next(100) >= 10 || cartel == 2) continue;
+            dealers[z]--;
+            Notification.Show("~r~" + angry.Name + " jumped one of your dealers in " + Game.GetLocalizedString(z) + ".");
+        }
         int crewWages = crewHired * 150;
         int tribute = cartel == 2 ? Math.Max(0, (turf.Count * 150 + dealers.Values.Sum() * 100) * 15 / 100) : 0;
         return crewWages + tribute;
+    }
+
+    // ---------- levy's city map, laid over Los Santos ----------
+
+    // The districts on levy's map, each placed on the part of GTA V's world that fits it best. They show on the map once
+    // you've been there (or reached the rank that opens them), like districts you discover as you go.
+    class District { public string Id, Name, Where; public Vector3 At; public int Rank; public Blip Blip; }
+    readonly List<District> districts = new List<District>
+    {
+        new District { Id = "downtown", Name = "Downtown", Where = "skyscrapers, offices, the Construction Zone next door", At = new Vector3(-200f, -800f, 0f) },
+        new District { Id = "nightlife", Name = "Shopping & Nightlife", Where = "Vinewood Boulevard: clubs, shops, customers with money", At = new Vector3(300f, 200f, 0f), Rank = 3 },
+        new District { Id = "uptown", Name = "Uptown Hills", Where = "Vinewood Hills mansions, the best houses to buy", At = new Vector3(-100f, 650f, 0f), Rank = 5 },
+        new District { Id = "lakepark", Name = "Lake Park", Where = "Mirror Park and its lake", At = new Vector3(1090f, -650f, 0f), Rank = 2 },
+        new District { Id = "suburbs", Name = "Suburbs", Where = "Mirror Park and East Vinewood houses", At = new Vector3(1270f, -560f, 0f), Rank = 1 },
+        new District { Id = "construction", Name = "Construction Zone", Where = "the Mile High building site downtown", At = new Vector3(-150f, -1000f, 0f) },
+        new District { Id = "port", Name = "Port", Where = "the Port of Los Santos: warehouses, containers, the docks lab", At = new Vector3(950f, -3050f, 0f), Rank = 4 },
+        new District { Id = "airport", Name = "Airport", Where = "Los Santos International", At = new Vector3(-1050f, -2740f, 0f), Rank = 2 },
+        new District { Id = "trailer", Name = "Trailer Park", Where = "Sandy Shores trailers, the meth lab", At = new Vector3(1800f, 3750f, 0f), Rank = 2 },
+        new District { Id = "farms", Name = "Farms", Where = "Grapeseed farmland", At = new Vector3(2100f, 4900f, 0f), Rank = 1 },
+        new District { Id = "industrial", Name = "Industrial District", Where = "Cypress Flats and La Mesa factories", At = new Vector3(820f, -2150f, 0f), Rank = 3 },
+        new District { Id = "countryside", Name = "Countryside", Where = "Blaine County, Mount Chiliad and Paleto Forest", At = new Vector3(500f, 5000f, 0f), Rank = 3 },
+    };
+    readonly HashSet<string> found = new HashSet<string>();   // districts and hidden places you've discovered
+    int nextExplore;
+
+    // Houses to buy (Schedule I's properties, levy's map suburbs and hills): rent every in-game hour, a bed to rest
+    // in, and a stash the police can't raid.
+    class House { public string Id, Name, District; public Vector3 At; public int Price, Rank, Rent; public bool Owned; public Blip Blip; }
+    readonly List<House> houses = new List<House>
+    {
+        new House { Id = "vespucci", Name = "Vespucci Beach apartment", District = "airport", At = new Vector3(-1150f, -1520f, 4.4f), Price = 60000, Rank = 1, Rent = 350 },
+        new House { Id = "mirror", Name = "Mirror Park house", District = "suburbs", At = new Vector3(1265f, -580f, 69f), Price = 90000, Rank = 2, Rent = 500 },
+        new House { Id = "lake", Name = "Lake Park villa", District = "lakepark", At = new Vector3(1060f, -480f, 64f), Price = 140000, Rank = 3, Rent = 800 },
+        new House { Id = "uptown", Name = "Uptown Hills mansion", District = "uptown", At = new Vector3(-174f, 497f, 137.7f), Price = 245000, Rank = 5, Rent = 1500 },
+    };
+
+    // Hidden places to discover, each with a locked cache (a lockpick opens it).
+    class Secret { public string Id, Name; public Vector3 At; public bool Found, Opened; public Prop Cache; }
+    readonly List<Secret> secrets = new List<Secret>
+    {
+        new Secret { Id = "chiliad", Name = "Mount Chiliad summit", At = new Vector3(501f, 5604f, 797.9f) },
+        new Secret { Id = "sign", Name = "Behind the Vinewood sign", At = new Vector3(730f, 1200f, 0f) },
+        new Secret { Id = "lighthouse", Name = "El Gordo lighthouse", At = new Vector3(3430f, 5175f, 0f) },
+        new Secret { Id = "mine", Name = "The abandoned Senora mine", At = new Vector3(-596f, 2090f, 131.4f) },
+        new Secret { Id = "sawmill", Name = "Paleto sawmill", At = new Vector3(-565f, 5300f, 0f) },
+        new Secret { Id = "altruist", Name = "The Altruist camp", At = new Vector3(-1100f, 4920f, 0f) },
+        new Secret { Id = "drain", Name = "The LS River storm drain", At = new Vector3(640f, -420f, 0f) },
+        new Secret { Id = "milehigh", Name = "Mile High building site", At = new Vector3(-155f, -950f, 0f) },
+    };
+
+    void MapLayer()
+    {
+        foreach (var d in districts)
+        {
+            if (d.Blip != null && d.Blip.Exists()) d.Blip.Delete();
+            d.Blip = null;
+            if (!found.Contains(d.Id) && !(creative || Rank >= d.Rank && d.Rank > 0)) continue;
+            d.Blip = World.CreateBlip(d.At);
+            d.Blip.Sprite = BlipSprite.Information;
+            d.Blip.Color = BlipColor.White;
+            d.Blip.Scale = 0.7f;
+            d.Blip.Name = d.Name + "  ·  " + d.Where;
+            d.Blip.IsShortRange = true;
+        }
+        foreach (var g in gangs)
+        {
+            if (g.HqBlip != null && g.HqBlip.Exists()) g.HqBlip.Delete();
+            g.HqBlip = World.CreateBlip(g.HqAt);
+            g.HqBlip.Sprite = BlipSprite.Enemy;
+            g.HqBlip.Color = turf.Overlaps(g.Zones) && g.Zones.All(z => turf.Contains(z)) ? BlipColor.Purple : g.Ring;
+            g.HqBlip.Name = g.Hq + "  ·  " + g.Name;
+            g.HqBlip.IsShortRange = false;
+        }
+        foreach (var h in houses)
+        {
+            if (h.Blip != null && h.Blip.Exists()) h.Blip.Delete();
+            h.Blip = World.CreateBlip(h.At);
+            h.Blip.Sprite = BlipSprite.Safehouse;
+            h.Blip.Color = h.Owned ? BlipColor.Purple : !creative && Rank < h.Rank ? BlipColor.Grey : BlipColor.White;
+            h.Blip.Name = h.Owned ? "Your " + h.Name : h.Name + " for sale  ·  $" + h.Price.ToString("N0") + "  ·  $" + h.Rent + " rent an hour" + (!creative && Rank < h.Rank ? "  ·  " + Ranks[h.Rank] : "");
+            h.Blip.IsShortRange = !h.Owned;
+        }
+        if (dealerBlip != null && dealerBlip.Exists()) dealerBlip.Delete();
+        dealerBlip = World.CreateBlip(Dealership);
+        dealerBlip.Sprite = BlipSprite.PersonalVehicleCar;
+        dealerBlip.Color = BlipColor.Purple;
+        dealerBlip.Name = "Premium Deluxe Motorsport  ·  supercars, SUVs and bikes";
+    }
+
+    /// <summary>Discovering districts and hidden places as you go; a hidden place's cache appears when you're close.</summary>
+    void Explore(Ped me)
+    {
+        if (Game.GameTime < nextExplore) return;
+        nextExplore = Game.GameTime + 1000;
+        bool changed = false;
+        foreach (var d in districts)
+            if (!found.Contains(d.Id) && me.Position.DistanceTo2D(d.At) < 220f)
+            {
+                found.Add(d.Id);
+                changed = true;
+                Screen.ShowSubtitle("~p~Discovered:~s~ " + d.Name + "  ·  " + d.Where, 5000);
+                AddXp(25, "district");
+            }
+        foreach (var x in secrets)
+        {
+            float dist = me.Position.DistanceTo2D(x.At);
+            if (!x.Found && dist < 40f)
+            {
+                x.Found = true;
+                changed = true;
+                Screen.ShowSubtitle("~p~Hidden place found:~s~ " + x.Name + (x.Opened ? "" : ". There's a locked cache here."), 6000);
+                AddXp(100, "hidden place");
+                Say("found " + x.Id);
+            }
+            if (!x.Opened && dist < 80f && (x.Cache == null || !x.Cache.Exists()))
+            {
+                var at = x.At;
+                float ground = World.GetGroundHeight(new Vector3(at.X, at.Y, at.Z > 0 ? at.Z + 5f : 1000f));
+                if (ground > 0) at.Z = ground;
+                var m = new Model("prop_box_wood02a");
+                if (m.Request(2000)) { x.Cache = World.CreateProp(m, at, true, true); m.MarkAsNoLongerNeeded(); }
+            }
+            if (x.Cache != null && x.Cache.Exists() && (x.Opened || dist > 150f)) { x.Cache.Delete(); x.Cache = null; }
+        }
+        if (changed) { MapLayer(); Save(); }
+    }
+
+    Secret SecretNear(Ped me) { return secrets.FirstOrDefault(x => !x.Opened && x.Cache != null && x.Cache.Exists() && me.Position.DistanceTo(x.Cache.Position) < 2.5f); }
+
+    void OpenCache(Secret x)
+    {
+        if (lockpicks <= 0 && !creative) { Notification.Show("It's locked. Craft a lockpick (F5 > Crafting: 2 scrap)."); return; }
+        if (!creative) lockpicks--;
+        x.Opened = true;
+        var rnd = new Random(x.Id.GetHashCode() ^ Game.GameTime);
+        int cash = 2000 + rnd.Next(8000);
+        Game.Player.Money += cash;
+        earned += cash;
+        scrap += 3; cloth += 2;
+        var guns = new[] { WeaponHash.Pistol50, WeaponHash.MicroSMG, WeaponHash.SawnOffShotgun, WeaponHash.CarbineRifle, WeaponHash.SMG };
+        Game.Player.Character.Weapons.Give(guns[rnd.Next(guns.Length)], 120, false, true);
+        Notification.Show("~g~Cache opened:~s~ $" + cash.ToString("N0") + ", a gun, 3 scrap and 2 cloth.");
+        AddXp(150, "cache");
+        Say("opened cache " + x.Id);
+        Save();
+    }
+
+    House HouseNear(Ped me) { return houses.FirstOrDefault(h => me.Position.DistanceTo(h.At) < 3f); }
+
+    void HouseMenu(House h)
+    {
+        var list = new List<KeyValuePair<string, Action>>();
+        if (!h.Owned)
+        {
+            bool open = creative || Rank >= h.Rank;
+            list.Add(Item(open ? "Buy it: $" + h.Price.ToString("N0") + " (pays $" + h.Rent + " rent an hour)" : "For sale from " + Ranks[h.Rank], () =>
+            {
+                if (!open) return;
+                if (!Pay(h.Price)) return;
+                h.Owned = true;
+                AddXp(h.Price / 500, "bought a house");
+                Notification.Show("~g~" + h.Name + " is yours.~s~ It pays $" + h.Rent + " an hour, and you can rest and stock up here.");
+                Cutscene("bought-house", Orbit(h.At, 12f, 5f, "Uncle Ray (phone)", "A house. Look at you. Rent in, product safe. That's how it's done."));
+                MapLayer();
+                Save();
+            }));
+        }
+        else
+        {
+            list.Add(Item("Rest here (sleep 6 hours)", () => Rest(h.Name)));
+            list.Add(Item("Stock up on snacks and drinks ($50)", StockUp));
+            list.Add(Item("Stash product here (safe from raids): " + stash, () =>
+            {
+                int n = 0;
+                foreach (var p in Products) { n += stock[p]; stock[p] = 0; }
+                stash += n;
+                Notification.Show("Stashed " + n + ". Take it back out when you need it.");
+                Save();
+            }));
+            if (stash > 0) list.Add(Item("Take out what you stashed (as weed)", () => { stock["weed"] += stash; stash = 0; Save(); }));
+        }
+        Open(h.Name.ToUpperInvariant() + (h.Owned ? "  ·  YOURS" : ""), list);
+    }
+
+    int HouseRent() { return houses.Where(h => h.Owned).Sum(h => h.Rent); }
+
+    // ---------- survival, part two: body temperature, scavenging, crafting and campfires ----------
+
+    float warmth = 60f;            // 0 freezing, 50 comfortable, 100 overheating
+    int scrap, cloth, rawMeat, cookedMeat, bandages, lockpicks, stash, nextTemp, nextScavenge;
+    Prop campfire;
+    int campfireUntil;
+    readonly HashSet<int> searched = new HashSet<int>();
+    static readonly Model[] Dumpsters = { new Model("prop_dumpster_01a"), new Model("prop_dumpster_02a"), new Model("prop_dumpster_02b"), new Model("prop_dumpster_3a"), new Model("prop_dumpster_4a"), new Model("prop_dumpster_4b") };
+    Prop dumpster;
+
+    /// <summary>Body temperature from the weather, the time, how high up you are, water and fire: cold nights and
+    /// snow chill you, Sandy Shores' sun overheats you; a car, a building or a campfire warms you up.</summary>
+    void Temperature(Ped me)
+    {
+        if (!SurvivalOn || Game.GameTime < nextTemp) return;
+        nextTemp = Game.GameTime + 1000;
+        int hour = World.CurrentTimeOfDay.Hours;
+        var w = World.Weather;
+        float target = 55f;
+        if (hour < 6 || hour >= 21) target -= 12f;
+        if (w == Weather.Raining || w == Weather.ThunderStorm) target -= 10f;
+        if (w == Weather.Snowing || w == Weather.Blizzard || w == Weather.Snowlight || w == Weather.Christmas) target -= 30f;
+        if (me.Position.Z > 400f) target -= (me.Position.Z - 400f) / 25f;
+        if (me.IsInWater) target -= 25f;
+        if (me.Position.Y > 2800f && hour >= 11 && hour < 17 && (w == Weather.ExtraSunny || w == Weather.Clear)) target += 25f;   // Blaine County desert sun
+        bool inside = me.IsInVehicle() || Function.Call<int>(Hash.GET_INTERIOR_FROM_ENTITY, me) != 0;
+        if (inside) target = Math.Max(target, 52f);
+        if (campfire != null && campfire.Exists() && me.Position.DistanceTo(campfire.Position) < 5f) target = Math.Max(target, 65f);
+        warmth += (target - warmth) * 0.02f;
+        if (warmth < 15f && Game.GameTime >= nextHurt) { nextHurt = Game.GameTime + 5000; me.ApplyDamage(2); Screen.ShowSubtitle("You're freezing. Get inside, into a car, or by a fire.", 3000); }
+        if (warmth > 85f) thirst = Math.Max(0f, thirst - 0.08f);
+        if (campfire != null && campfire.Exists() && Game.GameTime > campfireUntil) { campfire.Delete(); campfire = null; }
+    }
+
+    /// <summary>Dumpsters to search for scrap, cloth and food, and animals to hunt for meat.</summary>
+    void Scavenge(Ped me)
+    {
+        if (Game.GameTime < nextScavenge) return;
+        nextScavenge = Game.GameTime + 400;
+        dumpster = me.IsInVehicle() ? null : World.GetNearbyProps(me.Position, 2.2f, Dumpsters).FirstOrDefault(p => !searched.Contains(p.Handle));
+    }
+
+    void Search()
+    {
+        searched.Add(dumpster.Handle);
+        var rnd = new Random(Game.GameTime);
+        int r = rnd.Next(100);
+        string got = r < 35 ? "2 scrap" : r < 60 ? "a rag (cloth)" : r < 75 ? "a snack" : r < 85 ? "a drink" : r < 95 ? "$" + (20 + rnd.Next(80)) : "nothing";
+        if (r < 35) scrap += 2; else if (r < 60) cloth++; else if (r < 75) snacks++; else if (r < 85) drinks++; else if (r < 95) Game.Player.Money += 20 + rnd.Next(80);
+        Notification.Show("Searched the dumpster: " + got + ".");
+        dumpster = null;
+    }
+
+    Ped AnimalNear(Ped me) { return World.GetNearbyPeds(me, 2.5f).FirstOrDefault(p => !p.IsHuman && p.IsDead && !searched.Contains(p.Handle)); }
+
+    void Harvest(Ped animal)
+    {
+        searched.Add(animal.Handle);
+        rawMeat += 2;
+        Notification.Show("Took 2 raw meat. Cook it on a campfire (F5 > Crafting).");
+        Save();
+    }
+
+    void CraftMenu()
+    {
+        var me = Game.Player.Character;
+        var list = new List<KeyValuePair<string, Action>>();
+        list.Add(Item("You have: scrap " + scrap + ", cloth " + cloth + ", raw meat " + rawMeat + ", cooked meat " + cookedMeat + ", bandages " + bandages + ", lockpicks " + lockpicks, () => { }));
+        list.Add(Item("Bandage (2 cloth): heals you when used", () => { if (cloth < 2) { Notification.Show("Needs 2 cloth (search dumpsters)."); return; } cloth -= 2; bandages++; Save(); CraftMenu(); }));
+        list.Add(Item("Lockpick (2 scrap): opens hidden caches", () => { if (scrap < 2) { Notification.Show("Needs 2 scrap (search dumpsters)."); return; } scrap -= 2; lockpicks++; Save(); CraftMenu(); }));
+        list.Add(Item("Campfire (3 scrap, 1 cloth): warmth and cooking, 10 minutes", () =>
+        {
+            if (me.IsInVehicle()) return;
+            if (scrap < 3 || cloth < 1) { Notification.Show("Needs 3 scrap and 1 cloth."); return; }
+            scrap -= 3; cloth--;
+            if (campfire != null && campfire.Exists()) campfire.Delete();
+            var m = new Model("prop_beach_fire");
+            if (m.Request(2000))
+            {
+                var at = me.Position + me.ForwardVector * 1.5f;
+                at.Z = World.GetGroundHeight(at + new Vector3(0, 0, 2f));
+                campfire = World.CreateProp(m, at, false, true);
+                m.MarkAsNoLongerNeeded();
+                campfireUntil = Game.GameTime + 600000;
+            }
+            Save();
+        }));
+        if (campfire != null && campfire.Exists() && me.Position.DistanceTo(campfire.Position) < 5f)
+            list.Add(Item("Cook all raw meat on the fire (" + rawMeat + ")", () => { cookedMeat += rawMeat; rawMeat = 0; Notification.Show("Cooked. ~g~" + cookedMeat + " meals."); Save(); }));
+        if (bandages > 0) list.Add(Item("Use a bandage (" + bandages + ")", () => { bandages--; me.Health = Math.Min(me.MaxHealth, me.Health + 40); Save(); }));
+        if (cookedMeat > 0) list.Add(Item("Eat cooked meat (" + cookedMeat + ")", () => { cookedMeat--; hunger = Math.Min(100f, hunger + 50f); energy = Math.Min(100f, energy + 10f); Save(); }));
+        if (rawMeat > 0) list.Add(Item("Eat raw meat (it might make you sick)", () => { rawMeat--; hunger = Math.Min(100f, hunger + 20f); if (new Random(Game.GameTime).Next(2) == 0) { me.ApplyDamage(15); Screen.ShowSubtitle("That was a mistake.", 3000); } Save(); }));
+        Open("CRAFTING", list);
+    }
+
+    // ---------- gang tactics and gang cars ----------
+
+    static void Tactics(Ped p)
+    {
+        Function.Call(Hash.SET_PED_COMBAT_ATTRIBUTES, p, 0, true);    // takes cover
+        Function.Call(Hash.SET_PED_COMBAT_ATTRIBUTES, p, 46, true);   // fights to the end
+        Function.Call(Hash.SET_PED_COMBAT_ABILITY, p, 2);
+        Function.Call(Hash.SET_PED_COMBAT_MOVEMENT, p, 2);           // advances on you
+    }
+
+    /// <summary>A gang's reinforcements arrive in their own cars during a turf war.</summary>
+    void GangCars(Gang g, Ped me)
+    {
+        var car = new Model(g.Car);
+        var model = new Model(g.Model);
+        if (!car.IsInCdImage || !car.Request(3000) || !model.Request(3000)) return;
+        var rnd = new Random(Game.GameTime);
+        for (int c = 0; c < 2; c++)
+        {
+            var at = World.GetNextPositionOnStreet(me.Position.Around(90f + c * 20f));
+            var v = World.CreateVehicle(car, at);
+            if (v == null) continue;
+            v.Mods.PrimaryColor = VehicleColor.MetallicBlack;
+            for (int i = 0; i < 2; i++)
+            {
+                var p = v.CreatePedOnSeat(i == 0 ? VehicleSeat.Driver : VehicleSeat.Passenger, model);
+                if (p == null) continue;
+                p.RelationshipGroup = enemies;
+                p.Weapons.Give(rnd.Next(2) == 0 ? g.Gun : WeaponHash.MicroSMG, 400, true, true);
+                p.Armor = 40;
+                Tactics(p);
+                p.Task.FightAgainst(me);
+                p.AddBlip().Color = BlipColor.Red;
+                warPeds.Add(p);
+            }
+            v.MarkAsNoLongerNeeded();
+        }
+        car.MarkAsNoLongerNeeded();
+        model.MarkAsNoLongerNeeded();
+        Notification.Show("~r~" + g.Name + " are pulling up with backup.");
     }
 
     // ---------- menus ----------
@@ -1342,6 +1855,12 @@ public class FrankensteinEmpire : Script
         list.Add(Item("Crew (" + crewHired + ")...", CrewMenu));
         list.Add(Item("Arsenal...", ArsenalMenu));
         list.Add(Item("Vehicles (" + garage.Count + ")...", VehiclesMenu));
+        list.Add(Item("Crafting and survival kit...", CraftMenu));
+        list.Add(Item("Map: " + found.Count(f => districts.Any(d => d.Id == f)) + "/" + districts.Count + " districts, " + secrets.Count(x => x.Found) + "/" + secrets.Count + " hidden places, " + houses.Count(h => h.Owned) + " houses", () =>
+        {
+            var x = secrets.FirstOrDefault(y => !y.Found);
+            Notification.Show(x == null ? "You've found every hidden place." : "Rumour has it there's something hidden near " + Game.GetLocalizedString(Zone(x.At)) + ".");
+        }));
         if (SurvivalOn)
         {
             list.Add(Item("Eat a snack (" + snacks + " left)  ·  hunger " + (int)hunger, Eat));
@@ -1544,6 +2063,7 @@ public class FrankensteinEmpire : Script
         list.Add(Item("La Sombra's meeting", () => Cutscene("cartel-meet", Orbit(me.Position, 5f, 1.8f, "La Sombra", "Your product is in our state. Fifteen percent of everything, or you're finished."), true)));
         list.Add(Item("First stash taken", () => Cutscene("first-stash", Orbit(me.Position, 7f, 2.5f, "Uncle Ray (phone)", "That'll hurt them. Watch your back."), true)));
         list.Add(Item("First gun crates", () => Cutscene("first-crates", LabShots(labs.First(l => l.Id == "lamesa"), "Uncle Ray (phone)", "Guns. Every gang in the city will want you now."), true)));
+        list.Add(Item("First house", () => Cutscene("bought-house", Orbit(houses[0].At, 12f, 5f, "Uncle Ray (phone)", "A house. Look at you. Rent in, product safe."), true)));
         list.Add(Item("La Sombra beaten", () => Cutscene("cartel-beaten", Orbit(me.Position, 9f, 3f, "Uncle Ray (phone)", "La Sombra is finished. Nobody runs this state but you now."), true)));
         Open("CUTSCENES", list);
     }
@@ -1602,6 +2122,12 @@ public class FrankensteinEmpire : Script
         if (warZone.Length > 0) list.Add(Item("Win this turf war", () => { foreach (var p in warPeds) if (p != null && p.Exists()) p.Kill(); }));
         list.Add(Item("Take every gang's turf", () => { foreach (var x in gangs) foreach (var z in x.Zones) turf.Add(z); Save(); }));
         list.Add(Item("+20 gun crates", () => { stock["guns"] += 20; Save(); }));
+        list.Add(Item("Discover the whole map", () => { foreach (var d in districts) found.Add(d.Id); foreach (var x in secrets) x.Found = true; MapLayer(); Save(); }));
+        list.Add(Item("+10 scrap, cloth, meat, lockpicks", () => { scrap += 10; cloth += 10; rawMeat += 10; lockpicks += 10; Save(); }));
+        list.Add(Item("Freeze me (test body temperature)", () => { creativeSurvival = true; warmth = 12f; }));
+        list.Add(Item("Own every car", () => { foreach (var r in Rides) garage.Add(r.Model); Save(); }));
+        list.Add(Item("Go to the dealership", () => { me.Position = Dealership + new Vector3(0, 0, 0.5f); }));
+        foreach (var h in houses) { var hh = h; list.Add(Item("Go to " + h.Name, () => { me.Position = hh.At + new Vector3(0, 0, 0.5f); })); }
         list.Add(Item("Every customer hooked", () => { foreach (var c in customers) { c.Unlocked = true; c.Addiction = Math.Max(c.Addiction, 40); } Save(); }));
         list.Add(Item("Every customer orders now", () => { foreach (var c in customers) { c.Unlocked = true; c.OrderProduct = c.Wants; c.OrderQty = 2; c.OrderHours = 8; } Save(); }));
         list.Add(Item("Survival: " + (creativeSurvival ? "on" : "off"), () => { creativeSurvival = !creativeSurvival; Save(); CreativeMenu(); }));
@@ -1657,6 +2183,7 @@ public class FrankensteinEmpire : Script
             foreach (var kv in Needs) if (kv.Value > before && kv.Value <= Rank) now.Add(kv.Key == "worker" ? "workers" : kv.Key == "dealer" ? "dealers" : kv.Key == "turf" ? "turf wars" : kv.Key == "truce" ? "truces" : kv.Key);
             foreach (var l in labs) if (l.Rank > before && l.Rank <= Rank) { now.Add(l.Name); }
             Blips();
+            MapLayer();
             Screen.ShowSubtitle("~p~Rank up: " + Ranks[Rank] + "~s~" + (now.Count > 0 ? "  ·  Unlocked: " + string.Join(", ", now.ToArray()) : ""), 8000);
             for (int r = before + 1; r <= Rank; r++) Cutscene("rank-" + r, RankShots(r));
             Say("rank " + Ranks[Rank] + " (" + why + ")");
@@ -1698,6 +2225,9 @@ public class FrankensteinEmpire : Script
         "Buy the La Mesa gun workshop and sell gun crates to a gang",
         "Reach Enforcer and cook coke at the Elysian Island warehouse",
         "Make 10 deliveries to your customers",
+        "Buy a house (white house icons on the map)",
+        "Buy a car at Premium Deluxe Motorsport",
+        "Find 3 hidden places",
         "Become Kingpin",
     };
     // what Uncle Ray says when each objective comes up
@@ -1720,6 +2250,9 @@ public class FrankensteinEmpire : Script
         "Guns sell better than anything to the right people. There's a workshop in La Mesa.",
         "Coke. The docks. This is the big league.",
         "Your regulars keep you rich. Keep them stocked.",
+        "Money in the bank does nothing. Buy a house, the rent pays for itself.",
+        "You can't roll up to a deal in that. Premium Deluxe has supercars now.",
+        "There's stuff hidden all over this state. Bring a lockpick.",
         "One more push, kid. Run the whole city.",
     };
     int QuestCount { get { return QuestNames.Length; } }
@@ -1747,13 +2280,16 @@ public class FrankensteinEmpire : Script
             case 14: return cratesSold > 0;
             case 15: return labs.First(l => l.Id == "docks").Owned && (stock["coke"] > 0 || labs.Any(l => l.Batch == "coke"));
             case 16: return deliveries >= 10;
-            case 17: return Rank >= Ranks.Length - 1;
+            case 17: return houses.Any(h => h.Owned);
+            case 18: return garage.Count > 0;
+            case 19: return secrets.Count(x => x.Found) >= 3;
+            case 20: return Rank >= Ranks.Length - 1;
         }
         return false;
     }
 
     /// <summary>Saves from before the story grew (10 objectives) carry on at the same point of the new one.</summary>
-    static int OldQuest(int q) { int[] map = { 0, 1, 2, 3, 7, 8, 9, 10, 15, 17 }; return q < map.Length ? map[q] : 18; }
+    static int OldQuest(int q) { int[] map = { 0, 1, 2, 3, 7, 8, 9, 10, 15, 20 }; return q < map.Length ? map[q] : 21; }
 
     void QuestWaypoint()
     {
@@ -1762,6 +2298,8 @@ public class FrankensteinEmpire : Script
         if (l != null) { Function.Call(Hash.SET_NEW_WAYPOINT, l.At.X, l.At.Y); return; }
         if (quest == 3) { var c = customers.FirstOrDefault(x => !x.Unlocked && AreaOpen(x)); if (c != null) Function.Call(Hash.SET_NEW_WAYPOINT, c.At.X, c.At.Y); }
         if (quest == 12) Function.Call(Hash.SET_NEW_WAYPOINT, CartelMeet.X, CartelMeet.Y);
+        if (quest == 17) { var h = houses.FirstOrDefault(x => !x.Owned); if (h != null) Function.Call(Hash.SET_NEW_WAYPOINT, h.At.X, h.At.Y); }
+        if (quest == 18) Function.Call(Hash.SET_NEW_WAYPOINT, Dealership.X, Dealership.Y);
     }
 
     void Quests()
@@ -1846,18 +2384,19 @@ public class FrankensteinEmpire : Script
         if (SurvivalOn)
         {
             // hunger, thirst and energy, like Outward's bars
-            float[] v = { hunger, thirst, energy };
-            Color[] c = { Color.FromArgb(230, 230, 150, 60), Color.FromArgb(230, 70, 160, 240), Color.FromArgb(230, 240, 220, 80) };
-            string[] n = { "Food", "Water", "Energy" };
+            float[] v = { hunger, thirst, energy, warmth };
+            Color[] c = { Color.FromArgb(230, 230, 150, 60), Color.FromArgb(230, 70, 160, 240), Color.FromArgb(230, 240, 220, 80), warmth < 30f ? Color.FromArgb(230, 120, 200, 255) : warmth > 80f ? Color.FromArgb(230, 255, 110, 60) : Color.FromArgb(230, 120, 220, 140) };
+            string[] n = { "Food", "Water", "Energy", warmth < 30f ? "Cold" : warmth > 80f ? "Hot" : "Warmth" };
             new ContainerElement(new PointF(rx, 720 - 104), new SizeF(282, 28), Color.FromArgb(160, 10, 8, 14)).Draw();
-            for (int i = 0; i < 3; i++)
+            for (int i = 0; i < 4; i++)
             {
-                float x = rx + 8 + i * 92;
+                float x = rx + 8 + i * 69;
                 new TextElement(n[i], new PointF(x, 720 - 102), 0.22f, v[i] < 15f ? Color.FromArgb(255, 90, 90) : Color.FromArgb(200, 200, 210), Font.ChaletLondon).Draw();
-                new ContainerElement(new PointF(x, 720 - 86), new SizeF(84, 5), Color.FromArgb(150, 50, 50, 50)).Draw();
-                new ContainerElement(new PointF(x, 720 - 86), new SizeF(84 * v[i] / 100f, 5), c[i]).Draw();
+                new ContainerElement(new PointF(x, 720 - 86), new SizeF(62, 5), Color.FromArgb(150, 50, 50, 50)).Draw();
+                new ContainerElement(new PointF(x, 720 - 86), new SizeF(62 * v[i] / 100f, 5), c[i]).Draw();
             }
         }
+        Speedo(me);
         if (cartel == 3)
             new TextElement("At war with La Sombra  ·  stashes " + Enumerable.Range(0, 3).Count(i => (cartelMask & (1 << i)) != 0) + "/3", new PointF(28, creative ? 48 : 72), 0.28f, Color.FromArgb(255, 90, 90), Font.ChaletLondon).Draw();
         if (warZone.Length > 0)
@@ -1909,6 +2448,12 @@ public class FrankensteinEmpire : Script
         Function.Call(Hash.CLEAR_TIMECYCLE_MODIFIER);
         foreach (var p in warPeds) if (p != null && p.Exists()) p.Delete();
         foreach (var c in customers) { if (c.Ped != null && c.Ped.Exists()) c.Ped.Delete(); if (c.Blip != null && c.Blip.Exists()) c.Blip.Delete(); }
+        foreach (var d in districts) if (d.Blip != null && d.Blip.Exists()) d.Blip.Delete();
+        foreach (var g in gangs) if (g.HqBlip != null && g.HqBlip.Exists()) g.HqBlip.Delete();
+        foreach (var h in houses) if (h.Blip != null && h.Blip.Exists()) h.Blip.Delete();
+        foreach (var x in secrets) if (x.Cache != null && x.Cache.Exists()) x.Cache.Delete();
+        if (dealerBlip != null && dealerBlip.Exists()) dealerBlip.Delete();
+        if (campfire != null && campfire.Exists()) campfire.Delete();
         SendCrewHome();
         ClearCartel(true);
         CartelBlip(Vector3.Zero, "");
@@ -1929,11 +2474,14 @@ public class FrankensteinEmpire : Script
                                            "dealers=" + string.Join(",", dealers.Select(kv => kv.Key + ":" + kv.Value).ToArray()),
                                            "xp=" + xp, "quest=" + quest, "made=" + madeCount, "packed=" + packedCount, "sold=" + soldCount,
                                            "wars=" + warsWon, "creativeHeat=" + (creativeHeat ? 1 : 0), "look=" + look, "seen=" + string.Join(",", seen.ToArray()),
-                                           "story=2", "samples=" + samplesWon, "deliveries=" + deliveries, "rests=" + restCount, "mixed=" + mixedCount, "crates=" + cratesSold,
+                                           "story=3", "samples=" + samplesWon, "deliveries=" + deliveries, "rests=" + restCount, "mixed=" + mixedCount, "crates=" + cratesSold,
                                            "crew=" + crewHired + "|" + crewGear + "|" + crewEver + "|" + (crewGuard ? 1 : 0),
                                            "garage=" + string.Join(",", garage.ToArray()), "paint=" + paint,
                                            "survival=" + (int)hunger + "|" + (int)thirst + "|" + (int)energy + "|" + snacks + "|" + drinks + "|" + (creativeSurvival ? 1 : 0),
-                                           "cartel=" + cartel + "|" + cartelMask };
+                                           "cartel=" + cartel + "|" + cartelMask, "found=" + string.Join(",", found.ToArray()),
+                                           "houses=" + string.Join(",", houses.Where(h => h.Owned).Select(h => h.Id).ToArray()),
+                                           "secrets=" + string.Join(",", secrets.Select(x => x.Id + ":" + (x.Found ? 1 : 0) + (x.Opened ? 1 : 0)).ToArray()),
+                                           "kit=" + (int)warmth + "|" + scrap + "|" + cloth + "|" + rawMeat + "|" + cookedMeat + "|" + bandages + "|" + lockpicks + "|" + stash };
             foreach (var p in Goods) lines.Add("stock." + p + "=" + stock[p]);
             foreach (var kv in mix) lines.Add("mix." + kv.Key + "=" + string.Join(",", kv.Value.ToArray()));
             foreach (var c in customers) lines.Add("cust." + c.Id + "=" + (c.Unlocked ? 1 : 0) + "|" + c.Addiction + "|" + c.OrderProduct + "|" + c.OrderQty + "|" + c.OrderHours);
@@ -1956,7 +2504,7 @@ public class FrankensteinEmpire : Script
         try
         {
             if (!File.Exists(SaveFile)) { fresh = true; return; }
-            bool story2 = false;
+            int story = 1;
             foreach (var raw in File.ReadAllLines(SaveFile))
             {
                 int eq = raw.IndexOf('=');
@@ -1973,7 +2521,21 @@ public class FrankensteinEmpire : Script
                 else if (k == "wars" && int.TryParse(v, out n)) warsWon = n;
                 else if (k == "creativeHeat") creativeHeat = v == "1";
                 else if (k == "look" && int.TryParse(v, out n)) look = n;
-                else if (k == "story") story2 = v == "2";
+                else if (k == "story") int.TryParse(v, out story);
+                else if (k == "found") foreach (var x in v.Split(',')) { if (x.Length > 0) found.Add(x); }
+                else if (k == "houses") foreach (var x in v.Split(',')) { var h = houses.FirstOrDefault(y => y.Id == x); if (h != null) h.Owned = true; }
+                else if (k == "secrets")
+                    foreach (var x in v.Split(','))
+                    {
+                        var b = x.Split(':');
+                        var sc = secrets.FirstOrDefault(y => y.Id == b[0]);
+                        if (sc != null && b.Length == 2 && b[1].Length == 2) { sc.Found = b[1][0] == '1'; sc.Opened = b[1][1] == '1'; }
+                    }
+                else if (k == "kit")
+                {
+                    var b = v.Split('|');
+                    if (b.Length >= 8) { int a; if (int.TryParse(b[0], out a)) warmth = a; int.TryParse(b[1], out scrap); int.TryParse(b[2], out cloth); int.TryParse(b[3], out rawMeat); int.TryParse(b[4], out cookedMeat); int.TryParse(b[5], out bandages); int.TryParse(b[6], out lockpicks); int.TryParse(b[7], out stash); }
+                }
                 else if (k == "samples" && int.TryParse(v, out n)) samplesWon = n;
                 else if (k == "deliveries" && int.TryParse(v, out n)) deliveries = n;
                 else if (k == "rests" && int.TryParse(v, out n)) restCount = n;
@@ -2015,7 +2577,8 @@ public class FrankensteinEmpire : Script
                     if (b.Length >= 7) { l.Handler = b[5] == "1"; l.Cleaner = b[6] == "1"; }
                 }
             }
-            if (!story2) quest = OldQuest(quest);
+            if (story < 2) quest = OldQuest(quest);
+            else if (story == 2 && quest >= 17) quest += 3;   // three new objectives (house, car, hidden places) came in before Kingpin
         }
         catch (Exception e) { Say("load: " + e.Message); }
     }

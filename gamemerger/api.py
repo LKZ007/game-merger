@@ -18,7 +18,7 @@ import webbrowser
 
 from . import installer, storymode, accounts, devices, achievements, ai, autorecipe, controller, covers, minecraft, modsources, storeinfo, discord, profiles, detect, downloader, gallery, network, nexus, paths, permissions, saves, scan, sharing, updater, standard
 from .version import VERSION
-from .installer import MODE_COPY, MODE_HARDLINK, MODE_INPLACE, Merge, MergeError, find_clashes, preview
+from .installer import MODE_COPY, MODE_HARDLINK, MODE_INPLACE, MODE_SESSION, Merge, MergeError, find_clashes, preview
 from . import assetpacks, carryover, eldenring, mergeplan, playas, recipes
 from .recipes import load_recipes, resource_dir
 
@@ -581,6 +581,15 @@ class Api:
             problems.append("Frankenstein's own pages are from different versions (%s). Press Repair to download a fresh copy."
                             % ", ".join(stale))
         for m in Merge.all():
+            if m.mode == MODE_SESSION and m.data.get("attached") and not self._playing:
+                r = self._recipe(m.data.get("recipe_id"))
+                if not saves.running((r.processes if r else []) or []):
+                    try:
+                        m.detach()
+                        fixed.append("%s: took its mods back out of your game folder (Frankenstein closed while it ran)" % m.name)
+                    except Exception as e:
+                        problems.append("%s: couldn't take its mods back out of your game folder (%s)" % (m.name, e))
+        for m in Merge.all():
             try:
                 fixed += ["%s: %s" % (m.name, x) for x in self._check_merge(m)]
             except Exception as e:
@@ -897,6 +906,15 @@ class Api:
             except OSError:
                 pass  # cloud folder offline: next session tries again
         if mid:
+            try:
+                Merge.load(mid).detach()   # a session merge's mods come back out of your own game folder
+            except Exception as e:
+                try:
+                    mm = Merge.load(mid)
+                    mm.data["detach_error"] = str(e)[:300]
+                    mm.save()
+                except Exception:
+                    pass
             self._switch_from_game(mid)
             if self._settings.get("pack_after_play", True):
                 threading.Thread(target=self._auto_pack, args=(mid,), daemon=True).start()
@@ -1099,6 +1117,12 @@ class Api:
         self._games = [g for g in detect.scan(self._hand, self._settings.get("manual_folders", []))
                        if not self.NOT_GAMES.match(g.name.strip())]
         self._build_recipes()
+        if not getattr(self, "_empire_tried", False):
+            self._empire_tried = True
+            try:
+                self._auto_empire()   # the ready-made GTA V empire merge, once GTA V is found
+            except Exception as e:
+                self._settings["auto_empire"] = {"state": "failed", "error": str(e)[:300]}
         return self.library()
 
     def _style_names(self):
@@ -1125,17 +1149,20 @@ class Api:
 
     def library(self):
         installed = {g.name.lower() for g in self._games}
-        keys = {g.name.lower(): str(i) for i, g in enumerate(self._games)}
         out = []
         for i, g in enumerate(self._games):
             r = g.recipe
             themes = []
             for t in (r.themes if r else []):
+                # every tile in the library that is this theme's Extension game, closest name first (the real game
+                # before a merge copy or a second install named after it), so picking any of them keeps this Host
+                src = sorted((j for j, x in enumerate(self._games) if j != i and x.name.lower() != g.name.lower() and (
+                    any(m in x.name.lower() for m in t.source_match) or x.name.lower() == (t.from_game or "").lower())),
+                    key=lambda j: len(self._games[j].name))
                 themes.append({"id": t.id, "name": t.name, "from_game": t.from_game, "description": t.description,
                                "found": any(any(m in n for m in t.source_match) for n in installed),
                                # the Extension game's tile in the library, so it can glow next to the host
-                               "source_key": next((keys[n] for n in installed if n != g.name.lower() and (
-                                   any(m in n for m in t.source_match) or n == (t.from_game or "").lower())), None)})
+                               "source_key": str(src[0]) if src else None, "source_keys": [str(j) for j in src]})
             themes.sort(key=lambda t: (t["id"].startswith("style-"), not t["found"], t["from_game"].lower()))
             auto = getattr(r, "auto", None) or {}
             out.append({"key": str(i), "name": g.name, "source": g.source, "path": g.path, "base": r is not None,
@@ -2102,15 +2129,17 @@ class Api:
         t = r.theme(p["theme_id"])
         if p["mode"] == MODE_INPLACE and not self._is_mc(r):
             p["mode"] = MODE_COPY  # never mod the original install
-        self._settings.update(mode=p["mode"], destination=p["destination"])
-        paths.save_settings(self._settings)
+        if p["mode"] != MODE_SESSION:   # the ready-made GTA V merge doesn't change your usual merge choices
+            self._settings.update(mode=p["mode"], destination=p["destination"])
+            paths.save_settings(self._settings)
         frameworks = [r.framework(fid) for fid in p["frameworks"]]
         manual = p.get("manual_files", {})
 
         def work(job):
             job.write("Getting %s ready…" % p["name"])
+            # a session merge only writes to the game folder when you press Play (and asks then, if it must)
             needs = permissions.folders_needing_access(
-                [g.path] if p["mode"] != MODE_COPY else [], [] if p["mode"] == MODE_INPLACE else [p["destination"]])
+                [g.path] if p["mode"] == MODE_INPLACE else [], [] if p["mode"] in (MODE_INPLACE, MODE_SESSION) else [p["destination"]])
             if needs:
                 job.write("Asking Windows for permission to change: %s" % ", ".join(needs))
                 if not permissions.grant(needs):
@@ -2158,6 +2187,88 @@ class Api:
             job.write("Done.")
             return {"merge_id": merge.id, "name": merge.name, "problems": problems}
         return self._run(work)
+
+    # ---------- the ready-made GTA V empire merge ----------
+
+    EMPIRE_NAME = "GTA V - Schedule I x Hood Warfare"
+
+    def _empire_game(self):
+        """GTA V on this PC, when it can host (its own recipe found GTA5.exe or GTA5_Enhanced.exe)."""
+        return next((i for i, g in enumerate(getattr(self, "_games", [])) if g.recipe is not None and g.recipe.id == "gta5"
+                     and any(t.id == "empire" for t in g.recipe.themes)), None)
+
+    @staticmethod
+    def _empire_merge():
+        return next((m for m in Merge.all() if m.data.get("recipe_id") == "gta5" and m.data.get("theme_id") == "empire"), None)
+
+    def _auto_empire(self, force=False):
+        """Once GTA V is found, the GTA V (Host) x Schedule I x Hood Warfare (Extension) merge is made by itself and put in
+        My merges, ready to play: Script Hook V, Script Hook V .NET and Frankenstein's empire scripts, which go into your
+        own GTA V only while you play it from Frankenstein (offline Story mode) and come back out when it closes."""
+        st = self._settings.get("auto_empire") or {}
+        if st.get("state") == "dismissed" and not force:
+            return st
+        if self._empire_merge():
+            if st.get("state") != "made":
+                self._settings["auto_empire"] = {"state": "made"}
+                paths.save_settings(self._settings)
+            return {"state": "made"}
+        job = getattr(self, "_empire_job", None)
+        if job and job in self._jobs and not self._jobs[job].done:
+            return {"state": "making", "job": job}
+        i = self._empire_game()
+        if i is None:
+            return {"state": "no_gta"}
+        if st.get("state") == "failed" and not force:
+            return st
+        g = self._games[i]
+        r = g.recipe
+        t = r.theme("empire")
+        # levy's choice for GTA V (2026-10-27): no 100 GB copy; the mods go into their own GTA V only while it's
+        # played from Frankenstein and come back out when it closes (Merge.attach / detach)
+        dest = os.path.dirname(g.path)
+        p = {"key": str(i), "theme_id": t.id, "mode": MODE_SESSION, "destination": dest, "name": self.EMPIRE_NAME,
+             "tagline": "Build your business. Fight for your hood. Rule the streets.",
+             "frameworks": [fid for fid in t.frameworks if fid in r.frameworks], "mods": [], "auto": True}
+        self._empire_job = self.start_merge(p)
+        self._settings["auto_empire"] = {"state": "making", "job": self._empire_job, "dest": dest}
+        paths.save_settings(self._settings)
+        threading.Thread(target=self._watch_empire, args=(self._empire_job,), daemon=True).start()
+        return {"state": "making", "job": self._empire_job, "dest": dest}
+
+    def _watch_empire(self, job_id):
+        job = self._jobs.get(job_id)
+        while job and not job.done:
+            time.sleep(2)
+        if not job:
+            return
+        self._settings["auto_empire"] = {"state": "made"} if not job.error else {"state": "failed", "error": job.error[:300]}
+        paths.save_settings(self._settings)
+
+    def auto_empire_status(self):
+        """For My merges: the ready-made GTA V empire merge's state (making, made, no_space, failed, no_gta, dismissed)."""
+        st = dict(self._settings.get("auto_empire") or {})
+        job = getattr(self, "_empire_job", None)
+        if job and job in self._jobs and not self._jobs[job].done:
+            st = {"state": "making", "job": job, "progress": self._jobs[job].progress,
+                  "line": (self._jobs[job].log or [""])[-1]}
+        elif job and job in self._jobs:
+            st = {"state": "failed", "error": self._jobs[job].error[:300]} if self._jobs[job].error else {"state": "made"}
+        elif st.get("state") == "making":
+            st = {"state": "made"} if self._empire_merge() else {
+                "state": "failed", "error": "Frankenstein closed while it was making the merge. Press Try again to finish it."}
+        st["name"] = self.EMPIRE_NAME
+        return st
+
+    def auto_empire_now(self, pick=False):
+        """Make it now (after it failed or was put off)."""
+        self._auto_empire(force=True)
+        return self.auto_empire_status()
+
+    def auto_empire_dismiss(self):
+        self._settings["auto_empire"] = {"state": "dismissed"}
+        paths.save_settings(self._settings)
+        return True
 
     # ---------- auto-merge: Frankenstein picks and installs the mods itself ----------
 
@@ -3097,7 +3208,8 @@ class Api:
     # ---------- my merges ----------
 
     def merges(self):
-        kinds = {MODE_HARDLINK: "Fast copy", MODE_COPY: "Full copy", MODE_INPLACE: "Original (backed up)"}
+        kinds = {MODE_HARDLINK: "Fast copy", MODE_COPY: "Full copy", MODE_INPLACE: "Original (backed up)",
+                 MODE_SESSION: "Your game · mods only while playing"}
         out = []
         me = self._me()
         for m in Merge.all():
@@ -3106,7 +3218,7 @@ class Api:
                 continue  # someone else's merge
             out.append({"id": m.id, "name": m.name, "tagline": m.data.get("tagline", ""), "game": m.data.get("game_name", ""),
                         "recipe_id": m.data.get("recipe_id"), "theme": m.data.get("theme_name", ""),
-                        "mode": m.mode, "mode_label": kinds.get(m.mode, m.mode), "folder": m.target_path,
+                        "mode": m.mode, "mode_label": kinds.get(m.mode, m.mode), "folder": m.data["target_path"] if m.mode == MODE_SESSION else m.target_path,
                         "created": m.data.get("created", ""), "status": m.data.get("status", ""),
                         "mods": [i["label"] for i in m.data.get("installs", [])],
                         "replaced": sum(1 for e in m.data.get("files", {}).values() if e.get("replaced")),
@@ -3172,6 +3284,31 @@ class Api:
             return {"note": note}
         if m.packed:
             raise MergeError("%s is packed away. Unpack it first (Play does this for you)." % m.name)
+        if m.mode == MODE_SESSION and self._playing != merge_id:
+            self._attach(m, r)
+        try:
+            return self._play(m, r, merge_id, creative)
+        except Exception:
+            if m.mode == MODE_SESSION and self._playing != merge_id:
+                try:
+                    Merge.load(merge_id).detach()   # it didn't start: your game folder goes back as it was
+                except Exception:
+                    pass
+            raise
+
+    def _attach(self, m, r):
+        """A session merge's mods go into your own game folder for this play (asking Windows once if the folder is
+        protected). GTA V's intro movie is switched off for the play too."""
+        root = m.data["target_path"]
+        needs = permissions.folders_needing_access([root])
+        if needs and not permissions.grant(needs):
+            raise MergeError("Frankenstein needs permission to add the mods to %s. Press Play again and click Yes when "
+                             "Windows asks." % root)
+        if r and r.id == "gta5":
+            m.data["hide"] = ["x64/movies/rockstar_logos.bik"]
+        m.attach()
+
+    def _play(self, m, r, merge_id, creative):
         saves.unzip_slots(merge_id)
         exe = r.launch_exe(m.target_path) if r else None
         if not exe:

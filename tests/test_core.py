@@ -98,6 +98,45 @@ class MergeTests(unittest.TestCase):
         with open(os.path.join(*p)) as f:
             return f.read()
 
+    def snapshot(self, root):
+        out = {}
+        for d, _dirs, files in os.walk(root):
+            for f in files:
+                out[os.path.relpath(os.path.join(d, f), root)] = self.read(d, f)
+        return out
+
+    def test_session_merge_mods_the_game_only_while_it_runs(self):
+        """levy's GTA V mode: the mods go into the real game folder at Play and back out at close, exactly."""
+        gta = RECIPES["gta5"]
+        game = os.path.join(self.d, "Grand Theft Auto V")
+        write(os.path.join(game, "GTA5.exe"), "exe")
+        write(os.path.join(game, "dinput8.dll"), "theirs")
+        write(os.path.join(game, "x64", "movies", "rockstar_logos.bik"), "intro")
+        before = self.snapshot(game)
+        m = installer.Merge.create(gta, gta.theme("empire"), game, self.d, installer.MODE_SESSION, "GTA V - Empire")
+        write(os.path.join(self.d, "dinput8.dll"), "asi loader")
+        m.put_file(os.path.join(self.d, "dinput8.dll"), "dinput8.dll")
+        write(os.path.join(self.d, "e.cs"), "empire")
+        m.put_file(os.path.join(self.d, "e.cs"), "scripts/FrankensteinEmpire.3.cs")
+        self.assertEqual(self.snapshot(game), before)          # made, but nothing in the game folder yet
+        m.data["hide"] = ["x64/movies/rockstar_logos.bik"]
+        m.attach()
+        self.assertEqual(self.read(game, "dinput8.dll"), "asi loader")
+        self.assertEqual(self.read(game, "scripts", "FrankensteinEmpire.3.cs"), "empire")
+        self.assertFalse(os.path.exists(os.path.join(game, "x64", "movies", "rockstar_logos.bik")))
+        write(os.path.join(game, "scripts", "Frankenstein", "empire.txt"), "my empire")   # the game writes
+        write(os.path.join(game, "ScriptHookV.log"), "log")
+        m.detach()
+        self.assertEqual(self.snapshot(game), before)          # back exactly as it was
+        self.assertEqual(sorted(os.listdir(game)), ["GTA5.exe", "dinput8.dll", "x64"])
+        m = installer.Merge.load(m.id)
+        m.attach()                                              # next play: the empire save comes back with it
+        self.assertEqual(self.read(game, "scripts", "Frankenstein", "empire.txt"), "my empire")
+        m.detach()
+        m.delete()
+        self.assertEqual(self.snapshot(game), before)
+        self.assertIsNone(installer.Merge(dict(m.data)).can_pack() and None)
+
     def check_copy_mode(self, mode):
         m = installer.Merge.create(self.recipe, self.theme, self.base, os.path.join(self.d, "out"),
                                    mode, "Cyberpunk - Forza", appid="1091500")
