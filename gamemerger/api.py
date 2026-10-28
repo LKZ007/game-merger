@@ -15,6 +15,7 @@ import types
 import urllib.parse
 import uuid
 import webbrowser
+import zipfile
 
 from . import installer, storymode, accounts, devices, achievements, ai, autorecipe, controller, covers, minecraft, modsources, storeinfo, discord, profiles, detect, downloader, gallery, network, nexus, paths, permissions, saves, scan, sharing, updater, standard
 from .version import VERSION
@@ -1037,6 +1038,8 @@ class Api:
     def _mod_check(m):
         """After playing: did Frankenstein's own mod load? Read from the mod loader's log (MelonLoader's), so the
         card can say so in plain words instead of leaving you to wonder why a menu didn't show."""
+        if (m.data.get("recipe_id") or "") == "gta5" and m.target_path:
+            return Api._gta_mod_check(m.target_path)
         if (m.data.get("recipe_id") or "") != "schedule1" or not m.target_path:
             return None
         log = os.path.join(m.target_path, "MelonLoader", "Latest.log")
@@ -1072,6 +1075,45 @@ class Api:
             if g:
                 guns = g.group(1)
         return {"time": time.time(), "loaded": loaded and not bad and not old, "why": why, "version": ver, "guns": guns}
+
+    @staticmethod
+    def _gta_mod_check(root):
+        """GTA V: Script Hook V, then Script Hook V .NET, then the empire script each leave a log. Read them in that
+        order and say where the chain stopped."""
+        def read(*rel):
+            try:
+                with open(os.path.join(root, *rel), encoding="utf-8", errors="replace") as f:
+                    return f.read()[-200000:]
+            except OSError:
+                return None
+        now = time.time()
+        enhanced = os.path.isfile(os.path.join(root, "GTA5_Enhanced.exe"))
+        hook, net = read("ScriptHookV.log"), read("ScriptHookVDotNet.log")
+        empire = read("scripts", "Frankenstein", "empire-debug.txt")
+        if empire and "empire on" in empire:
+            bad = [x for x in empire.splitlines() if re.search(r"(?i)\btick: |exception|error", x)]
+            return {"time": now, "loaded": not bad, "why": "The empire ran with a problem: " + bad[-1].strip()[-200:]
+                    if bad else "", "edition": "Enhanced" if enhanced else "Legacy"}
+        if empire:
+            return {"time": now, "loaded": False, "edition": "Enhanced" if enhanced else "Legacy",
+                    "why": "The empire script ran but switched itself off (this merge's settings didn't reach it). "
+                           "Press ⋯ More, Repair, then Play again."}
+        if hook is None:
+            why = ("Script Hook V didn't start, so no scripts ran. " +
+                   ("This is GTA V Enhanced, which needs the newest Script Hook V. "
+                    if enhanced else "") + "Press Play again: Frankenstein now checks it's in place first.")
+        elif re.search(r"(?i)unknown game version|not supported", hook):
+            why = ("Script Hook V doesn't support this GTA V update yet, so it stopped. Rockstar updated the game; "
+                   "a new Script Hook V usually comes out within days. Frankenstein gets it on the next Play.")
+        elif net is None:
+            why = ("Script Hook V ran but Script Hook V .NET didn't, so the empire (a .NET script) never loaded." +
+                   (" The official Script Hook V .NET is built for GTA V Legacy, and this is GTA V Enhanced."
+                    if enhanced else " It needs Microsoft .NET Framework 4.8 and the Visual C++ 2019 runtime."))
+        else:
+            err = [x for x in net.splitlines() if re.search(r"(?i)\[error\]|failed|exception", x)]
+            why = ("Script Hook V .NET ran but didn't load the empire" +
+                   (": " + err[-1].strip()[-200:] if err else ".") )
+        return {"time": now, "loaded": False, "why": why, "edition": "Enhanced" if enhanced else "Legacy"}
 
     def _switch_from_game(self, merge_id):
         """Creative from inside the game: Frankenstein's own mod leaves switch.json next to its settings and the
@@ -3285,6 +3327,8 @@ class Api:
         if m.packed:
             raise MergeError("%s is packed away. Unpack it first (Play does this for you)." % m.name)
         if m.mode == MODE_SESSION and self._playing != merge_id:
+            if r and r.id == "gta5":
+                self._gta_hooks(m, r)
             self._attach(m, r)
         try:
             return self._play(m, r, merge_id, creative)
@@ -3295,6 +3339,55 @@ class Api:
                 except Exception:
                     pass
             raise
+
+    GTA_HOOKS = {"scripthookv": ("scripthookv.dll", "dinput8.dll"),
+                 "shvdn": ("scripthookvdotnet.asi", "scripthookvdotnet3.dll")}
+
+    @staticmethod
+    def _gta_has(m, fid):
+        have = {os.path.basename(rel).lower() for rel in m.data.get("files", {})}
+        return all(f in have for f in Api.GTA_HOOKS[fid])
+
+    def _gta_hooks(self, m, r, log=lambda *_: None):
+        """GTA V runs Frankenstein's scripts only through Script Hook V (dev-c.com) and Script Hook V .NET. If either
+        didn't come in when the merge was made (dev-c.com sometimes blocks downloads), get it now, or use the zip
+        from your Downloads folder, so Play never starts GTA with the empire missing without saying so."""
+        for fid in ("scripthookv", "shvdn"):
+            if fid not in r.frameworks or self._gta_has(m, fid):
+                continue
+            fw = r.framework(fid)
+            archive, err = None, ""
+            try:
+                archive = downloader.fetch_framework(fw, log=log)
+                if not zipfile.is_zipfile(archive):
+                    os.remove(archive)
+                    archive, err = None, "the download wasn't a zip"
+            except Exception as e:
+                err = str(e)
+            if not archive and fid == "scripthookv":
+                archive = self._downloads_zip(r"(?i)^ScriptHookV_[\w.]+\.zip$")
+            if not archive:
+                raise MergeError("%s isn't installed yet, so GTA V wouldn't run the empire (%s). Download the zip from %s "
+                                 "into your Downloads folder, then press Play again: Frankenstein finds it there."
+                                 % (fw.name, err or "couldn't download it", fw.manual_url or "https://github.com/%s/releases"
+                                    % fw.github))
+            m.install(archive, fw.name, r.layout, flat_root=fw.flat_root, subdir=fw.subdir, log=log)
+            m = Merge.load(m.id)
+            if not self._gta_has(m, fid):
+                raise MergeError("%s installed, but its files (%s) weren't in the zip. Download it again from %s."
+                                 % (fw.name, ", ".join(self.GTA_HOOKS[fid]), fw.manual_url or "its page"))
+        m.data.update(Merge.load(m.id).data)
+
+    @staticmethod
+    def _downloads_zip(pattern):
+        """The newest matching zip in your Downloads folder, if you got it by hand."""
+        folder = saves.known_folder("Downloads")
+        try:
+            hits = [os.path.join(folder, n) for n in os.listdir(folder) if re.match(pattern, n)]
+        except OSError:
+            return None
+        hits = [h for h in hits if zipfile.is_zipfile(h)]
+        return max(hits, key=os.path.getmtime) if hits else None
 
     def _attach(self, m, r):
         """A session merge's mods go into your own game folder for this play (asking Windows once if the folder is

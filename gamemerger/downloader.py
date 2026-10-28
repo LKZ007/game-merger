@@ -5,6 +5,7 @@ import os
 import re
 import urllib.parse
 import urllib.request
+import zipfile
 
 from . import paths
 
@@ -61,6 +62,9 @@ def fetch_framework(fw, log=lambda *_: None):
             if not chunk:
                 break
             f.write(chunk)
+    if name.lower().endswith(".zip") and not zipfile.is_zipfile(tmp):
+        os.remove(tmp)  # the site sent a web page (a check or an error), not the file
+        raise LookupError("%s's site sent a web page instead of the zip." % fw.name)
     os.replace(tmp, dest)
     return dest
 

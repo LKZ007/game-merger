@@ -3,6 +3,11 @@
 Every release, newest first. Downloads are on the [releases page](https://github.com/LKZ007/game-merger/releases).
 The app was called Game Merger before 3.8.0.
 
+## v3.54.0 (2026-10-28)
+- **No more North Yankton start mission.** If GTA V starts the prologue (the bank job in the snow), the empire stops it straight away and drops you into free roam as Franklin outside the Strawberry stash house, with the empire running. Untested in game yet.
+- **Play checks the script hooks first.** GTA V only runs Frankenstein's scripts through Script Hook V and Script Hook V .NET. If either didn't come in when the merge was made, Play gets it now. If Script Hook V's site won't hand over the file, put the ScriptHookV zip from dev-c.com in your Downloads folder and Frankenstein picks it up. It no longer starts GTA V without them and says nothing.
+- **The merge card says whether the empire ran.** After you close GTA V, Frankenstein reads Script Hook V's, Script Hook V .NET's and the empire's own logs and says where it stopped if it didn't load (hook missing, GTA V updated past Script Hook V, .NET hook not running, or GTA V Enhanced).
+
 ## v3.53.1 (2026-10-27)
 - **Fixed: GTA V said "Please run Grand Theft Auto V using Rockstar Games Launcher" (ERR_NO_LAUNCHER).** Play now starts GTA V through its own launcher (PlayGTAV.exe), still offline in Story mode, and the mods still come back out of your GTA V folder when the game closes.
 

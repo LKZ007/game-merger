@@ -752,5 +752,40 @@ class FeatureChecklist(unittest.TestCase):
         self.assertIn("subprocess.Popen([self._launcher_for(r, exe)] + args", api)
         self.assertNotIn("StraightIntoFreemode", api + read(PKG, "recipes", "gta5.json"))   # that one goes to GTA Online
 
+    def test_354_no_prologue_and_hooks_checked(self):
+        emp = read(PKG, "mods", "gta5", "FrankensteinEmpire.3.cs")
+        self.assertIn("bool SkipPrologue(Ped me)", emp)
+        self.assertIn('TERMINATE_ALL_SCRIPTS_WITH_THIS_NAME, "prologue1"', emp)
+        self.assertIn('new Model("player_one")', emp)
+        self.assertLess(emp.index("SkipPrologue(me)"), emp.index("if (!loaded) { Load();"))
+        api = read(PKG, "api.py")
+        self.assertIn("self._gta_hooks(m, r)", api)
+        self.assertLess(api.index("self._gta_hooks(m, r)"), api.index("            self._attach(m, r)"))
+        self.assertIn("zipfile.is_zipfile(tmp)", read(PKG, "downloader.py"))
+        import sys
+        sys.path.insert(0, ROOT)
+        from gamemerger.api import Api
+        m = type("M", (), {})()
+        m.data = {"files": {"ScriptHookV.dll": {}, os.path.join("x", "dinput8.dll"): {}}}
+        self.assertTrue(Api._gta_has(m, "scripthookv"))
+        self.assertFalse(Api._gta_has(m, "shvdn"))
+        d = tempfile.mkdtemp()
+        why = Api._gta_mod_check(d)
+        self.assertFalse(why["loaded"])
+        self.assertIn("Script Hook V didn't start", why["why"])
+        with open(os.path.join(d, "ScriptHookV.log"), "w") as f:
+            f.write("INIT: Started\nFATAL: Unknown game version, check http://dev-c.com for updates\n")
+        self.assertIn("doesn't support this GTA V update", Api._gta_mod_check(d)["why"])
+        with open(os.path.join(d, "ScriptHookV.log"), "w") as f:
+            f.write("INIT: Started\n")
+        open(os.path.join(d, "GTA5_Enhanced.exe"), "w").close()
+        got = Api._gta_mod_check(d)
+        self.assertEqual(got["edition"], "Enhanced")
+        self.assertIn("Script Hook V .NET didn't", got["why"])
+        os.makedirs(os.path.join(d, "scripts", "Frankenstein"))
+        with open(os.path.join(d, "scripts", "Frankenstein", "empire-debug.txt"), "w") as f:
+            f.write("12:00:00 empire on (Schedule I x Hood Warfare merge), Story\n")
+        self.assertTrue(Api._gta_mod_check(d)["loaded"])
+
 if __name__ == "__main__":
     unittest.main()

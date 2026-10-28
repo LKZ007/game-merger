@@ -1,5 +1,5 @@
 "use strict";
-window.APP_BUILD = "3.53.1";  // must match index.html: a mixed-up install is caught at start
+window.APP_BUILD = "3.54.0";  // must match index.html: a mixed-up install is caught at start
 
 // ---------- talking to the Python side ----------
 const TOKEN = document.querySelector('meta[name="gm-token"]')?.content;
@@ -1001,7 +1001,7 @@ async function loadMerges() {
             </div></div>
         </div>
         ${m.ingame ? `<div class="ingame small" title="Frankenstein's own mod adds these to the game itself">🎮 <strong>In the game:</strong> ${esc(m.ingame)}</div>` : `<div class="ingame small muted">Creative lives inside the game, never here. Frankenstein's own mod for this game isn't built yet, so this merge has no Creative yet.</div>`}
-        ${m.mod_check && !m.mod_check.loaded ? `<div class="ingame small warn" role="status">⚠ <strong>Last time you played:</strong> ${esc(m.mod_check.why)}</div>` : m.mod_check?.version ? `<div class="ingame small muted" title="Read from MelonLoader's log. F6's title in the game shows the same number.">✓ Frankenstein mod ${esc(m.mod_check.version)} ran last time you played.${m.mod_check.guns ? ` ${esc(m.mod_check.guns)}.` : ""}</div>` : ""}
+        ${m.mod_check && !m.mod_check.loaded ? `<div class="ingame small warn" role="status">⚠ <strong>Last time you played:</strong> ${esc(m.mod_check.why)}</div>` : m.mod_check?.loaded && m.mod_check.edition ? `<div class="ingame small muted" title="Read from Script Hook V's logs.">✓ The empire ran last time you played (GTA V ${esc(m.mod_check.edition)}).</div>` : m.mod_check?.version ? `<div class="ingame small muted" title="Read from MelonLoader's log. F6's title in the game shows the same number.">✓ Frankenstein mod ${esc(m.mod_check.version)} ran last time you played.${m.mod_check.guns ? ` ${esc(m.mod_check.guns)}.` : ""}</div>` : ""}
         ${m.creative_folded?.moved ? `<div class="ingame small muted" role="status">✦ Your ${m.creative_folded.moved} Creative save${m.creative_folded.moved > 1 ? "s are" : " is"} now with your other saves${m.creative_folded.kept ? `; ${m.creative_folded.kept} couldn't fit and ${m.creative_folded.kept > 1 ? "are" : "is"} kept safe` : ""}. Creative is a Game Mode on each save now.</div>` : ""}
         ${m.pack_error ? `<div class="ingame small muted" role="status">📦 ${esc(m.pack_error)}</div>` : ""}
         ${m.builtin_error ? `<div class="ingame small warn" role="status">⚠ Frankenstein's own mod couldn't be added: ${esc(m.builtin_error)} It's tried again when you press Play.</div>` : ""}

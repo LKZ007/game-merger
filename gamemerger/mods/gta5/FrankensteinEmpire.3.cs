@@ -203,6 +203,7 @@ public class FrankensteinEmpire : Script
         if (!on) return;
         var me = Game.Player.Character;
         if (me == null || !me.Exists() || Game.IsLoading) return;
+        try { if (SkipPrologue(me)) return; } catch (Exception ex) { Say("prologue skip: " + ex.Message); }
         if (!loaded) { Load(); loaded = true; Begin(); Blips(); MapLayer(); Look(); Say("loaded: " + labs.Count(l => l.Owned) + " labs, " + turf.Count + " turf, $" + earned + " earned, " + RankName + " (" + xp + " XP)"); }
         if (playing != null) { try { Scenes(me); } catch (Exception ex) { Say("cutscene: " + ex.Message); EndScene(); } return; }  // a cutscene owns the screen
         try
@@ -227,6 +228,57 @@ public class FrankensteinEmpire : Script
             if (menuOpen) Menu();
         }
         catch (Exception ex) { Say("tick: " + ex.Message); }
+    }
+
+    // ---------- no prologue: straight into free roam ----------
+
+    int nextPrologue;
+    static readonly string[] PrologueIpls =
+    {
+        "prologue01", "prologue01c", "prologue01d", "prologue01e", "prologue01f", "prologue01g", "prologue01h", "prologue01i",
+        "prologue01j", "prologue01k", "prologue01z", "prologue02", "prologue03", "prologue03b", "prologue03_grv_dug",
+        "prologue04", "prologue04b", "prologue04_cover", "prologue05", "prologue05b", "prologue06", "prologue06b",
+        "prologue06_int", "prologue06_pannel", "prologuerd", "prologuerdb", "prologue_DistantLights", "prologue_LODLights",
+        "prologue_m2_door", "prologue_grv_torch", "plg_occl_00", "DES_ProTree_start", "DES_ProTree_start_lod",
+    };
+
+    /// <summary>A new GTA V game starts with the North Yankton bank job. The empire skips it every time: the mission
+    /// is stopped, North Yankton is unloaded, and you're Franklin in Los Santos, in free roam, with the empire running.</summary>
+    bool SkipPrologue(Ped me)
+    {
+        if (Game.GameTime < nextPrologue) return false;
+        nextPrologue = Game.GameTime + 1000;
+        bool running = Function.Call<int>(Hash.GET_NUMBER_OF_THREADS_RUNNING_THE_SCRIPT_WITH_THIS_HASH, Game.GenerateHash("prologue1")) > 0;
+        bool yankton = me.Position.X > 2500f && me.Position.Y < -4000f;   // North Yankton sits far off Los Santos' south-east
+        if (!running && !yankton) return false;
+        Screen.FadeOut(500);
+        Wait(700);
+        Function.Call(Hash.STOP_CUTSCENE_IMMEDIATELY);   // the opening bank cutscene, if it was playing
+        Function.Call(Hash.REMOVE_CUTSCENE);
+        Function.Call(Hash.TERMINATE_ALL_SCRIPTS_WITH_THIS_NAME, "prologue1");
+        Function.Call(Hash.SET_MISSION_FLAG, false);
+        foreach (var ipl in PrologueIpls) Function.Call(Hash.REMOVE_IPL, ipl);
+        var model = new Model("player_one");
+        if (model.Request(5000))
+        {
+            Game.Player.ChangeModel(model);
+            model.MarkAsNoLongerNeeded();
+        }
+        me = Game.Player.Character;
+        Function.Call(Hash.SET_PED_DEFAULT_COMPONENT_VARIATION, me);
+        var start = labs.First(l => l.Id == "strawberry").At;
+        me.Position = start + new Vector3(2f, 2f, 0.5f);
+        me.Weapons.RemoveAll();
+        Game.Player.WantedLevel = 0;
+        Function.Call(Hash.SET_MAX_WANTED_LEVEL, 5);
+        Function.Call(Hash.SET_PLAYER_CONTROL, Game.Player, true, 0);
+        Function.Call(Hash.DISPLAY_HUD, true);
+        Function.Call(Hash.DISPLAY_RADAR, true);
+        World.CurrentTimeOfDay = new TimeSpan(17, 30, 0);
+        Wait(1500);
+        Screen.FadeIn(1000);
+        Say("skipped the North Yankton prologue: Franklin in Strawberry, free roam");
+        return true;
     }
 
     // ---------- business ----------
