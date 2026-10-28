@@ -805,5 +805,11 @@ class FeatureChecklist(unittest.TestCase):
         z = Api._downloads_zip(r"(?i)^ScriptHookV.*\.zip$", r"(?i)^ScriptHookV", "ScriptHookV.dll", folder=e)
         self.assertIn("bin/ScriptHookV.dll", zipfile.ZipFile(z).namelist())
 
+    def test_3543_gta_needs_a_sound_output(self):
+        api = read(PKG, "api.py")
+        self.assertIn("waveOutGetNumDevs", api)
+        self.assertIn("7002.1", api)
+        self.assertLess(api.index("self._sound_outputs() == 0"), api.index("self._gta_hooks(m, r)\n"))
+
 if __name__ == "__main__":
     unittest.main()

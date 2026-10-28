@@ -3328,6 +3328,11 @@ class Api:
             raise MergeError("%s is packed away. Unpack it first (Play does this for you)." % m.name)
         if m.mode == MODE_SESSION and self._playing != merge_id:
             if r and r.id == "gta5":
+                if self._sound_outputs() == 0:
+                    raise MergeError("GTA V won't start without a sound output (Rockstar error 7002.1). Windows has no "
+                                     "speakers or headphones switched on right now. Plug some in, or turn on your "
+                                     "monitor's speakers: right-click the speaker icon by the clock, Sound settings, "
+                                     "and pick an Output. Then press Play again.")
                 self._gta_hooks(m, r)
             self._attach(m, r)
         try:
@@ -3390,6 +3395,17 @@ class Api:
         m.data.update(Merge.load(m.id).data)
 
     _opened_page = {}
+
+    @staticmethod
+    def _sound_outputs():
+        """How many sound outputs Windows has on (None when it can't tell, or off Windows)."""
+        if sys.platform != "win32":
+            return None
+        try:
+            import ctypes
+            return ctypes.windll.winmm.waveOutGetNumDevs()
+        except Exception:
+            return None
 
     def _wait_for_hook(self, merge_id, minutes=15, pause=2):
         """After Play opened Script Hook V's page: watch Downloads, and once the zip is there, press Play for you."""
