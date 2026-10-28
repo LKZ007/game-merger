@@ -3,6 +3,9 @@
 Every release, newest first. Downloads are on the [releases page](https://github.com/LKZ007/game-merger/releases).
 The app was called Game Merger before 3.8.0.
 
+## v3.54.1 (2026-10-28)
+- **Fixed: "Script Hook V isn't installed yet ... Couldn't find the download link".** Script Hook V's site only lets a person download it in a browser, so Frankenstein can't fetch it by itself. Play now opens its page in your browser for you. Click Download there and press Play again. Frankenstein finds the file in Downloads (any name, like "ScriptHookV_3889.0 (1).zip", or a folder you already unzipped), installs it into the merge and starts GTA V.
+
 ## v3.54.0 (2026-10-28)
 - **No more North Yankton start mission.** If GTA V starts the prologue (the bank job in the snow), the empire stops it straight away and drops you into free roam as Franklin outside the Strawberry stash house, with the empire running. Untested in game yet.
 - **Play checks the script hooks first.** GTA V only runs Frankenstein's scripts through Script Hook V and Script Hook V .NET. If either didn't come in when the merge was made, Play gets it now. If Script Hook V's site won't hand over the file, put the ScriptHookV zip from dev-c.com in your Downloads folder and Frankenstein picks it up. It no longer starts GTA V without them and says nothing.

@@ -787,5 +787,22 @@ class FeatureChecklist(unittest.TestCase):
             f.write("12:00:00 empire on (Schedule I x Hood Warfare merge), Story\n")
         self.assertTrue(Api._gta_mod_check(d)["loaded"])
 
+    def test_3541_script_hook_v_by_hand_is_one_click(self):
+        api = read(PKG, "api.py")
+        self.assertIn("webbrowser.open(page)", api)
+        self.assertIn("One step for you", api)
+        import sys
+        sys.path.insert(0, ROOT)
+        import zipfile
+        from gamemerger.api import Api
+        d = tempfile.mkdtemp()
+        zipfile.ZipFile(os.path.join(d, "ScriptHookV_3889.0 (1).zip"), "w").writestr("bin/ScriptHookV.dll", "x")
+        self.assertTrue(Api._downloads_zip(r"(?i)^ScriptHookV.*\.zip$", folder=d).endswith("(1).zip"))
+        e = tempfile.mkdtemp()
+        os.makedirs(os.path.join(e, "ScriptHookV_3889.0"))
+        open(os.path.join(e, "ScriptHookV_3889.0", "ScriptHookV.dll"), "w").close()
+        z = Api._downloads_zip(r"(?i)^ScriptHookV.*\.zip$", r"(?i)^ScriptHookV", "ScriptHookV.dll", folder=e)
+        self.assertIn("bin/ScriptHookV.dll", zipfile.ZipFile(z).namelist())
+
 if __name__ == "__main__":
     unittest.main()

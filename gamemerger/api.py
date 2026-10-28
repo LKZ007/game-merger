@@ -3365,12 +3365,21 @@ class Api:
             except Exception as e:
                 err = str(e)
             if not archive and fid == "scripthookv":
-                archive = self._downloads_zip(r"(?i)^ScriptHookV_[\w.]+\.zip$")
+                archive = self._downloads_zip(r"(?i)^ScriptHookV.*\.zip$", r"(?i)^ScriptHookV", "ScriptHookV.dll")
             if not archive:
-                raise MergeError("%s isn't installed yet, so GTA V wouldn't run the empire (%s). Download the zip from %s "
-                                 "into your Downloads folder, then press Play again: Frankenstein finds it there."
-                                 % (fw.name, err or "couldn't download it", fw.manual_url or "https://github.com/%s/releases"
-                                    % fw.github))
+                page = fw.manual_url or "https://github.com/%s/releases" % fw.github
+                # dev-c.com only hands Script Hook V to a person in a browser, so open its page for you: one click on
+                # Download there, and the next Play finds the zip (or the unzipped folder) in Downloads by itself
+                if self._opened_page.get(fid, 0) < time.time() - 60:
+                    self._opened_page[fid] = time.time()
+                    try:
+                        webbrowser.open(page)
+                    except Exception:
+                        pass
+                raise MergeError("One step for you: %s has to be downloaded by hand (its site doesn't allow apps to do it). "
+                                 "Its page is opening in your browser. Click the Download button there and leave the "
+                                 "file in Downloads, then press Play again. Frankenstein finds it and installs it for "
+                                 "you. (%s)" % (fw.name, err or "couldn't download it"))
             m.install(archive, fw.name, r.layout, flat_root=fw.flat_root, subdir=fw.subdir, log=log)
             m = Merge.load(m.id)
             if not self._gta_has(m, fid):
@@ -3378,15 +3387,38 @@ class Api:
                                  % (fw.name, ", ".join(self.GTA_HOOKS[fid]), fw.manual_url or "its page"))
         m.data.update(Merge.load(m.id).data)
 
+    _opened_page = {}
+
     @staticmethod
-    def _downloads_zip(pattern):
-        """The newest matching zip in your Downloads folder, if you got it by hand."""
-        folder = saves.known_folder("Downloads")
+    def _downloads_zip(pattern, dir_pattern=None, marker=None, folder=None):
+        """The newest matching zip in your Downloads folder (any name your browser gave it, like "(1)" copies), or a
+        folder you already unzipped there, packed back into a zip so it installs the same way."""
+        folder = folder or saves.known_folder("Downloads")
         try:
-            hits = [os.path.join(folder, n) for n in os.listdir(folder) if re.match(pattern, n)]
+            names = os.listdir(folder)
         except OSError:
             return None
+        hits = [os.path.join(folder, n) for n in names if re.match(pattern, n)]
         hits = [h for h in hits if zipfile.is_zipfile(h)]
+        if dir_pattern and marker:
+            for n in names:
+                d = os.path.join(folder, n)
+                if not (re.match(dir_pattern, n) and os.path.isdir(d)):
+                    continue
+                for root, dirs, files in os.walk(d):
+                    if marker in files:
+                        inbin = os.path.basename(root).lower() == "bin"
+                        top, pre = (os.path.dirname(root), "") if inbin else (root, "bin/")  # the zip keeps bin/
+                        out = os.path.join(paths.sub(os.path.join("downloads", "unzipped")), n + ".zip")
+                        with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
+                            for rr, _dd, ff in os.walk(top):
+                                for f in ff:
+                                    z.write(os.path.join(rr, f), pre + os.path.relpath(os.path.join(rr, f), top))
+                        os.utime(out, (os.path.getmtime(d),) * 2)
+                        hits.append(out)
+                        break
+                    if root.count(os.sep) - d.count(os.sep) >= 3:
+                        dirs[:] = []
         return max(hits, key=os.path.getmtime) if hits else None
 
     def _attach(self, m, r):
