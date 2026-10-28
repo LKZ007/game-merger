@@ -790,7 +790,8 @@ class FeatureChecklist(unittest.TestCase):
     def test_3541_script_hook_v_by_hand_is_one_click(self):
         api = read(PKG, "api.py")
         self.assertIn("webbrowser.open(page)", api)
-        self.assertIn("One step for you", api)
+        self.assertIn("One click for you", api)
+        self.assertIn("def _wait_for_hook(", api)
         import sys
         sys.path.insert(0, ROOT)
         import zipfile

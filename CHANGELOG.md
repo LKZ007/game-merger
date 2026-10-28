@@ -3,6 +3,9 @@
 Every release, newest first. Downloads are on the [releases page](https://github.com/LKZ007/game-merger/releases).
 The app was called Game Merger before 3.8.0.
 
+## v3.54.2 (2026-10-28)
+- **Script Hook V in one click.** When you press Play and Script Hook V is missing, its page opens in your browser. Click Download there and that's it: as soon as the file lands in Downloads, Frankenstein installs it and starts GTA V by itself. Script Hook V's site only lets a person download it, so this one click can't be skipped.
+
 ## v3.54.1 (2026-10-28)
 - **Fixed: "Script Hook V isn't installed yet ... Couldn't find the download link".** Script Hook V's site only lets a person download it in a browser, so Frankenstein can't fetch it by itself. Play now opens its page in your browser for you. Click Download there and press Play again. Frankenstein finds the file in Downloads (any name, like "ScriptHookV_3889.0 (1).zip", or a folder you already unzipped), installs it into the merge and starts GTA V.
 

@@ -3376,10 +3376,12 @@ class Api:
                         webbrowser.open(page)
                     except Exception:
                         pass
-                raise MergeError("One step for you: %s has to be downloaded by hand (its site doesn't allow apps to do it). "
-                                 "Its page is opening in your browser. Click the Download button there and leave the "
-                                 "file in Downloads, then press Play again. Frankenstein finds it and installs it for "
-                                 "you. (%s)" % (fw.name, err or "couldn't download it"))
+                if fid == "scripthookv" and not getattr(self, "_hook_wait", None):
+                    self._hook_wait = m.id
+                    threading.Thread(target=self._wait_for_hook, args=(m.id,), daemon=True).start()
+                raise MergeError("One click for you: %s's site only lets a person download it, so its page is opening in "
+                                 "your browser. Click Download there. As soon as the file lands in Downloads, Frankenstein "
+                                 "installs it and starts GTA V by itself. (%s)" % (fw.name, err or "couldn't download it"))
             m.install(archive, fw.name, r.layout, flat_root=fw.flat_root, subdir=fw.subdir, log=log)
             m = Merge.load(m.id)
             if not self._gta_has(m, fid):
@@ -3388,6 +3390,27 @@ class Api:
         m.data.update(Merge.load(m.id).data)
 
     _opened_page = {}
+
+    def _wait_for_hook(self, merge_id, minutes=15, pause=2):
+        """After Play opened Script Hook V's page: watch Downloads, and once the zip is there, press Play for you."""
+        try:
+            end = time.time() + minutes * 60
+            while time.time() < end:
+                if self._downloads_zip(r"(?i)^ScriptHookV.*\.zip$", r"(?i)^ScriptHookV", "ScriptHookV.dll"):
+                    time.sleep(pause)   # let the browser finish writing it
+                    try:
+                        self.play(merge_id)
+                    except Exception as e:
+                        try:
+                            mm = Merge.load(merge_id)
+                            mm.data["builtin_error"] = str(e)[:300]
+                            mm.save()
+                        except Exception:
+                            pass
+                    return
+                time.sleep(pause)
+        finally:
+            self._hook_wait = None
 
     @staticmethod
     def _downloads_zip(pattern, dir_pattern=None, marker=None, folder=None):
